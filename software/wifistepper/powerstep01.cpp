@@ -6,59 +6,81 @@
 #define PS_PIN_RST      (15)
 #define PS_PIN_CS       (4)
 
-//#define PS_DEBUG
+#define PS_DEBUG
 
-void _ps_xfer(uint8_t * data, size_t len) {
+uint8_t _ps_xferbyte(uint8_t b) {
+  digitalWrite(PS_PIN_CS, LOW);
+  SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+  b = SPI.transfer(b);
+  SPI.endTransaction();
+  digitalWrite(PS_PIN_CS, HIGH);
+
+  // Per datasheet, must raise CS between bytes and hold for at least 625ns
+  delayMicroseconds(1);
+
+  return b;
+}
+
+void _ps_xfer(uint8_t cmd, uint8_t * data, size_t len) {
   #ifdef PS_DEBUG
   {
-    Serial.print("SPI Write: ");
+    Serial.print("SPI Write: (");
+    Serial.print(cmd, BIN);
+    Serial.print(")");
     for (size_t i = 0; i < len; i++) {
-      Serial.print(data[i], BIN);
       Serial.print(", ");
+      Serial.print(data[i], BIN);
     }
     Serial.println();
   }
   #endif
-  
-  for (size_t i = 0; i < len; i++) {
-    digitalWrite(PS_PIN_CS, LOW);
-    SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
-    data[i] = SPI.transfer(data[i]);
-    SPI.endTransaction();
-    digitalWrite(PS_PIN_CS, HIGH);
 
-    // Per datasheet, must raise CS between bytes and hold for at least 625ns
-    delayMicroseconds(1);
+  cmd = _ps_xferbyte(cmd);
+  for (size_t i = 0; i < len; i++) {
+    data[i] = _ps_xferbyte(data[i]);
   }
 
   #ifdef PS_DEBUG
   {
     Serial.print("SPI Read: ");
-    if (data[0] != 0) {
+    if (cmd != 0) {
       Serial.print("XX----> ");
     }
+    Serial.print(cmd, BIN);
     for (size_t i = 0; i < len; i++) {
-      Serial.print(data[i], BIN);
       Serial.print(", ");
+      Serial.print(data[i], BIN);
     }
     Serial.println();
   }
   #endif
 }
 
-#define ps_set16(b1, b2, v)       ({b1 = ((v) >> 8) & 0xFF; b2 = (v) & 0xFF;})
-#define ps_get16(b1, b2)          ((uint16_t)((b1) << 8) | (b2))
-#define ps_set24(b1, b2, b3, v)   ({b1 = ((v) >> 16) & 0xFF; b2 = ((v) >> 8) & 0xFF; b3 = (v) & 0xFF;})
-//#define ps_get24(b1, b2, b3)
+#define _ps_mask(b)                           ((1 << (b))-1)
 
-#define ps_setsplit16(n, v)       ps_set16(n ## _U, n ## _L, (v))
-#define ps_getsplit16(n)          ps_get16(n ## _U, n ## _L)
+#define _ps_setsplit16(v, b1, b2, s)          ({(b1) = (uint8_t)(((uint16_t)(v) >> (s)) & _ps_mask(16-(s))); (b2) = (uint8_t)((uint16_t)(v) & _ps_mask(s));})
+#define ps_setsplit16(v, n, s)                _ps_setsplit16((v), (n ## _U), (n ## _L), (s))
+#define ps_set16(v, b)                        _ps_setsplit16((v), (b)[0], (b)[1], 8)
+
+#define _ps_getsplit16(b1, b2, s)             ((((uint16_t)(b1) & _ps_mask(16-(s))) << (s)) | ((uint16_t)(b2) & _ps_mask(s)))
+#define ps_getsplit16(n, s)                   _ps_getsplit16((n ## _U), (n ## _L), (s))
+#define ps_get16(b)                           _ps_getsplit16((b)[0], (b)[1], 8)
+
+#define _ps_setsplit24(v, b1, b2, b3, sh, sl) ({(b1) = (uint8_t)(((uint32_t)(v) >> (sh)) & _ps_mask(24-(sh))); (b2) = (uint8_t)(((uint32_t)(v) >> (sl)) & _ps_mask((sh)-(sl))); (b3) = (uint8_t)((uint32_t)(v) & _ps_mask(sl));})
+#define ps_setsplit24(v, n, sh, sl)           _ps_setsplit24((v), (n ## _U), (n ## _M), (n ## _L), (sh), (sl))
+#define ps_set24(v, b)                        _ps_setsplit24((v), (b)[0], (b)[1], (b)[2], 16, 8)
+
+#define _ps_getsplit24(b1, b2, b3, sh, sl)    ((((uint32_t)(b1) & _ps_mask(24-(sh))) << (sh)) | (((uint32_t)(b2) & _ps_mask((sh)-(sl))) << (sl)) | ((uint32_t)(b3) & _ps_mask(sl)))
+#define ps_getsplit24(n, sh, sl)              _ps_getsplit24((n ## _U), (n ## _M), (n ## _L), (sh), (sl))
+#define ps_get24(b)                           _ps_getsplit24((b)[0], (b)[1], (b)[2], 16, 8)
+
+#define ps_xferreg(cmdname, cmd, reg)    ps_xfer((cmdname), (cmd), (uint8_t *)&(reg), sizeof(reg))
 
 #ifdef PS_DEBUG
-void ps_xfer(const char * cmdname, uint8_t * data, size_t len) {
+void ps_xfer(const char * cmdname, uint8_t cmd, uint8_t * data, size_t len) {
   Serial.print("SPI Cmd: ");
   Serial.println(cmdname);
-  _ps_xfer(data, len);
+  _ps_xfer(cmd, data, len);
 }
 
 void ps_print(const ps_status_reg * s) {
@@ -70,7 +92,7 @@ void ps_print(const ps_status_reg * s) {
   Serial.print("UVLO ADC: "); Serial.println(s->uvlo_adc, BIN);
   Serial.print("UVLO: "); Serial.println(s->uvlo, BIN);
   Serial.print("Step Clk: "); Serial.println(s->stck_mod, BIN);
-  Serial.print("Cmd ERR: "); Serial.println(s->cmd_err, BIN);
+  Serial.print("Cmd ERR: "); Serial.println(s->cmd_error, BIN);
   Serial.print("Motor Status: "); Serial.println(s->mot_status, BIN);
   Serial.print("Direction: "); Serial.println(s->dir, BIN);
   Serial.print("Sw Event: "); Serial.println(s->sw_evn, BIN);
@@ -92,7 +114,7 @@ void ps_print(const ps_stepmode_reg * m) {
 void ps_print(const ps_fsspd_reg * r) {
   Serial.println("Full Speed:");
   Serial.print("Boost Mode: "); Serial.println(r->boost_mode, BIN);
-  Serial.print("FullStep Speed: "); Serial.println(ps_getsplit16(r->fs_spd), BIN);
+  Serial.print("FullStep Speed: "); Serial.println(ps_getsplit16(r->fs_spd, 8), BIN);
   Serial.println();
 }
 
@@ -148,7 +170,7 @@ void ps_print(const char * name, uint8_t data) {
 }
 #else
 
-#define ps_xfer(cmdname, data, len)   _ps_xfer(data, len)
+#define ps_xfer(cmdname, cmd, data, len)   _ps_xfer(cmd, data, len)
 #define ps_print(...)
 
 #endif
@@ -166,329 +188,437 @@ void ps_spiinit() {
 }
 
 ps_status ps_getstatus(bool clear_errors) {
-  uint8_t buf[3] = {clear_errors? CMD_GETSTATUS() : CMD_GETPARAM(PARAM_STATUS), 0, 0};
-  ps_status_reg * reg = (ps_status_reg *)&buf[1];
-  ps_xfer(clear_errors? "getstatus" : "getparam status", buf, 3);
-  ps_print(reg);
+  ps_status_reg reg = {};
+  if (clear_errors)   ps_xferreg("getstatus", CMD_GETSTATUS(), reg);
+  else                ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+  ps_print(&reg);
   return (ps_status){
-    .busy = (bool)reg->busy
+    .direction = (ps_direction)reg.dir,
+    .movement = (ps_movement)reg.mot_status,
+    .hiz = (bool)reg.hiz,
+    .user_switch = (bool)reg.sw_f,
+    .step_clock = (bool)reg.stck_mod,
+    .alarms = {
+      .command_error = reg.cmd_error,
+      .overcurrent = !reg.ocd,
+      .undervoltage = !reg.uvlo,
+      .thermal_shutdown = reg.th_status == TH_BRIDGESHUTDOWN || reg.th_status == TH_DEVICESHUTDOWN,
+      .user_switch = reg.sw_evn,
+      .thermal_warning = reg.th_status == TH_WARNING,
+      .stall_detect = !reg.stall_a || !reg.stall_b,
+      .adc_undervoltage = !reg.uvlo_adc
+    }
   };
 }
 
 void ps_waitbusy(ps_waitcb waitf) {
-  uint8_t buf[3] = {0, 0, 0};
-  ps_status_reg * reg = (ps_status_reg *)&buf[1];
-  
+  ps_status_reg reg = {};
   while (true) {
-    memset(buf, 0, sizeof(buf));
-    buf[0] = CMD_GETPARAM(PARAM_STATUS);
-    ps_xfer("getparam status", buf, 3);
-    if (reg->busy) return;
+    memset(&reg, 0, sizeof(reg));
+    ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+    if (reg.busy) return;
     if (waitf != NULL) waitf();
   }
 }
 
-ps_stepmode ps_getstepmode() {
-  uint8_t buf[2] = {CMD_GETPARAM(PARAM_STEPMODE), 0};
-  ps_stepmode_reg * reg = (ps_stepmode_reg *)&buf[1];
-  ps_xfer("getparam stepmode", buf, 2);
-  ps_print(reg);
-  return (ps_stepmode){
-    .mode = (ps_mode)reg->cm_vm,
-    .stepsize = (ps_stepsize)reg->step_sel,
-    .sync_mode = (ps_sync)reg->sync_en,
-    .sync_stepsize = (ps_stepsize)reg->sync_sel
+void ps_reset() {
+  ps_xfer("resetdevice", CMD_RESETDEVICE(), NULL, 0);
+}
+
+void ps_nop() {
+  ps_xfer("nop", CMD_NOP(), NULL, 0);
+}
+
+ps_mode ps_getmode() {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  return (ps_mode)reg.cm_vm;
+}
+
+void ps_setmode(ps_mode mode) {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  reg.cm_vm = mode;
+  ps_xferreg("setparam stepmode", CMD_SETPARAM(PARAM_STEPMODE), reg);
+}
+
+ps_stepsize ps_getstepsize() {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  return (ps_stepsize)reg.step_sel;
+}
+
+void ps_setstepsize(ps_stepsize stepsize) {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  reg.step_sel = stepsize;
+  ps_xferreg("setparam stepmode", CMD_SETPARAM(PARAM_STEPMODE), reg);
+}
+
+ps_syncinfo ps_getsync() {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  ps_print(&reg);
+  return (ps_syncinfo){
+    .sync_mode = (ps_sync)reg.sync_en,
+    .sync_stepsize = (ps_stepsize)reg.sync_sel
   };
 }
 
-void ps_setmode(const ps_mode mode, const ps_stepsize stepsize) {
-  uint8_t buf[2] = {0, 0};
-  ps_stepmode_reg * reg = (ps_stepmode_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_STEPMODE);
-  ps_xfer("getparam stepmode", buf, 2);
-  reg->cm_vm = mode;
-  reg->step_sel = stepsize;
-  buf[0] = CMD_SETPARAM(PARAM_STEPMODE);
-  ps_xfer("setparam stepmode", buf, 2);
-}
-
-void ps_setsync(const ps_sync sync, const ps_stepsize stepsize) {
-  uint8_t buf[2] = {0, 0};
-  ps_stepmode_reg * reg = (ps_stepmode_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_STEPMODE);
-  ps_xfer("getparam stepmode", buf, 2);
-  reg->sync_en = sync;
-  reg->sync_sel = stepsize;
-  buf[0] = CMD_SETPARAM(PARAM_STEPMODE);
-  ps_xfer("setparam stepmode", buf, 2);
+void ps_setsync(ps_sync sync, ps_stepsize stepsize) {
+  ps_stepmode_reg reg = {};
+  ps_xferreg("getparam stepmode", CMD_GETPARAM(PARAM_STEPMODE), reg);
+  reg.sync_en = sync;
+  reg.sync_sel = stepsize;
+  ps_xferreg("setparam stepmode", CMD_SETPARAM(PARAM_STEPMODE), reg);
 }
 
 float ps_getmaxspeed() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_MAXSPEED), 0, 0};
-  ps_xfer("getparam maxspeed", buf, 3);
-  uint16_t maxspeed = ps_get16(buf[1], buf[2]);
+  uint8_t buf[2] = {0, 0};
+  ps_xfer("getparam maxspeed", CMD_GETPARAM(PARAM_MAXSPEED), buf, 2);
+  uint16_t maxspeed = ps_get16(buf);
   ps_print("Max Speed", maxspeed);
   return ((float)(maxspeed & MAXSPEED_MASK))/MAXSPEED_COEFF;
 }
 
 void ps_setmaxspeed(float steps_per_second) {
-  uint8_t buf[3] = {CMD_SETPARAM(PARAM_MAXSPEED), 0, 0};
+  uint8_t buf[2] = {0, 0};
   uint16_t maxspeed = min((int)round(steps_per_second * MAXSPEED_COEFF), MAXSPEED_MASK);
-  ps_set16(buf[1], buf[2], maxspeed);
-  ps_xfer("setparam maxspeed", buf, 3);
+  ps_set16(maxspeed, buf);
+  ps_xfer("setparam maxspeed", CMD_SETPARAM(PARAM_MAXSPEED), buf, 2);
 }
 
 ps_fullspeed ps_getfullspeed() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_FSSPD), 0, 0};
-  ps_fsspd_reg * reg = (ps_fsspd_reg *)&buf[1];
-  ps_xfer("getparam fsspd", buf, 3);
-  ps_print(reg);
+  ps_fsspd_reg reg = {};
+  ps_xferreg("getparam fsspd", CMD_GETPARAM(PARAM_FSSPD), reg);
+  ps_print(&reg);
   return (ps_fullspeed){
-    .steps_per_sec = ((float)(ps_getsplit16(reg->fs_spd) & FSSPD_MASK) + FSSPD_OFFSET)/FSSPD_COEFF,
-    .boost_mode = (bool)reg->boost_mode
+    .steps_per_sec = ((float)(ps_getsplit16(reg.fs_spd, 8) & FSSPD_MASK) + FSSPD_OFFSET)/FSSPD_COEFF,
+    .boost_mode = (bool)reg.boost_mode
   };
 }
 
 void ps_setfullspeed(float steps_per_sec, bool boost_mode) {
-  uint8_t buf[3] = {CMD_SETPARAM(PARAM_FSSPD), 0, 0};
-  ps_fsspd_reg * reg = (ps_fsspd_reg *)&buf[1];
+  ps_fsspd_reg reg = {};
   uint16_t fs_spd = min((int)round(steps_per_sec * FSSPD_COEFF - FSSPD_OFFSET), FSSPD_MASK);
-  ps_setsplit16(reg->fs_spd, fs_spd);
-  reg->boost_mode = boost_mode? 0x1 : 0x0;
-  ps_xfer("setparam fsspd", buf, 3);
+  ps_setsplit16(fs_spd, reg.fs_spd, 8);
+  reg.boost_mode = boost_mode? 0x1 : 0x0;
+  ps_xferreg("setparam fsspd", CMD_SETPARAM(PARAM_FSSPD), reg);
 }
 
 float ps_getaccel() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_ACC), 0, 0};
-  ps_xfer("getparam acc", buf, 3);
-  uint16_t acc = ps_get16(buf[1], buf[2]);
+  uint8_t buf[2] = {0, 0};
+  ps_xfer("getparam acc", CMD_GETPARAM(PARAM_ACC), buf, 2);
+  uint16_t acc = ps_get16(buf);
   ps_print("Acc", acc);
   return ((float)(acc & ACC_MASK))/ACC_COEFF;
 }
 
 void ps_setaccel(float steps_per_sec_2) {
-  uint8_t buf[3] = {CMD_SETPARAM(PARAM_ACC), 0, 0};
+  uint8_t buf[2] = {0, 0};
   uint16_t acc = min((int)round(steps_per_sec_2 * ACC_COEFF), ACC_MASK);
-  ps_set16(buf[1], buf[2], acc);
-  ps_xfer("setparam acc", buf, 3);
+  ps_set16(acc, buf);
+  ps_xfer("setparam acc", CMD_SETPARAM(PARAM_ACC), buf, 2);
 }
 
 float ps_getdecel() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_DEC), 0, 0};
-  ps_xfer("getparam dec", buf, 3);
-  uint16_t dec = ps_get16(buf[1], buf[2]);
+  uint8_t buf[2] = {0, 0};
+  ps_xfer("getparam dec", CMD_GETPARAM(PARAM_DEC), buf, 2);
+  uint16_t dec = ps_get16(buf);
   ps_print("Dec", dec);
   return ((float)(dec & DEC_MASK)) / DEC_COEFF;
 }
 
 void ps_setdecel(float steps_per_sec_2) {
-  uint8_t buf[3] = {CMD_SETPARAM(PARAM_DEC), 0, 0};
+  uint8_t buf[2] = {0, 0};
   uint16_t dec = min((int)round(steps_per_sec_2 * DEC_COEFF), DEC_MASK);
-  ps_set16(buf[1], buf[2], dec);
-  ps_xfer("setparam dec", buf, 3);
+  ps_set16(dec, buf);
+  ps_xfer("setparam dec", CMD_SETPARAM(PARAM_DEC), buf, 2);
 }
 
 ps_slewrate ps_getslewrate() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_GATECFG1), 0, 0};
-  ps_gatecfg1_reg * reg = (ps_gatecfg1_reg *)&buf[1];
-  ps_xfer("getparam gatecfg1", buf, 3);
-  ps_print(reg);
-  return (ps_slewrate)reg->slew;
+  ps_gatecfg1_reg reg = {};
+  ps_xferreg("getparam gatecfg1", CMD_GETPARAM(PARAM_GATECFG1), reg);
+  ps_print(&reg);
+  return (ps_slewrate)reg.slew;
 }
 
 void ps_setslewrate(ps_slewrate slew) {
-  uint8_t buf[3] = {0, 0, 0};
-  ps_gatecfg1_reg * reg = (ps_gatecfg1_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_GATECFG1);
-  ps_xfer("getparam gatecfg1", buf, 3);
-  reg->slew = slew;
-  buf[0] = CMD_SETPARAM(PARAM_GATECFG1);
-  ps_xfer("setparam gatecfg1", buf, 3);
+  ps_gatecfg1_reg reg = {};
+  ps_xferreg("getparam gatecfg1", CMD_GETPARAM(PARAM_GATECFG1), reg);
+  reg.slew = slew;
+  ps_xferreg("setparam gatecfg1", CMD_SETPARAM(PARAM_GATECFG1), reg);
 }
 
 ps_ocd ps_getocd() {
-  uint8_t buf1[2] = {CMD_GETPARAM(PARAM_OCDTH), 0};
-  uint8_t buf2[3] = {CMD_GETPARAM(PARAM_CONFIG), 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf2[1];
-  ps_xfer("getparam ocdth", buf1, 2);
-  ps_xfer("getparam config", buf2, 3);
-  ps_print("OCD Th", buf1[1]);
-  ps_print("OCD En", reg->com.oc_sd);
+  uint8_t ocdth = 0;
+  ps_config_reg reg = {};
+  ps_xfer("getparam ocdth", CMD_GETPARAM(PARAM_OCDTH), &ocdth, 1);
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  ps_print("OCD Th", ocdth);
+  ps_print("OCD En", reg.com.oc_sd);
   return (ps_ocd){
-    .millivolts = ((float)(buf1[1] & OCDTH_MASK)) / OCDTH_COEFF,
-    .shutdown = reg->com.oc_sd
+    .millivolts = ((float)(ocdth & OCDTH_MASK)) / OCDTH_COEFF,
+    .shutdown = reg.com.oc_sd
   };
 }
 
 void ps_setocd(float millivolts, bool shutdown) {
-  uint8_t buf1[2] = {CMD_SETPARAM(PARAM_OCDTH), 0};
-  uint8_t buf2[3] = {0, 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf2[1];
-  buf1[1] = min((int)round(millivolts * OCDTH_COEFF), OCDTH_MASK);
-  ps_xfer("setparam ocdth", buf1, 2);
-  buf2[0] = CMD_GETPARAM(PARAM_CONFIG);
-  ps_xfer("getparam config", buf2, 3);
-  reg->com.oc_sd = shutdown? 0x1 : 0x0;
-  buf2[0] = CMD_SETPARAM(PARAM_CONFIG);
-  ps_xfer("setparam config", buf2, 3);
+  uint8_t ocdth = min((int)round(millivolts * OCDTH_COEFF), OCDTH_MASK);
+  ps_config_reg reg = {};
+  ps_xfer("setparam ocdth", CMD_SETPARAM(PARAM_OCDTH), &ocdth, 1);
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.com.oc_sd = shutdown? 0x1 : 0x0;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
 ps_clocksel ps_getclocksel() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_CONFIG), 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  ps_xfer("getparam config", buf, 3);
-  ps_print(reg);
-  return (ps_clocksel)reg->com.clk_sel;
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  ps_print(&reg);
+  return (ps_clocksel)reg.com.clk_sel;
 }
 
 void ps_setclocksel(const ps_clocksel clock) {
-  uint8_t buf[3] = {0, 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_CONFIG);
-  ps_xfer("getparam config", buf, 3);
-  reg->com.clk_sel = clock;
-  buf[0] = CMD_SETPARAM(PARAM_CONFIG);
-  ps_xfer("setparam config", buf, 3);
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.com.clk_sel = clock;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
 ps_swmode ps_getswmode() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_CONFIG), 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  ps_xfer("getparam config", buf, 3);
-  ps_print(reg);
-  return (ps_swmode)reg->com.sw_mode;
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  ps_print(&reg);
+  return (ps_swmode)reg.com.sw_mode;
 }
 
 void ps_setswmode(const ps_swmode swmode) {
-  uint8_t buf[3] = {0, 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_CONFIG);
-  ps_xfer("getparam config", buf, 3);
-  reg->com.sw_mode = swmode;
-  buf[0] = CMD_SETPARAM(PARAM_CONFIG);
-  ps_xfer("setparam config", buf, 3);
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.com.sw_mode = swmode;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
 void ps_vm_setpwmfreq(uint8_t div, uint8_t mul) {
-  uint8_t buf[3] = {0, 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_CONFIG);
-  ps_xfer("getparam config", buf, 3);
-  reg->vm.f_pwm_int = div;
-  reg->vm.f_pwm_dec = mul;
-  buf[0] = CMD_SETPARAM(PARAM_CONFIG);
-  ps_xfer("setparam config", buf, 3);
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.vm.f_pwm_int = div;
+  reg.vm.f_pwm_dec = mul;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
-ps_alarms ps_getalarms() {
-  uint8_t buf[2] = {CMD_GETPARAM(PARAM_ALARMEN), 0};
-  ps_alarms_reg * reg = (ps_alarms_reg *)&buf[1];
-  ps_xfer("getparam alarmen", buf, 2);
-  ps_print(reg);
+ps_alarms ps_getalarmconfig() {
+  ps_alarms_reg reg = {};
+  ps_xferreg("getparam alarmen", CMD_GETPARAM(PARAM_ALARMEN), reg);
+  ps_print(&reg);
   return (ps_alarms){
-    .command_error = reg->command_error,
-    .overcurrent = reg->overcurrent,
-    .undervoltage = reg->undervoltage,
-    .thermal_shutdown = reg->thermal_shutdown,
-    .user_switch = reg->user_switch,
-    .thermal_warning = reg->thermal_warning,
-    .stall_detect = reg->stall_detect,
-    .adc_undervoltage = reg->adc_undervoltage
+    .command_error = reg.command_error,
+    .overcurrent = reg.overcurrent,
+    .undervoltage = reg.undervoltage,
+    .thermal_shutdown = reg.thermal_shutdown,
+    .user_switch = reg.user_switch,
+    .thermal_warning = reg.thermal_warning,
+    .stall_detect = reg.stall_detect,
+    .adc_undervoltage = reg.adc_undervoltage
   };
 }
 
-void ps_setalarms(const ps_alarms * alarms) {
-  ps_setalarms(alarms->command_error, alarms->overcurrent, alarms->undervoltage, alarms->thermal_shutdown, alarms->user_switch, alarms->thermal_warning, alarms->stall_detect, alarms->adc_undervoltage);
+void ps_setalarmconfig(const ps_alarms * alarms) {
+  ps_setalarmconfig(alarms->command_error, alarms->overcurrent, alarms->undervoltage, alarms->thermal_shutdown, alarms->user_switch, alarms->thermal_warning, alarms->stall_detect, alarms->adc_undervoltage);
 }
 
-void ps_setalarms(bool command_error, bool overcurrent, bool undervoltage, bool thermal_shutdown, bool user_switch, bool thermal_warning, bool stall_detect, bool adc_undervoltage) {
-  uint8_t buf[2] = {CMD_SETPARAM(PARAM_ALARMEN), 0};
-  ps_alarms_reg * reg = (ps_alarms_reg *)&buf[1];
-  reg->overcurrent = overcurrent? 0x1 : 0x0;
-  reg->thermal_shutdown = thermal_shutdown? 0x1 : 0x0;
-  reg->thermal_warning = thermal_warning? 0x1 : 0x0;
-  reg->undervoltage = undervoltage? 0x1 : 0x0;
-  reg->adc_undervoltage = adc_undervoltage? 0x1 : 0x0;
-  reg->stall_detect = stall_detect? 0x1 : 0x0;
-  reg->user_switch = user_switch? 0x1 : 0x0;
-  reg->command_error = command_error? 0x1 : 0x0;
-  ps_xfer("setparam alarmen", buf, 2);
+void ps_setalarmconfig(bool command_error, bool overcurrent, bool undervoltage, bool thermal_shutdown, bool user_switch, bool thermal_warning, bool stall_detect, bool adc_undervoltage) {
+  ps_alarms_reg reg = {
+    .overcurrent = overcurrent? 0x1 : 0x0,
+    .thermal_shutdown = thermal_shutdown? 0x1 : 0x0,
+    .thermal_warning = thermal_warning? 0x1 : 0x0,
+    .undervoltage = undervoltage? 0x1 : 0x0,
+    .adc_undervoltage = adc_undervoltage? 0x1 : 0x0,
+    .stall_detect = stall_detect? 0x1 : 0x0,
+    .user_switch = user_switch? 0x1 : 0x0,
+    .command_error = command_error? 0x1 : 0x0,
+  };
+  ps_xferreg("setparam alarmen", CMD_SETPARAM(PARAM_ALARMEN), reg);
+}
+
+ps_alarms ps_getalarms() {
+  ps_status_reg reg = {};
+  ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+  return (ps_alarms){
+    .command_error = reg.cmd_error,
+    .overcurrent = !reg.ocd,
+    .undervoltage = !reg.uvlo,
+    .thermal_shutdown = reg.th_status == TH_BRIDGESHUTDOWN || reg.th_status == TH_DEVICESHUTDOWN,
+    .user_switch = reg.sw_evn,
+    .thermal_warning = reg.th_status == TH_WARNING,
+    .stall_detect = !reg.stall_a || !reg.stall_b,
+    .adc_undervoltage = !reg.uvlo_adc
+  };
 }
 
 bool ps_vm_getvoltcomp() {
-  uint8_t buf[3] = {CMD_GETPARAM(PARAM_CONFIG), 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  ps_xfer("getparam config", buf, 3);
-  return reg->vm.en_vscomp;
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (bool)reg.vm.en_vscomp;
 }
 
 void ps_vm_setvoltcomp(bool voltage_compensation) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.vm.en_vscomp = voltage_compensation? 0x1 : 0x0;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
+}
+
+bool ps_cm_gettorqreg() {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (bool)reg.cm.en_tqreg;
+}
+
+void ps_cm_settorqreg(bool torque_reg_adcin) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.cm.en_tqreg = torque_reg_adcin? 0x1 : 0x0;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
+}
+
+ps_ktvals ps_getktvals() {
+  uint8_t kthold = 0, ktrun = 0, ktacc = 0, ktdec = 0;
+  ps_xfer("getparam ktvalhold", CMD_GETPARAM(PARAM_KTVALHOLD), &kthold, 1);
+  ps_xfer("getparam ktvalrun", CMD_GETPARAM(PARAM_KTVALRUN), &ktrun, 1);
+  ps_xfer("getparam ktvalacc", CMD_GETPARAM(PARAM_KTVALACC), &ktacc, 1);
+  ps_xfer("getparam ktvaldec", CMD_GETPARAM(PARAM_KTVALDEC), &ktdec, 1);
+  return (ps_ktvals){
+    .hold = ((float)kthold) * KTVALS_COEFF,
+    .run = ((float)ktrun) * KTVALS_COEFF,
+    .accel = ((float)ktacc) * KTVALS_COEFF,
+    .decel = ((float)ktdec) * KTVALS_COEFF
+  };
+}
+
+void ps_setktvals(float hold, float run, float accel, float decel) {
+  uint8_t kthold = (uint8_t)round(constrain(hold, 0.0, 1.0) / KTVALS_COEFF);
+  uint8_t ktrun = (uint8_t)round(constrain(run, 0.0, 1.0) / KTVALS_COEFF);
+  uint8_t ktacc = (uint8_t)round(constrain(accel, 0.0, 1.0) / KTVALS_COEFF);
+  uint8_t ktdec = (uint8_t)round(constrain(decel, 0.0, 1.0) / KTVALS_COEFF);
+  ps_xfer("setparam ktvalhold", CMD_SETPARAM(PARAM_KTVALHOLD), &kthold, 1);
+  ps_xfer("setparam ktvalrun", CMD_SETPARAM(PARAM_KTVALRUN), &ktrun, 1);
+  ps_xfer("setparam ktvalacc", CMD_SETPARAM(PARAM_KTVALACC), &ktacc, 1);
+  ps_xfer("setparam ktvaldec", CMD_SETPARAM(PARAM_KTVALDEC), &ktdec, 1);
+}
+
+int ps_readadc() {
+  uint8_t adc = 0;
+  ps_xfer("getparam adcout", CMD_GETPARAM(PARAM_ADCOUT), &adc, 1);
+  ps_print("Adc", adc);
+  return (int)adc;
+}
+
+uint32_t ps_move(ps_direction dir, uint32_t steps) {
   uint8_t buf[3] = {0, 0, 0};
-  ps_config_reg * reg = (ps_config_reg *)&buf[1];
-  buf[0] = CMD_GETPARAM(PARAM_CONFIG);
-  ps_xfer("getparam config", buf, 3);
-  reg->vm.en_vscomp = voltage_compensation? 0x1 : 0x0;
-  buf[0] = CMD_SETPARAM(PARAM_CONFIG);
-  ps_xfer("setparam config", buf, 3);
-}
-
-ps_vm_kvals ps_vm_getkvals() {
-  ps_vm_kvals kvals = {0.0, 0.0, 0.0, 0.0};
-  {
-    uint8_t buf[2] = {CMD_GETPARAM(PARAM_KVALHOLD), 0};
-    ps_xfer("getparam kvalhold", buf, 2);
-    kvals.hold = ((float)buf[1]) * KVALS_COEFF;
-  }
-  {
-    uint8_t buf[2] = {CMD_GETPARAM(PARAM_KVALRUN), 0};
-    ps_xfer("getparam kvalrun", buf, 2);
-    kvals.run = ((float)buf[1]) * KVALS_COEFF;
-  }
-  {
-    uint8_t buf[2] = {CMD_GETPARAM(PARAM_KVALACC), 0};
-    ps_xfer("getparam kvalacc", buf, 2);
-    kvals.accel = ((float)buf[1]) * KVALS_COEFF;
-  }
-  {
-    uint8_t buf[2] = {CMD_GETPARAM(PARAM_KVALDEC), 0};
-    ps_xfer("getparam kvaldec", buf, 2);
-    kvals.decel = ((float)buf[1]) * KVALS_COEFF;
-  }
-  return kvals;
-}
-
-void ps_vm_setkvals(float hold, float run, float accel, float decel) {
-  hold = constrain(hold, 0.0, 1.0);
-  run = constrain(run, 0.0, 1.0);
-  accel = constrain(accel, 0.0, 1.0);
-  decel = constrain(decel, 0.0, 1.0);
-  {
-    uint8_t buf[2] = {CMD_SETPARAM(PARAM_KVALHOLD), (uint8_t)round(hold / KVALS_COEFF)};
-    ps_xfer("setparam kvalhold", buf, 2);
-  }
-  {
-    uint8_t buf[2] = {CMD_SETPARAM(PARAM_KVALRUN), (uint8_t)round(run / KVALS_COEFF)};
-    ps_xfer("setparam kvalrun", buf, 2);
-  }
-  {
-    uint8_t buf[2] = {CMD_SETPARAM(PARAM_KVALACC), (uint8_t)round(accel / KVALS_COEFF)};
-    ps_xfer("setparam kvalacc", buf, 2);
-  }
-  {
-    uint8_t buf[2] = {CMD_SETPARAM(PARAM_KVALDEC), (uint8_t)round(decel / KVALS_COEFF)};
-    ps_xfer("setparam kvaldec", buf, 2);
-  }
-}
-
-void ps_move(ps_dir dir, uint32_t steps) {
-  uint8_t buf[4] = {CMD_MOVE(dir), 0, 0, 0};
-  steps = steps & MOVE_MASK;
-  ps_set24(buf[1], buf[2], buf[3], steps);
-  ps_xfer("move", buf, 4);
+  steps = min(steps, (uint32_t)MOVE_MASK);
+  ps_set24(steps, buf);
+  ps_xfer("move", CMD_MOVE(dir), buf, 3);
+  return steps;
 }
 
 void ps_softstop() {
-  uint8_t buf[1] = {CMD_SOFTSTOP()};
-  ps_xfer("softstop", buf, 1);
+  ps_xfer("softstop", CMD_SOFTSTOP(), NULL, 0);
+}
+
+void ps_hardstop() {
+  ps_xfer("hardstop", CMD_HARDSTOP(), NULL, 0);
+}
+
+void ps_softhiz() {
+  ps_xfer("softhiz", CMD_SOFTHIZ(), NULL, 0);
+}
+void ps_hardhiz() {
+  ps_xfer("hardhiz", CMD_HARDHIZ(), NULL, 0);
+}
+
+static inline int32_t ps_xferpos(int32_t pos, uint8_t * buf) {
+  int32_t oldp = ps_get24(buf);
+  if (oldp & 0x00200000) oldp |= 0xFFC00000;
+  uint32_t newp = pos & ABSPOS_MASK;
+  ps_set24(newp, buf);
+  return oldp;
+}
+
+int32_t ps_getpos() {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xfer("getparam abspos", CMD_GETPARAM(PARAM_ABSPOS), buf, 3);
+  return ps_xferpos(0, buf);
+}
+
+void ps_setpos(int32_t pos) {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xferpos(pos, buf);
+  ps_xfer("setparam abspos", CMD_SETPARAM(PARAM_ABSPOS), buf, 3);
+}
+
+void ps_resetpos() {
+  ps_xfer("resetpos", CMD_RESETPOS(), NULL, 0);
+}
+
+void ps_gohome() {
+  ps_xfer("gohome", CMD_GOHOME(), NULL, 0);
+}
+
+int32_t ps_getmark() {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xfer("getparam mark", CMD_GETPARAM(PARAM_MARK), buf, 3);
+  return ps_xferpos(0, buf);
+}
+
+void ps_setmark(int32_t mark) {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xferpos(mark, buf);
+  ps_xfer("setparam mark", CMD_SETPARAM(PARAM_MARK), buf, 3);
+}
+
+void ps_gomark() {
+  ps_xfer("gomark", CMD_GOMARK(), NULL, 0);
+}
+
+void ps_goto(int32_t pos) {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xferpos(pos, buf);
+  ps_xfer("goto", CMD_GOTO(), buf, 3);
+}
+
+void ps_goto(int32_t pos, ps_direction dir) {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xferpos(pos, buf);
+  ps_xfer("gotodir", CMD_GOTODIR(dir), buf, 3);
+}
+
+float ps_getspeed() {
+  uint8_t buf[3] = {0, 0, 0};
+  ps_xfer("getparam speed", CMD_GETPARAM(PARAM_SPEED), buf, 3);
+  return (float)ps_get24(buf) * SPEED_COEFF;
+}
+
+void ps_run(ps_direction dir, float speed) {
+  uint32_t spd = (uint32_t)round(constrain(speed, 0.0, SPEED_MAX) / SPEED_COEFF);
+  uint8_t buf[3] = {0, 0, 0};
+  ps_set24(spd, buf);
+  ps_xfer("run", CMD_RUN(dir), buf, 3);
+}
+
+void ps_stepclock(ps_direction dir) {
+  ps_xfer("stepclock", CMD_STEPCLOCK(dir), NULL, 0);
+}
+
+void ps_gountil(ps_posact act, ps_direction dir, float speed) {
+  uint32_t spd = (uint32_t)round(constrain(speed, 0.0, SPEED_MAX) / SPEED_COEFF);
+  uint8_t buf[3] = {0, 0, 0};
+  ps_set24(spd, buf);
+  ps_xfer("gountil", CMD_GOUNTIL(act, dir), buf, 3);
+}
+
+void ps_releasesw(ps_posact act, ps_direction dir) {
+  ps_xfer("releasesw", CMD_RELEASESW(act, dir), NULL, 0);
 }
 

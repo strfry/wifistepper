@@ -13,7 +13,7 @@
 #define CMD_SETPARAM(param)     (0b00000000 | __MS(param, MASK_PARAM, SHIFT_PARAM))
 #define CMD_GETPARAM(param)     (0b00100000 | __MS(param, MASK_PARAM, SHIFT_PARAM))
 #define CMD_RUN(dir)            (0b01010000 | __MS(dir, MASK_DIR, SHIFT_DIR))
-#define CMD_STEPCLK(dir)        (0b01011000 | __MS(dir, MASK_DIR, SHIFT_DIR))
+#define CMD_STEPCLOCK(dir)      (0b01011000 | __MS(dir, MASK_DIR, SHIFT_DIR))
 #define CMD_MOVE(dir)           (0b01000000 | __MS(dir, MASK_DIR, SHIFT_DIR))
 #define CMD_GOTO()              (0b01100000)
 #define CMD_GOTODIR(dir)        (0b01101000 | __MS(dir, MASK_DIR, SHIFT_DIR))
@@ -49,11 +49,13 @@
 #define PARAM_STATUS            (0x1B)
 #define PARAM_CONFIG            (0x1A)
 
+/* Both Voltage & Current Mode */
+#define PARAM_KTVALHOLD         (0x09)
+#define PARAM_KTVALRUN          (0x0A)
+#define PARAM_KTVALACC          (0x0B)
+#define PARAM_KTVALDEC          (0x0C)
+
 /* Voltage Mode */
-#define PARAM_KVALHOLD          (0x09)
-#define PARAM_KVALRUN           (0x0A)
-#define PARAM_KVALACC           (0x0B)
-#define PARAM_KVALDEC           (0x0C)
 #define PARAM_INTSPEED          (0x0D)
 #define PARAM_STSLP             (0x0E)
 #define PARAM_FNSLPACC          (0x0F)
@@ -62,14 +64,12 @@
 #define PARAM_STALLTH           (0x14)
 
 /* Current Mode */
-#define PARAM_TVALHOLD          (0x09)
-#define PARAM_TVALRUN           (0x0A)
-#define PARAM_TVALACC           (0x0B)
-#define PARAM_TVALDEC           (0x0C)
 #define PARAM_TFAST             (0x0E)
 #define PARAM_TONMIN            (0x0F)
 #define PARAM_TOFFMIN           (0x10)
 
+/* REG ABSPOS */
+#define ABSPOS_MASK       (0x003FFFFF)
 
 /* REG ELPOS */
 typedef struct __attribute__((packed)) __ps_elpos_reg {
@@ -79,6 +79,13 @@ typedef struct __attribute__((packed)) __ps_elpos_reg {
   uint8_t microstep : 7;
   uint8_t step_L : 1;
 } ps_elpos_reg;
+
+/* REG MARK */
+#define MARK_MASK       (0x003FFFFF)
+
+/* REG SPEED */
+#define SPEED_COEFF       (0.015)
+#define SPEED_MAX         (15625.0)
 
 /* REG ACC */
 #define ACC_COEFF         (0.137438)
@@ -169,8 +176,15 @@ typedef struct __attribute__((packed)) __ps_status_reg {
   uint8_t sw_evn : 1;
   uint8_t dir : 1;
   uint8_t mot_status: 2;
-  uint8_t cmd_err : 1;
+  uint8_t cmd_error : 1;
 } ps_status_reg;
+
+typedef enum __ps_thstatus {
+  TH_NORMAL           = 0x0,
+  TH_WARNING          = 0x1,
+  TH_BRIDGESHUTDOWN   = 0x2,
+  TH_DEVICESHUTDOWN   = 0x3
+} ps_thstatus;
 
 /* REG CONFIG */
 typedef struct __attribute__((packed)) __ps_config_vm_reg {
@@ -214,15 +228,13 @@ typedef union __ps_config_reg {
 } ps_config_reg;
 
 /* KVALS */
-#define KVALS_COEFF       (0.004)
+#define KTVALS_COEFF       (0.00392)
 
 /* REG TFAST */
 typedef struct __attribute__((packed)) __ps_tfast_reg {
   uint8_t fast_step : 4;
   uint8_t toff_fast : 4;
 } ps_tfast_reg;
-
-
 
 /* CMD MOVE */
 #define MOVE_MASK         (0x003FFFFF)

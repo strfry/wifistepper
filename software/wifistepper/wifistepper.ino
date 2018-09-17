@@ -7,43 +7,63 @@ void wait_callback() {
   ESP.wdtFeed();
 }
 
+void printalarms(ps_alarms * a) {
+  Serial.println("Alarms:");
+  Serial.print("Command Error: "); Serial.println(a->command_error);
+  Serial.print("Overcurrent: "); Serial.println(a->overcurrent);
+  Serial.print("Undervoltage: "); Serial.println(a->undervoltage);
+  Serial.print("Thermal Shutdown: "); Serial.println(a->thermal_shutdown);
+  Serial.println();
+}
+
 void setup() {
   Serial.begin(115200);
   
   ps_spiinit();
 
   ps_setsync(SYNC_BUSY);
-  ps_setmode(MODE_VOLTAGE, STEP_128);
+  //ps_setmode(MODE_VOLTAGE);                 // V
+  ps_setmode(MODE_CURRENT);                 // C
+  ps_setstepsize(STEP_16);        
   ps_setmaxspeed(1000);
-  ps_setfullspeed(2000, false);
+  ps_setfullspeed(1000, false);
   
-  ps_setaccel(2000);
-  ps_setdecel(2000);
+  ps_setaccel(50);
+  ps_setdecel(50);
   ps_setslewrate(SR_520);
 
-  ps_setocd(250, true);
-  ps_vm_setpwmfreq(0, 1);
-  ps_vm_setvoltcomp(false);
+  ps_setocd(500, true);
+  //ps_vm_setpwmfreq(0, 1);                   // V
+  //ps_vm_setvoltcomp(false);                 // V
+  ps_cm_settorqreg(false);
   ps_setswmode(SW_USER);
   ps_setclocksel(CLK_INT16);
 
-  ps_vm_setkvals(0.125, 0.25, 0.25, 0.25);
-  ps_setalarms(true, true, true, true);
+  //ps_setktvals(0.125, 0.25, 0.25, 0.25);
+  ps_setktvals(0.5, 0.75, 0.75, 0.75);
+  ps_setalarmconfig(true, true, true, true);
   
   ps_getstatus(true);
 }
 
 void loop() {
   Serial.println("Loop");
+
+  ps_alarms alarms = ps_getalarms();
+  printalarms(&alarms);
   
   ps_move(FWD, 2000);
   ps_waitbusy(wait_callback);
   ps_softstop();
   ps_waitbusy(wait_callback);
 
+  //ps_getstatus();
+
   ps_move(REV, 2000);
   ps_waitbusy(wait_callback);
   ps_softstop();
   ps_waitbusy(wait_callback);
+
+  //ps_getstatus();
 }
 
