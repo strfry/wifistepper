@@ -24,23 +24,27 @@ void setup() {
   ps_setsync(SYNC_BUSY);
   //ps_setmode(MODE_VOLTAGE);                 // V
   ps_setmode(MODE_CURRENT);                 // C
-  ps_setstepsize(STEP_16);        
-  ps_setmaxspeed(1000);
-  ps_setfullspeed(1000, false);
+  ps_setstepsize(STEP_16);                  // C
+  //ps_setstepsize(STEP_128);                 // V
   
+  ps_setmaxspeed(1000);
+  ps_setminspeed(10, true);
   ps_setaccel(50);
   ps_setdecel(50);
+
+  ps_setfullstepspeed(2000, false);
+  
   ps_setslewrate(SR_520);
 
   ps_setocd(500, true);
   //ps_vm_setpwmfreq(0, 1);                   // V
-  //ps_vm_setvoltcomp(false);                 // V
-  ps_cm_settorqreg(false);
+  ps_cm_setpredict(true);                   // C
+  ps_setvoltcomp(false);
   ps_setswmode(SW_USER);
   ps_setclocksel(CLK_INT16);
 
-  //ps_setktvals(0.125, 0.25, 0.25, 0.25);
-  ps_setktvals(0.5, 0.75, 0.75, 0.75);
+  //ps_setktvals(0.125, 0.25, 0.25, 0.25);    // V
+  ps_setktvals(0.75, 0.75, 0.75, 0.75);     // C
   ps_setalarmconfig(true, true, true, true);
   
   ps_getstatus(true);
@@ -65,5 +69,6 @@ void loop() {
   ps_waitbusy(wait_callback);
 
   //ps_getstatus();
+
 }
 

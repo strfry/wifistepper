@@ -108,6 +108,9 @@ typedef struct __attribute__((packed)) __ps_minspeed_reg {
   uint8_t min_speed_L : 8;
 } ps_minspeed_reg;
 
+#define MINSPEED_COEFF    (4.194304)
+#define MINSPEED_MASK     (0x0FFF)
+
 /* REG OCDTH */
 #define OCDTH_COEFF       (0.032)
 #define OCDTH_MASK        (0x1F)
@@ -192,8 +195,7 @@ typedef struct __attribute__((packed)) __ps_config_vm_reg {
   uint8_t f_pwm_dec : 3;
   uint8_t f_pwm_int : 3;
 
-  uint8_t __mask1 : 5;
-  uint8_t en_vscomp : 1;
+  uint8_t __mask1 : 6;
   uint8_t __unused : 1;
   uint8_t __mask2 : 1;
 } ps_config_vm_reg;
@@ -203,8 +205,7 @@ typedef struct __attribute__((packed)) __ps_config_cm_reg {
   uint8_t tsw : 5;
   uint8_t pred_en : 1;
 
-  uint8_t __mask1 : 5;
-  uint8_t en_tqreg : 1;
+  uint8_t __mask1 : 6;
   uint8_t __unused : 1;
   uint8_t __mask2 : 1;
 } ps_config_cm_reg;
@@ -216,7 +217,7 @@ typedef struct __attribute__((packed)) __ps_config_com_reg {
 
   uint8_t clk_sel : 4;
   uint8_t sw_mode : 1;
-  uint8_t __mask1 : 1;
+  uint8_t en_voltcomp : 1;
   uint8_t __unused : 1;
   uint8_t oc_sd : 1;
 } ps_config_com_reg;

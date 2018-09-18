@@ -49,6 +49,15 @@ void ps_setdecel(float steps_per_sec_2);
 float ps_getmaxspeed();
 void ps_setmaxspeed(float steps_per_second);
 
+/* MINSPEED */
+typedef struct __ps_minspeed {
+  float steps_per_sec;
+  bool lowspeed_optim;
+} ps_minspeed;
+
+ps_minspeed ps_getminspeed();
+void ps_setminspeed(float steps_per_second, bool lowspeed_optim);
+
 /* ADCOUT */
 int ps_readadc();
 
@@ -62,13 +71,13 @@ ps_ocd ps_getocd();
 void ps_setocd(float millivolts, bool shutdown =true);
 
 /* FULLSPEED */
-typedef struct __ps_fullspeed {
+typedef struct __ps_fullstepspeed {
   float steps_per_sec;
   bool boost_mode;
-} ps_fullspeed;
+} ps_fullstepspeed;
 
-ps_fullspeed ps_getfullspeed();
-void ps_setfullspeed(float steps_per_sec, bool boost_mode =false);
+ps_fullstepspeed ps_getfullstepspeed();
+void ps_setfullstepspeed(float steps_per_sec, bool boost_mode =false);
 
 /* STEPMODE */
 typedef enum __ps_mode {
@@ -164,14 +173,26 @@ typedef struct __ps_ktvals {
 ps_ktvals ps_getktvals();
 void ps_setktvals(float hold, float run, float accel, float decel);
 
-/* VM */
-bool ps_vm_getvoltcomp();
-void ps_vm_setvoltcomp(bool voltage_compensation);
+/* CONFIG */
+bool ps_getvoltcomp();
+void ps_setvoltcomp(bool voltage_compensation);
 
 /* CM */
-bool ps_cm_gettorqreg();
-void ps_cm_settorqreg(bool torque_reg_adcin);
+typedef struct __ps_cm_controltimes {
+  float min_on_us;
+  float min_off_us;
+  float fast_off_us;
+  float fast_step_us;
+} ps_cm_ctrltimes;
 
+ps_cm_ctrltimes ps_cm_getctrltimes();
+void ps_cm_setctrltimes(float min_on_us, float min_off_us, float fast_off_us, float fast_step_us);
+
+bool ps_cm_getpredict();
+void ps_cm_setpredict(bool enable_predict);
+
+float ps_cm_getswitchfreq();
+void ps_cm_setswitchfreq(float switching_khz);
 
 /* MOVE */
 uint32_t ps_move(ps_direction dir, uint32_t steps);

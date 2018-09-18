@@ -83,31 +83,38 @@ void ps_xfer(const char * cmdname, uint8_t cmd, uint8_t * data, size_t len) {
   _ps_xfer(cmd, data, len);
 }
 
-void ps_print(const ps_status_reg * s) {
+void ps_print(const ps_status_reg * r) {
   Serial.println("StepperMotor Status:");
-  Serial.print("Stall A: "); Serial.println(s->stall_a, BIN);
-  Serial.print("Stall B: "); Serial.println(s->stall_b, BIN);
-  Serial.print("OCD: "); Serial.println(s->ocd, BIN);
-  Serial.print("Th Status: "); Serial.println(s->th_status, BIN);
-  Serial.print("UVLO ADC: "); Serial.println(s->uvlo_adc, BIN);
-  Serial.print("UVLO: "); Serial.println(s->uvlo, BIN);
-  Serial.print("Step Clk: "); Serial.println(s->stck_mod, BIN);
-  Serial.print("Cmd ERR: "); Serial.println(s->cmd_error, BIN);
-  Serial.print("Motor Status: "); Serial.println(s->mot_status, BIN);
-  Serial.print("Direction: "); Serial.println(s->dir, BIN);
-  Serial.print("Sw Event: "); Serial.println(s->sw_evn, BIN);
-  Serial.print("Sw F: "); Serial.println(s->sw_f, BIN);
-  Serial.print("Busy: "); Serial.println(s->busy, BIN);
-  Serial.print("HiZ: "); Serial.println(s->hiz, BIN);
+  Serial.print("Stall A: "); Serial.println(r->stall_a, BIN);
+  Serial.print("Stall B: "); Serial.println(r->stall_b, BIN);
+  Serial.print("OCD: "); Serial.println(r->ocd, BIN);
+  Serial.print("Th Status: "); Serial.println(r->th_status, BIN);
+  Serial.print("UVLO ADC: "); Serial.println(r->uvlo_adc, BIN);
+  Serial.print("UVLO: "); Serial.println(r->uvlo, BIN);
+  Serial.print("Step Clk: "); Serial.println(r->stck_mod, BIN);
+  Serial.print("Cmd ERR: "); Serial.println(r->cmd_error, BIN);
+  Serial.print("Motor Status: "); Serial.println(r->mot_status, BIN);
+  Serial.print("Direction: "); Serial.println(r->dir, BIN);
+  Serial.print("Sw Event: "); Serial.println(r->sw_evn, BIN);
+  Serial.print("Sw F: "); Serial.println(r->sw_f, BIN);
+  Serial.print("Busy: "); Serial.println(r->busy, BIN);
+  Serial.print("HiZ: "); Serial.println(r->hiz, BIN);
   Serial.println();
 }
 
-void ps_print(const ps_stepmode_reg * m) {
+void ps_print(const ps_stepmode_reg * r) {
   Serial.println("Step Mode:");
-  Serial.print("Sync En: "); Serial.println(m->sync_en, BIN);
-  Serial.print("Sync Sel: "); Serial.println(m->sync_sel, BIN);
-  Serial.print("CM VM: "); Serial.println(m->cm_vm, BIN);
-  Serial.print("Step Sel: "); Serial.println(m->step_sel, BIN);
+  Serial.print("Sync En: "); Serial.println(r->sync_en, BIN);
+  Serial.print("Sync Sel: "); Serial.println(r->sync_sel, BIN);
+  Serial.print("CM VM: "); Serial.println(r->cm_vm, BIN);
+  Serial.print("Step Sel: "); Serial.println(r->step_sel, BIN);
+  Serial.println();
+}
+
+void ps_print(const ps_minspeed_reg * r) {
+  Serial.println("Min Speed:");
+  Serial.print("Lowspeed Optim: "); Serial.println(r->lspd_opt, BIN);
+  Serial.print("Min Speed: "); Serial.println(ps_getsplit16(r->min_speed, 8), BIN);
   Serial.println();
 }
 
@@ -130,10 +137,9 @@ void ps_print(const ps_config_reg * r) {
   Serial.println("Configuration:");
   Serial.print("V PWM Int: "); Serial.println(r->vm.f_pwm_int, BIN);
   Serial.print("V PWM Dec: "); Serial.println(r->vm.f_pwm_dec, BIN);
-  Serial.print("V VS Comp: "); Serial.println(r->vm.en_vscomp, BIN);
   Serial.print("C Pred: "); Serial.println(r->cm.pred_en, BIN);
   Serial.print("C TSW: "); Serial.println(r->cm.tsw, BIN);
-  Serial.print("C TQ Reg: "); Serial.println(r->cm.en_tqreg, BIN);
+  Serial.print("- Volt Comp: "); Serial.println(r->com.en_voltcomp, BIN);
   Serial.print("- VCC: "); Serial.println(r->com.vccval, BIN);
   Serial.print("- UVLO: "); Serial.println(r->com.uvloval, BIN);
   Serial.print("- OC SD: "); Serial.println(r->com.oc_sd, BIN);
@@ -274,7 +280,7 @@ void ps_setsync(ps_sync sync, ps_stepsize stepsize) {
 }
 
 float ps_getmaxspeed() {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   ps_xfer("getparam maxspeed", CMD_GETPARAM(PARAM_MAXSPEED), buf, 2);
   uint16_t maxspeed = ps_get16(buf);
   ps_print("Max Speed", maxspeed);
@@ -282,23 +288,41 @@ float ps_getmaxspeed() {
 }
 
 void ps_setmaxspeed(float steps_per_second) {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   uint16_t maxspeed = min((int)round(steps_per_second * MAXSPEED_COEFF), MAXSPEED_MASK);
   ps_set16(maxspeed, buf);
   ps_xfer("setparam maxspeed", CMD_SETPARAM(PARAM_MAXSPEED), buf, 2);
 }
 
-ps_fullspeed ps_getfullspeed() {
+ps_minspeed ps_getminspeed() {
+  ps_minspeed_reg reg = {};
+  ps_xferreg("getparam minspeed", CMD_GETPARAM(PARAM_MINSPEED), reg);
+  ps_print(&reg);
+  return (ps_minspeed){
+    .steps_per_sec = ((float)(ps_getsplit16(reg.min_speed, 8) & MINSPEED_MASK))/MINSPEED_COEFF,
+    .lowspeed_optim = (bool)reg.lspd_opt
+  };
+}
+
+void ps_setminspeed(float steps_per_second, bool lowspeed_optim) {
+  ps_minspeed_reg reg = {};
+  uint16_t steps_per_sec = min((int)round(steps_per_second * MINSPEED_COEFF), MINSPEED_MASK);
+  ps_setsplit16(steps_per_second, reg.min_speed, 8);
+  reg.lspd_opt = lowspeed_optim? 0x1 : 0x0;
+  ps_xferreg("setparam minspeed", CMD_SETPARAM(PARAM_MINSPEED), reg);
+}
+
+ps_fullstepspeed ps_getfullstepspeed() {
   ps_fsspd_reg reg = {};
   ps_xferreg("getparam fsspd", CMD_GETPARAM(PARAM_FSSPD), reg);
   ps_print(&reg);
-  return (ps_fullspeed){
+  return (ps_fullstepspeed){
     .steps_per_sec = ((float)(ps_getsplit16(reg.fs_spd, 8) & FSSPD_MASK) + FSSPD_OFFSET)/FSSPD_COEFF,
     .boost_mode = (bool)reg.boost_mode
   };
 }
 
-void ps_setfullspeed(float steps_per_sec, bool boost_mode) {
+void ps_setfullstepspeed(float steps_per_sec, bool boost_mode) {
   ps_fsspd_reg reg = {};
   uint16_t fs_spd = min((int)round(steps_per_sec * FSSPD_COEFF - FSSPD_OFFSET), FSSPD_MASK);
   ps_setsplit16(fs_spd, reg.fs_spd, 8);
@@ -307,7 +331,7 @@ void ps_setfullspeed(float steps_per_sec, bool boost_mode) {
 }
 
 float ps_getaccel() {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   ps_xfer("getparam acc", CMD_GETPARAM(PARAM_ACC), buf, 2);
   uint16_t acc = ps_get16(buf);
   ps_print("Acc", acc);
@@ -315,14 +339,14 @@ float ps_getaccel() {
 }
 
 void ps_setaccel(float steps_per_sec_2) {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   uint16_t acc = min((int)round(steps_per_sec_2 * ACC_COEFF), ACC_MASK);
   ps_set16(acc, buf);
   ps_xfer("setparam acc", CMD_SETPARAM(PARAM_ACC), buf, 2);
 }
 
 float ps_getdecel() {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   ps_xfer("getparam dec", CMD_GETPARAM(PARAM_DEC), buf, 2);
   uint16_t dec = ps_get16(buf);
   ps_print("Dec", dec);
@@ -330,7 +354,7 @@ float ps_getdecel() {
 }
 
 void ps_setdecel(float steps_per_sec_2) {
-  uint8_t buf[2] = {0, 0};
+  uint8_t buf[2] = {};
   uint16_t dec = min((int)round(steps_per_sec_2 * DEC_COEFF), DEC_MASK);
   ps_set16(dec, buf);
   ps_xfer("setparam dec", CMD_SETPARAM(PARAM_DEC), buf, 2);
@@ -457,29 +481,16 @@ ps_alarms ps_getalarms() {
   };
 }
 
-bool ps_vm_getvoltcomp() {
+bool ps_getvoltcomp() {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  return (bool)reg.vm.en_vscomp;
+  return (bool)reg.com.en_voltcomp;
 }
 
-void ps_vm_setvoltcomp(bool voltage_compensation) {
+void ps_setvoltcomp(bool voltage_compensation) {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  reg.vm.en_vscomp = voltage_compensation? 0x1 : 0x0;
-  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
-}
-
-bool ps_cm_gettorqreg() {
-  ps_config_reg reg = {};
-  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  return (bool)reg.cm.en_tqreg;
-}
-
-void ps_cm_settorqreg(bool torque_reg_adcin) {
-  ps_config_reg reg = {};
-  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  reg.cm.en_tqreg = torque_reg_adcin? 0x1 : 0x0;
+  reg.com.en_voltcomp = voltage_compensation? 0x1 : 0x0;
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
@@ -508,6 +519,37 @@ void ps_setktvals(float hold, float run, float accel, float decel) {
   ps_xfer("setparam ktvaldec", CMD_SETPARAM(PARAM_KTVALDEC), &ktdec, 1);
 }
 
+/*
+ps_cm_ctrltimes ps_cm_getctrltimes() {
+  // TODO
+}
+
+void ps_cm_setctrltimes(float min_on_us, float min_off_us, float fast_off_us, float fast_step_us) {
+  // TODO
+}
+*/
+
+bool ps_cm_getpredict() {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (bool)reg.cm.pred_en;
+}
+
+void ps_cm_setpredict(bool enable_predict) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.cm.pred_en = enable_predict? 0x1 : 0x0;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
+}
+
+float ps_cm_getswitchfreq() {
+  // TODO
+}
+
+void ps_cm_setswitchfreq(float switching_khz) {
+  // TODO
+}
+
 int ps_readadc() {
   uint8_t adc = 0;
   ps_xfer("getparam adcout", CMD_GETPARAM(PARAM_ADCOUT), &adc, 1);
@@ -516,7 +558,7 @@ int ps_readadc() {
 }
 
 uint32_t ps_move(ps_direction dir, uint32_t steps) {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   steps = min(steps, (uint32_t)MOVE_MASK);
   ps_set24(steps, buf);
   ps_xfer("move", CMD_MOVE(dir), buf, 3);
@@ -547,13 +589,13 @@ static inline int32_t ps_xferpos(int32_t pos, uint8_t * buf) {
 }
 
 int32_t ps_getpos() {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xfer("getparam abspos", CMD_GETPARAM(PARAM_ABSPOS), buf, 3);
   return ps_xferpos(0, buf);
 }
 
 void ps_setpos(int32_t pos) {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xferpos(pos, buf);
   ps_xfer("setparam abspos", CMD_SETPARAM(PARAM_ABSPOS), buf, 3);
 }
@@ -567,13 +609,13 @@ void ps_gohome() {
 }
 
 int32_t ps_getmark() {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xfer("getparam mark", CMD_GETPARAM(PARAM_MARK), buf, 3);
   return ps_xferpos(0, buf);
 }
 
 void ps_setmark(int32_t mark) {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xferpos(mark, buf);
   ps_xfer("setparam mark", CMD_SETPARAM(PARAM_MARK), buf, 3);
 }
@@ -583,26 +625,26 @@ void ps_gomark() {
 }
 
 void ps_goto(int32_t pos) {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xferpos(pos, buf);
   ps_xfer("goto", CMD_GOTO(), buf, 3);
 }
 
 void ps_goto(int32_t pos, ps_direction dir) {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xferpos(pos, buf);
   ps_xfer("gotodir", CMD_GOTODIR(dir), buf, 3);
 }
 
 float ps_getspeed() {
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_xfer("getparam speed", CMD_GETPARAM(PARAM_SPEED), buf, 3);
   return (float)ps_get24(buf) * SPEED_COEFF;
 }
 
 void ps_run(ps_direction dir, float speed) {
   uint32_t spd = (uint32_t)round(constrain(speed, 0.0, SPEED_MAX) / SPEED_COEFF);
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_set24(spd, buf);
   ps_xfer("run", CMD_RUN(dir), buf, 3);
 }
@@ -613,7 +655,7 @@ void ps_stepclock(ps_direction dir) {
 
 void ps_gountil(ps_posact act, ps_direction dir, float speed) {
   uint32_t spd = (uint32_t)round(constrain(speed, 0.0, SPEED_MAX) / SPEED_COEFF);
-  uint8_t buf[3] = {0, 0, 0};
+  uint8_t buf[3] = {};
   ps_set24(spd, buf);
   ps_xfer("gountil", CMD_GOUNTIL(act, dir), buf, 3);
 }
