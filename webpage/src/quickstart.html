@@ -1,0 +1,69 @@
+---
+title: Quick Start
+menu: quickstart
+layout: default
+---
+
+<h1 class="title is-1">{% mdicon logo %}Wifi Stepper Quickstart Guide</h1>
+<hr />
+
+<div id="profiles">
+    {% raw %}
+    <div class="select is-medium">
+        <select v-model="mode">
+            <option value="servo">Servo Control</option>
+            <option value="speed">Motor Speed</option>
+            <option value="waypoints">Motor Waypoints</option>
+        </select>
+    </div>
+
+    <div v-if="mode == 'servo'">
+        <div class="columns">
+            <div class="column">
+                <figure></figure>
+            </div>
+            <div class="column">
+                
+            </div>
+        </div>
+    </div>
+    <div v-else-if="mode == 'speed'">
+        [speed]
+    </div>
+    <div v-else-if="mode == 'waypoints'">
+        [waypoints]
+    </div>
+    {% endraw %}
+</div>
+
+<div class="message">
+    <div class="message-header"><span class="title is-5">{% mdicon settings %}Motor Configuration</span></div>
+    <div class="message-body" id="config">
+        {% raw %}
+        [Body]
+        {% endraw %}
+    </div>
+</div>
+
+<script>
+    var app_profiles = new Vue({
+        el: '#profiles',
+        data: {
+            mode: 'servo'
+        },
+        watch: {
+        },
+        methods: {
+        }
+    });
+
+    var app_config = new Vue({
+        el: '#config',
+        data: {
+        },
+        watch: {
+        },
+        methods: {
+        }
+    });
+</script>

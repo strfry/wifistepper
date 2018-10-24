@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>{{ page.title }}</title>
+        <link rel="stylesheet" href="/css/main.css" inline />
+        <script type="module" src="/js/bulmajs/plugins/navbar.js" es6 inline></script>
+        <script src="/js/axios{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+        <script src="/js/vue{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+    </head>
+    <body>
+        <nav class="navbar is-black" role="navigation" aria-label="main navigation">
+            <div class="navbar-brand">
+                <span class="navbar-item">{% mdicon logo, #fff, .baseline %}Wifi Stepper</span>
+                <div class="navbar-burger burger"  data-target="navbar-main">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+            <div class="navbar-menu" id="navbar-main">
+                <div class="navbar-start is-hidden-desktop">
+                    <div class="navbar-item has-dropdown is-hoverable">
+                        <div class="navbar-dropdown is-boxed">
+                            <a class="navbar-item" href="/quickstart">{% mdicon rocket %}Quick Start</a>
+                            <a class="navbar-item" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a>
+                            <a class="navbar-item" href="/settings">{% mdicon lock %}Settings</a>
+                            <a class="navbar-item" href="/about">{% mdicon information %}About</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <section class="section columns">
+            <aside class="column is-2 is-hidden-touch">
+                <p class="menu-label">Menu</p>
+                <ul class="menu-list">
+                    <li><a class="{% if page.menu == 'quickstart' %}is-active{% endif %}" href="/quickstart">{% mdicon rocket %}Quick Start</a></li>
+                    <li><a class="{% if page.menu == 'dashboard' %}is-active{% endif %}" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a></li>
+                    <li><a class="{% if page.menu == 'settings' %}is-active{% endif %}" href="/settings">{% mdicon lock %}Settings</a></li>
+                    <li><a class="{% if page.menu == 'about' %}is-active{% endif %}" href="/about">{% mdicon information %}About</a></li>
+                </ul>
+            </aside>
+
+            <div class="container column">
+                {{ content }}
+            </div>
+        </section>
+
+        <footer class="footer is-hidden">
+            <div class="container">
+                <div class="content has-text-centered">
+                    <p>Hello</p>
+                </div>
+            </div>
+        </footer>
+    </body>
+</html>

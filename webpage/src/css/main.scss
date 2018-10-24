@@ -1,0 +1,55 @@
+---
+---
+$body-background-color: #383838;
+$text: #fff;
+$background-hover: #666;
+$background-dark: #222;
+$background-header: #333;
+$background-active: #1a1a1a;
+
+$navbar-background-color: $background-dark;
+$navbar-item-color: $text;
+$navbar-item-hover-color: $text;
+$navbar-item-hover-background-color: $background-hover;
+
+$menu-item-hover-color: $text;
+$menu-item-hover-background-color: $background-hover;
+$menu-item-active-background-color: $background-active;
+
+$title-color: $text;
+$subtitle-color: $text;
+
+$message-header-background-color: $background-dark;
+$message-header-color: $text;
+$message-background-color: $background-header;
+
+@import 'bulma';
+
+
+.mdicon {
+    display: inline-flex;
+    align-self: center;
+    margin-right: 0.25em;
+    margin-left: 0.25em;
+
+    &:not(.mdiinline) {
+        margin-right: 0.5em;
+    }
+
+    svg {
+        position: relative;
+        top: .125em;
+        height: 1em;
+        width: 1em;
+    }
+}
+
+.mdicon.baseline svg {
+    position: relative;
+    top: -0.05em;
+}
+
+
+.mdicon:not(.mdicolor) svg {
+    fill: $text;
+}
