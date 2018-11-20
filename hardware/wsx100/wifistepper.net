@@ -1,6 +1,6 @@
 (export (version D)
   (design
-    (source /home/aklofas/Projects/wifistepper/hardware/reva/wifistepper.sch)
+    (source /home/aklofas/Projects/wifistepper/hardware/wsx100/wifistepper.sch)
     (date "Sun 28 Oct 2018 12:14:55 PM PDT")
     (tool "Eeschema 5.0.1-33cea8e~68~ubuntu16.04.1")
     (sheet (number 1) (name /) (tstamps /)

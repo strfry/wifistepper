@@ -1,14 +1,225 @@
 ---
 title: Settings
 menu: settings
+css:
+    - bulma-checkradio
+    - bulma-divider
 layout: default
 ---
 <h1 class="title is-3">{% mdicon lock %}Settings</h1>
 <hr />
 
-<!--
-- Wifi network
-- Web interface password
-- Crypto chip
--->
+<div id="settings">
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon wifi %}Wifi Connection</span></div>
+        <div class="message-body">
+            <div style="margin-left: auto; margin-right: auto; max-width: 500px;">
+                <div class="title is-4 has-text-centered mode-select">
+                    Mode:
+                    <span class="select">
+                        <select v-model="wifi.mode">
+                            <option value="softap">Soft AP</option>
+                            <option value="station">Station</option>
+                        </select>
+                    </span>
+                    {% mdicon help-circle-outline %}
+                </div>
+                <div v-if="wifi.mode == 'softap'">
+                    <div class="field control">
+                        <input class="is-checkradio has-background-color is-white" id="wifi-softap-encryption" type="checkbox" v-model="wifi.ap.encryption" />
+                        <label for="wifi-softap-encryption"><strong>Enable WPA2-PSK Encryption</strong></label>
+                    </div>
+                    <div class="field control">
+                        <input class="input" type="text" placeholder="AP Password" v-model="wifi.ap.password" v-bind:disabled="!wifi.ap.encryption" />
+                    </div>
+                    <div class="is-divider" data-content="Advanced"></div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">AP Mac</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" type="text" placeholder="Auto" v-model="wifi.ap.mac" /></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal">
+                        <div class="field-label"></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control">
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-broadcast-enable" type="checkbox" v-model="wifi.ap.broadcast" />
+                                    <label for="wifi-broadcast-enable"><strong>Broadcast SSID</strong></label>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Channel</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" style="width: 75px;" type="number" v-model="wifi.ap.channel" /></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else-if="wifi.mode == 'station'">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">SSID</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control" style="width: 100%;">
+                                    <div class="select is-fullwidth">
+                                        <select v-model="wifi.station.network">
+                                            {% raw %}<option v-for="network in wifi.detect.networks" v-bind:value="network.mac">{{ network.ssid }}</option>{% endraw %}
+                                        </select>
+                                    </div>
+                                </span>
+                                <span class="control"><button class="button is-primary" style="border-color: #666;" v-on:click="wifiscan">{% mdicon refresh, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="wifi.station.encryption" class="field is-horizontal">
+                        <div class="field-label is-normal">
+                            <label class="label">Password</label>
+                        </div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" type="text" placeholder="Empty" v-model="wifi.station.password" /></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="is-divider" data-content="Advanced"></div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">IP Address</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" type="text" placeholder="Auto" v-model="wifi.station.ip" /></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="field has-text-centered">
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="">Apply</button></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon application %}Browser &amp; API Interface</span></div>
+        <div class="message-body">
+            <div class="field is-horizontal">
+                <div class="field-label"></div>
+                <div class="field-body">
+                    <div class="field">
+                        <span class="control">
+                            <input class="is-checkradio has-background-color is-white" id="browser-enable" type="checkbox" v-model="browser.enabled" />
+                            <label for="browser-enable"><strong>Browser Access Enabled</strong></label>
+                        </span>
+                        <span v-if="!browser.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable browser access through this interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="field is-horizontal">
+                <div class="field-label is-normal"><label class="label">HT Access</label></div>
+                <div class="field-body">
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Username" v-model="browser.htacess.username" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" v-model="browser.htacess.password" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control">
+                            <input class="is-checkradio has-background-color is-white" id="browser-htaccess-enable" type="checkbox" v-model="browser.htacess.enabled" />
+                            <label for="browser-htaccess-enable"><strong>Enabled</strong></label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="field has-text-centered">
+                <span class="control"><button class="button is-primary is-medium" v-on:click="">Apply</button></span>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon lock-plus %}Crypto Authentication</span></div>
+        <div class="message-body">
+            [Body]
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon update %}Firmware Update and Reset</span></div>
+        <div class="message-body">
+            [Body]
+        </div>
+    </div>
+</div>
+<script>
+    var app = new Vue({
+        el: '#settings',
+        data: {
+            wifi: {
+                mode: null,
+                ap: {
+                    encryption: false,
+                    password: '',
+                    mac: '',
+                    broadcast: true,
+                    channel: 1,
+                },
+                station: {
+                    network: null,
+                    encryption: false,
+                    password: '',
+                    ip: ''
+                },
+                detect: {
+                    networks: []
+                }
+            },
 
+            browser: {
+                enabled: true,
+                htacess: {
+                    enabled: false,
+                    username: '',
+                    password: ''
+                }
+            }
+        },
+        watch: {
+            'wifi.mode': function(newv) {
+                if (newv == 'station') {
+                    this.wifiscan();
+                }
+            },
+            'wifi.station.network': function(newv) {
+                for (var i = 0; i < this.wifi.detect.networks.length; i++) {
+                    if (this.wifi.station.network == this.wifi.detect.networks[i].mac) {
+                        this.wifi.station.encryption = this.wifi.detect.networks[i].encryption;
+                    }
+                }
+            }
+        },
+        computed: {
+        },
+        methods: {
+            wifiscan: function() {
+                console.log("Initiating Wifi Scan");
+                axios.get("{{ site.apiurl }}/api/wifi/scan", {
+                    params: {}
+                }).then(function (r) {
+                    if (r.data.status == 'ok') {
+                        var networks = r.data.networks;
+                        networks.sort(function(a, b){return b['rssi']-a['rssi'];});
+                        app.wifi.detect.networks = networks;
+                    }
+                }).catch(function (e) {
+                    console.log(e);
+                });;
+            }
+        },
+        mounted: function () {
+        }
+    });
+</script>

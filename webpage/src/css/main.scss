@@ -7,6 +7,12 @@ $background-dark: #222;
 $background-header: #333;
 $background-active: #1a1a1a;
 
+$primary: $background-dark;
+$light: #b5b5b5;
+
+$hr-background-color: #b5b5b5;
+$hr-height: 1px;
+
 $navbar-background-color: $background-dark;
 $navbar-item-color: $text;
 $navbar-item-hover-color: $text;
@@ -23,6 +29,25 @@ $message-header-background-color: $background-dark;
 $message-header-color: $text;
 $message-background-color: $background-header;
 
+$box-background-color: $background-dark;
+
+$label-color: $text;
+
+$input-color: $text;
+$input-arrow: #999;
+$input-hover-color: #666;
+$input-border-color: #666;
+$input-background-color: $body-background-color;
+
+$input-disabled-color: $body-background-color;
+$input-disabled-border-color: #666;
+$input-disabled-background-color: #666;
+
+$button-static-color: $text;
+$button-static-border-color: $input-border-color;
+$button-static-background-color: #4d4d4d;
+
+
 @import 'bulma';
 
 
@@ -32,7 +57,7 @@ $message-background-color: $background-header;
     margin-right: 0.25em;
     margin-left: 0.25em;
 
-    &:not(.mdiinline) {
+    &:not(.inline) {
         margin-right: 0.5em;
     }
 
@@ -52,4 +77,77 @@ $message-background-color: $background-header;
 
 .mdicon:not(.mdicolor) svg {
     fill: $text;
+}
+
+.field-label {
+    flex-basis: 80px !important;
+    white-space: nowrap;
+}
+
+.nobreak {
+    white-space: nowrap;
+}
+
+.is-divider {
+    border-top-color: $hr-background-color !important;
+    &::after { background-color: $message-background-color !important; }
+}
+
+input.input {
+    font-weight: bold;
+}
+
+.select select {
+    font-weight: bold;
+    option { color: $text; }
+}
+
+button.button {
+    &.is-help, &.is-addon {
+        background-color: $button-static-background-color;
+        border-color: $input-border-color;
+        border-left-style: none;
+    }
+}
+
+.tooltip::before {
+    color: #000 !important;
+}
+
+sup {
+    position: relative;
+    top: -0.4em;
+}
+
+.mode-select {
+    line-height: 2;
+    .select {
+        font-size: 1.2rem;
+        select {
+            position: relative;
+            top: 3px;
+            margin: 0 0.5rem;
+            font-weight: bold;
+        }
+    }
+}
+
+.warnings {
+    .tag {
+        margin: 0 0.5rem;
+        color: #666;
+        background-color: $background-dark;
+
+        &.is-warning {
+            color: $text;
+            font-weight: bold;
+            background-color: #f90;
+        }
+
+        &.is-error {
+            color: $text;
+            font-weight: bold;
+            background-color: #900;
+        }
+    }
 }

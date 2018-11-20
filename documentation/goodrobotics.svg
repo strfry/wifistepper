@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 744.09448819 1052.3622047"
+   id="svg2"
+   version="1.1"
+   inkscape:version="0.91 r13725"
+   sodipodi:docname="goodrobotics.svg">
+  <defs
+     id="defs4">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient4311">
+      <stop
+         style="stop-color:#353da8;stop-opacity:1"
+         offset="0"
+         id="stop4313" />
+      <stop
+         style="stop-color:#cccccc;stop-opacity:1"
+         offset="1"
+         id="stop4315" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4311"
+       id="linearGradient4317"
+       x1="137.73592"
+       y1="390.19696"
+       x2="372.6842"
+       y2="155.24867"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(4,-4)" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="2.4485477"
+     inkscape:cx="204.48727"
+     inkscape:cy="780.25401"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer4"
+     showgrid="false"
+     inkscape:window-width="1920"
+     inkscape:window-height="1027"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1" />
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:groupmode="layer"
+     id="layer3"
+     inkscape:label="background"
+     style="display:inline">
+    <rect
+       style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#353da8;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       id="rect4281"
+       width="311.31152"
+       height="311.31152"
+       x="105.51449"
+       y="109.80707"
+       rx="39.71579"
+       ry="39.71579"
+       inkscape:export-filename="/home/aklofas/goodrobotics-logo1.png"
+       inkscape:export-xdpi="72"
+       inkscape:export-ydpi="72" />
+    <circle
+       style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       id="path4198"
+       cx="259.28699"
+       cy="267.79462"
+       r="118.70623"
+       inkscape:export-filename="/home/aklofas/goodrobotics-logo1.png"
+       inkscape:export-xdpi="72"
+       inkscape:export-ydpi="72" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer4"
+     inkscape:label="background-alt"
+     style="display:none">
+    <circle
+       style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:url(#linearGradient4317);fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       id="path4198-9"
+       cx="259.28699"
+       cy="267.79462"
+       r="118.70623" />
+  </g>
+  <g
+     inkscape:groupmode="layer"
+     id="layer2"
+     inkscape:label="mask-orig"
+     style="display:none">
+    <path
+       style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       d="m 199.33203,197.07227 c -19.26065,0.71071 -31.36295,27.25774 -18.35351,42.00976 6.98718,10.08259 20.80141,11.77869 31.47265,7.14649 l 21.51367,21.51562 25.4961,0 0,20.85352 20.54687,20.54687 c -5.68325,9.12285 -6.49614,21.47049 0.97071,29.9375 11.64817,16.80845 42.2845,10.33334 45.66796,-9.96875 4.19067,-15.56338 -9.34603,-32.54025 -25.42968,-32.02734 -3.62146,-0.18293 -7.01464,0.56172 -10.08008,1.97265 l -16.67578,-16.67382 0,-18.59961 16.78125,-16.78125 c 13.83185,5.24843 32.78459,-2.17139 35.40429,-17.89063 4.19067,-15.56338 -9.34603,-32.54025 -25.42968,-32.02734 -19.60818,-0.99043 -32.6902,24.8027 -21.57422,40.30273 l -15.35547,15.35547 -24.10938,0 -16.2539,-16.25586 c 1.31753,-2.19853 2.26999,-4.65884 2.72265,-7.375 4.19067,-15.56338 -9.34603,-32.54025 -25.42968,-32.02734 -0.63561,-0.0321 -1.26346,-0.0366 -1.88477,-0.0137 z"
+       id="path4136-5"
+       inkscape:connector-curvature="0" />
+  </g>
+  <g
+     style="display:inline"
+     inkscape:label="mask-expand"
+     id="g4248"
+     inkscape:groupmode="layer">
+    <path
+       style="color:#000000;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:1;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#ffffff;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       d="m 300.52148,188.87891 c -22.52474,-0.17819 -39.21971,26.37885 -30.8125,46.87109 -4.44182,3.95709 -8.22352,8.32367 -14.95507,8.9043 -5.32148,0.40476 -10.48996,0.47965 -15.27344,-4 -2.56585,-2.55149 -5.77029,-4.28392 -4.81641,-9.30664 5.57248,-21.89069 -15.18046,-46.04722 -37.86718,-42.1836 -25.05397,2.6175 -38.93993,37.80765 -21.16602,56.2461 8.20069,10.02474 22.66957,13.45094 34.89062,9.98437 8.28631,7.24498 14.67827,19.42782 26.6875,20.45117 4.77707,0.0295 9.42726,0.11836 14.19727,-0.0645 -1.24945,9.53851 0.56416,17.2555 9.63281,25.8457 3.04662,3.03712 5.59804,5.88972 8.95899,9.31836 -8.94021,19.79005 6.85776,46.08361 29.02539,45.86133 19.69624,1.42066 39.54748,-16.57778 36.31445,-36.93359 -1.82997,-19.62051 -23.0001,-35.14286 -42.24414,-30.17969 -4.74892,-5.28624 -10.6853,-8.5673 -10.87109,-16.82813 0.0572,-4.91455 1.64909,-7.34432 4.69439,-10.87527 1.96851,-2.58075 4.81451,-6.46681 9.74311,-5.60324 20.35966,3.71069 42.20008,-15.65551 38.60351,-36.69336 -1.84298,-16.90749 -17.60728,-31.2743 -34.74219,-30.81445 z"
+       id="path4250"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="ccccccccccccccccccccc"
+       inkscape:export-filename="/home/aklofas/goodrobotics-logo1.png"
+       inkscape:export-xdpi="72"
+       inkscape:export-ydpi="72" />
+  </g>
+  <g
+     inkscape:label="route"
+     inkscape:groupmode="layer"
+     id="layer1"
+     style="display:inline">
+    <path
+       style="color:#000000;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:medium;line-height:normal;font-family:sans-serif;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;block-progression:tb;writing-mode:lr-tb;baseline-shift:baseline;text-anchor:start;white-space:normal;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;opacity:0.9300001;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;solid-color:#000000;solid-opacity:1;fill:#353da8;fill-opacity:1;fill-rule:nonzero;stroke:none;stroke-width:15;stroke-linecap:butt;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate"
+       d="M 201.42773 197.71875 C 187.51221 197.71875 176.07227 209.16064 176.07227 223.07617 C 176.07227 236.9917 187.51221 248.43359 201.42773 248.43359 C 205.27707 248.43359 208.93585 247.55537 212.2168 245.99414 L 233.96484 267.74414 L 259.46094 267.74414 L 259.46094 288.59766 L 280.18164 309.31836 C 277.5897 313.29187 276.07227 318.01859 276.07227 323.07617 C 276.07227 336.9917 287.51221 348.43359 301.42773 348.43359 C 315.34326 348.43359 326.78516 336.9917 326.78516 323.07617 C 326.78516 309.16064 315.34326 297.71875 301.42773 297.71875 C 298.005 297.71875 294.73394 298.41502 291.74414 299.66602 L 274.46094 282.38477 L 274.46094 263.78516 L 291.75391 246.49023 C 294.74109 247.73867 298.0087 248.43359 301.42773 248.43359 C 315.34326 248.43359 326.78516 236.9917 326.78516 223.07617 C 326.78516 209.16064 315.34326 197.71875 301.42773 197.71875 C 287.51221 197.71875 276.07227 209.16064 276.07227 223.07617 C 276.07227 228.1378 277.59176 232.86828 280.1875 236.84375 L 264.28711 252.74414 L 240.17773 252.74414 L 223.28711 235.85156 C 225.50479 232.09044 226.78516 227.72284 226.78516 223.07617 C 226.78516 209.16064 215.34326 197.71875 201.42773 197.71875 z M 201.42773 212.71875 C 207.23666 212.71875 211.78516 217.26724 211.78516 223.07617 C 211.78516 228.8851 207.23666 233.43359 201.42773 233.43359 C 195.61881 233.43359 191.07227 228.8851 191.07227 223.07617 C 191.07227 217.26724 195.61881 212.71875 201.42773 212.71875 z M 301.42773 212.71875 C 307.23666 212.71875 311.78516 217.26724 311.78516 223.07617 C 311.78516 228.8851 307.23666 233.43359 301.42773 233.43359 C 295.61881 233.43359 291.07227 228.8851 291.07227 223.07617 C 291.07227 217.26724 295.61881 212.71875 301.42773 212.71875 z M 301.42773 312.71875 C 307.23666 312.71875 311.78516 317.26724 311.78516 323.07617 C 311.78516 328.8851 307.23666 333.43359 301.42773 333.43359 C 295.61881 333.43359 291.07227 328.8851 291.07227 323.07617 C 291.07227 317.26724 295.61881 312.71875 301.42773 312.71875 z "
+       id="path4136"
+       inkscape:export-filename="/home/aklofas/goodrobotics-logo1.png"
+       inkscape:export-xdpi="72"
+       inkscape:export-ydpi="72" />
+  </g>
+</svg>

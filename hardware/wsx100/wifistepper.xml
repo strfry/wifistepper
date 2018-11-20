@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <export version="D">
   <design>
-    <source>/home/aklofas/Projects/wifistepper/hardware/reva/wifistepper.sch</source>
-    <date>Sun 28 Oct 2018 03:46:41 PM PDT</date>
+    <source>/home/aklofas/Projects/wifistepper/hardware/wsx100/wifistepper.sch</source>
+    <date>Fri 02 Nov 2018 04:52:22 PM PDT</date>
     <tool>Eeschema 5.0.1-33cea8e~68~ubuntu16.04.1</tool>
     <sheet number="1" name="/" tstamps="/">
       <title_block>

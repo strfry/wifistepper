@@ -1,55 +1,470 @@
 ---
 title: Quick Start
 menu: quickstart
+css:
+    - bulma-tooltip
+    - bulma-checkradio
+bulmajs:
+    - notification
 layout: default
 ---
-
+{% include helptext.html %}
 <h1 class="title is-1">{% mdicon logo %}Wifi Stepper Quickstart Guide</h1>
-<hr />
-
 <div id="profiles">
-    {% raw %}
-    <div class="select is-medium">
-        <select v-model="mode">
-            <option value="servo">Servo Control</option>
-            <option value="speed">Motor Speed</option>
-            <option value="waypoints">Motor Waypoints</option>
-        </select>
-    </div>
-
-    <div v-if="mode == 'servo'">
-        <div class="columns">
-            <div class="column">
-                <figure></figure>
+    <div class="box">
+        <div class="level">
+            <div class="level-item">
+                <span>Voltage</span>
             </div>
-            <div class="column">
-                
+            <div class="level-item">
+                <span>User Button</span>
+            </div>
+            <div class="level-item">
+                <span>ADC</span>
             </div>
         </div>
     </div>
-    <div v-else-if="mode == 'speed'">
-        [speed]
+    <div class="notification is-warning" v-if="$cookies.get('help-hookup') !== 'hide'">
+        <button class="delete" v-on:click="$cookies.set('help-hookup', 'hide', Infinity)"></button>
+        <strong>Note:</strong> If this is your first time working with stepper motors, see the <a class="link" href="/documentation#hookup-guide"><strong>Hookup Guide</strong></a> for help wiring a stepper motor and connecting it to this board.
     </div>
-    <div v-else-if="mode == 'waypoints'">
+    <div class="notification is-info" v-if="voltage >= 50">
+        <strong>Important:</strong> Be sure to take a look at the <a class="link" href="/documentation#high-voltage"><strong>Working with High Voltage</strong></a> tutorial. There are required modifications to this board that are needed prior to using voltages above 50 volts (or things might blow up!).
+    </div>
+    <div class="title is-4 mode-select">
+        <span class="nobreak">
+            {% mdicon arrow-right-drop-circle, .inline %}
+            Set up
+            <span class="select">
+                <select v-model="mode" v-bind:style="mode == 'none'? {'color': '#e60000'} : {}">
+                    <option value="none">Select...</option>
+                    <option value="servo">Servo Control</option>
+                    <option value="speed">Speed Control</option>
+                    <option value="waypoints">Waypoints</option>
+                </select>
+            </span>
+        </span>
+        <span class="nobreak">
+            on a
+            <span class="select">
+                <select v-model="size">
+                    <option value="nema-14">NEMA 14</option>
+                    <option value="nema-17">NEMA 17</option>
+                    <option value="nema-23">NEMA 23</option>
+                    <option value="nema-34">NEMA 34</option>
+                </select>
+            </span>
+        </span>
+        <span class="nobreak">
+            with
+            <span class="select">
+                <select v-model="voltage">
+                    <option value="12">~12 V</option>
+                    <option value="24">~24 V</option>
+                    <option value="48">~48 V</option>
+                    <option value="50">50+ V</option>
+                </select>
+            </span>
+            input
+        </span>
+        <span class="nobreak">
+            under
+            <span class="select">
+                <select v-model="control">
+                    <option value="current">Current</option>
+                    <option value="voltage">Voltage</option>
+                </select>
+            </span>
+            control:
+        </span>
+    </div>
+    <div v-if="mode == 'none'" style="height: 200px;">
+        <div class="has-text-centered" style="max-width: 500px;">
+            <div>{% mdicon arrow-up-bold, .title, .is-1 %}</div>
+            <div class="title">Select a profile</div>
+        </div>
+    </div>
+    <div v-bind:style="mode == 'servo'? {} : {'display': 'none'}">
+        <div class="columns">
+            <div class="column has-text-centered is-half">
+                <figure class="image">
+                    <svg id="servosvg" width="400" height="400" viewbox="-120 -120 240 240">
+                        <g style="stroke: #ccc;">
+                            <line transform="rotate(0)" x1="0" y1="-80" x2="0" y2="-100" style="stroke-width: 2;" />
+                            <line transform="rotate(15)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(30)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(45)" x1="0" y1="-90" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(60)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(75)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(90)" x1="0" y1="-80" x2="0" y2="-100" style="stroke-width: 2;" />
+                            <line transform="rotate(105)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(120)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(135)" x1="0" y1="-90" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(150)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(165)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(180)" x1="0" y1="-80" x2="0" y2="-100" style="stroke-width: 2;" />
+                            <line transform="rotate(-165)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-150)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-135)" x1="0" y1="-90" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-120)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-105)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-90)" x1="0" y1="-80" x2="0" y2="-100" style="stroke-width: 2;" />
+                            <line transform="rotate(-75)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-60)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-45)" x1="0" y1="-90" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-30)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                            <line transform="rotate(-15)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
+                        </g>
+                        <g v-bind:style="size == 'nema-14' || size == 'nema-17'? {} : {'display': 'none'}">
+                            <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="25" cx="0" cy="0" style="fill: #b3b3b3; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                        </g>
+                        <g v-bind:style="size == 'nema-23' || size == 'nema-34'? {} : {'display': 'none'}">
+                            <path d="m-70,-70 h140 v140 h-140 v-140 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="50" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="6" cx="-60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                        </g>
+                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
+                            <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
+                            <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
+                        </g>
+                        <g v-bind:transform="'rotate(' + (-servo.setangle) + ')'">
+                            <line x1="0" y1="-14" x2="0" y2="-90" style="stroke: #fff; stroke-width: 5;" />
+                            <line x1="0" y1="-14" x2="0" y2="-90" style="stroke: #000; stroke-dasharray: 10, 5; stroke-width: 5;" />
+                            <rect x="-7" y="-97" height="14" width="14" style="stroke: #000000; stroke-width: 1; fill: #6666ff; cursor: move;" />
+                        </g>
+                    </svg>
+                </figure>
+            </div>
+            <div class="column">
+                <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Position:</span></span>
+                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="servo.setangle" min="-180" max="180" step="1" /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="getangle" min="-180" max="180" readonly /></span>
+                    <span class="control"><span class="button is-static">degrees</span></span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control">
+                        <button class="button" style="color: #fff;" v-on:click="reverse = !reverse" v-bind:style="reverse? {'background-color': '#00c'} : {'background-color': '#66f'}">{% mdicon swap-horizontal, .baseline %}Reverse Toggle</button>
+                    </span>
+                    <span class="control">
+                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reverse_toggle }}" style="border-color: #dbdbdb;">{% mdicon help-circle, .baseline, .inline %}</button>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div v-bind:style="mode == 'speed'? {} : {'display': 'none'}">
+        <div class="columns">
+            <div class="column has-text-centered is-half">
+                <figure class="image">
+                    <svg id="speedsvg" width="300" height="300" viewbox="-80 -80 160 160">
+                        <g v-bind:style="size == 'nema-14' || size == 'nema-17'? {} : {'display': 'none'}">
+                            <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="25" cx="0" cy="0" style="fill: #b3b3b3; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                        </g>
+                        <g v-bind:style="size == 'nema-23' || size == 'nema-34'? {} : {'display': 'none'}">
+                            <path d="m-70,-70 h140 v140 h-140 v-140 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="50" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="6" cx="-60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                        </g>
+                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
+                            <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
+                            <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
+                        </g>
+                    </svg>
+                </figure>
+                <div>
+                    <button class="button is-large" style="background-color: #093;">{% mdicon rotate-left, .baseline, .inline %}</button>
+                    <button class="button is-large" style="background-color: #900;">{% mdicon stop, .baseline, .inline %}</button>
+                    <button class="button is-large" style="background-color: #093;">{% mdicon rotate-right, .baseline %}</button>
+                </div>
+            </div>
+            <div class="column">
+                <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Speed:</span></span>
+                    <span class="control"><input class="input" type="number" min="0" max="100" step="10" v-model="speed.setrpm" /></span>
+                    <span class="control"><span class="button is-static">RPM</span></span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_speed }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Position:</span></span>
+                    <span class="control"><input class="input" style="color: #999;" type="number" min="-180" max="180" v-bind:value="getangle" readonly /></span>
+                    <span class="control"><span class="button is-static">degrees</span></span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_getangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Microstep:</span></span>
+                    <span class="control">
+                        <span class="select">
+                            <select v-model="microstep">
+                                <option value="1">1/1</option>
+                                <option value="2">1/2</option>
+                                <option value="4">1/4</option>
+                                <option value="8">1/8</option>
+                                <option value="16">1/16</option>
+                                <option value="32" v-if="control == 'voltage'">1/32</option>
+                                <option value="64" v-if="control == 'voltage'">1/64</option>
+                                <option value="128" v-if="control == 'voltage'">1/128</option>
+                            </select>
+                        </span>
+                    </span>
+                    <span class="control">
+                        <span class="button is-static">Resolution</span>
+                    </span>
+                    <span class="control">
+                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_microstep }}">{% mdicon help-circle, .baseline, .inline %}</button>
+                    </span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control">
+                        <button class="button" style="color: #fff;" v-on:click="reverse = !reverse" v-bind:style="reverse? {'background-color': '#00c'} : {'background-color': '#66f'}">{% mdicon swap-horizontal, .baseline %}Reverse Toggle</button>
+                    </span>
+                    <span class="control">
+                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reverse_toggle }}" style="border-color: #dbdbdb;">{% mdicon help-circle, .baseline, .inline %}</button>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div v-bind:style="mode == 'waypoints'? {} : {'display': 'none'}">
         [waypoints]
     </div>
-    {% endraw %}
-</div>
+    <hr />
+    <div class="level warnings">
+        <div class="level-left">
+            <div class="level-item title is-4">{% mdicon alert, #ff9900, .baseline %}Flags:</div>
+        </div>
+        <div class="level-item">
+            <div class="level">
+                <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': flags.commanderror}">Command Error</span></div>
+                <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': flags.overcurrent}">Over Current</span></div>
+                <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': flags.undervoltage}">Under Voltage</span></div>
+                <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-warning': flags.thermalwarning, 'is-error': flags.thermalshutdown}">Thermal</span></div>
+            </div>
+        </div>
+        <div class="level-right">
+            <div class="level-item"><button class="button is-dark">Clear Flags</button></div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon settings %}Motor Configuration</span></div>
+        <div class="message-body">
+            <div class="columns is-multiline">
+                <!-- Min / Max Speed -->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Max Speed:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" v-model="maxspeed" /></span>
+                                <span class="control"><span class="button is-static">steps/s</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_maxspeed }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Min Speed:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" v-model="minspeed" /></span>
+                                <span class="control"><span class="button is-static">steps/s</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_minspeed }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-<div class="message">
-    <div class="message-header"><span class="title is-5">{% mdicon settings %}Motor Configuration</span></div>
-    <div class="message-body" id="config">
-        {% raw %}
-        [Body]
-        {% endraw %}
+                <!-- Accel / Decel -->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Acceleration:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" v-model="acceleration" /></span>
+                                <span class="control"><span class="button is-static">steps/s<sup>2</sup></span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_acceleration }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Deceleration:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" v-model="deceleration" /></span>
+                                <span class="control"><span class="button is-static">steps/s<sup>2</sup></span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_deceleration }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="columns is-multiline">
+                <!-- KT Vals -->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Hold:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="kt.hold" /></span>
+                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_kthold }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Run:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="kt.run" /></span>
+                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktrun }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Accel:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="kt.accel" /></span>
+                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktaccel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Decel:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="kt.decel" /></span>
+                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktdecel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="columns is-multiline">
+                <!-- Full Step Speed and Boost Mode-->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Full Step Speed:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="7.63" max="15625" step="100" v-model="fsspeed" /></span>
+                                <span class="control"><span class="button is-static">steps/s</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_fsspeed }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label">&nbsp;</div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control">
+                                    <span class="button">
+                                        <input class="is-checkradio has-background-color is-white" id="boostmode-enable" type="checkbox" v-model="boostmode" />
+                                        <label for="boostmode-enable"><strong>Boost Mode</strong></label>
+                                    </span>
+                                </span>
+                                <span class="control"></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_boostmode }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="field is-grouped is-grouped-right">
+                <span class="control">
+                    <button class="button is-medium is-primary">Commit</button>
+                </span>
+                <span class="control">
+                    <button class="button is-medium is-light">Revert</button>
+                </span>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon console %}Quick Code</span></div>
+        <div class="message-body">
+            [Body]
+        </div>
     </div>
 </div>
-
 <script>
-    var app_profiles = new Vue({
+    var app = new Vue({
         el: '#profiles',
         data: {
-            mode: 'servo'
+            mode: 'servo',
+            size: 'nema-17',
+            voltage: 24,
+            control: 'voltage',
+            flags: {
+                userswitch: false,
+                commanderror: false,
+                overcurrent: false,
+                undervoltage: false,
+                thermalwarning: false,
+                thermalshutdown: false,
+                stalldetect: false
+            },
+
+            servo: {
+                setangle: 0,
+            },
+
+            speed: {
+                setrpm: 0,
+            },
+
+            microstep: 1,
+            getangle: 0,
+            reverse: false,
+
+            maxspeed: 1500,
+            minspeed: 0,
+            acceleration: 50,
+            deceleration: 50,
+            kt: {
+                hold: 0.25,
+                run: 0.4,
+                accel: 0.4,
+                decel: 0.4
+            },
+            fsspeed: 2000,
+            boostmode: false,
         },
         watch: {
         },
@@ -57,13 +472,30 @@ layout: default
         }
     });
 
-    var app_config = new Vue({
-        el: '#config',
-        data: {
-        },
-        watch: {
-        },
-        methods: {
-        }
+    function servodrag(svg, evt) {
+        var bounds = svg.getBoundingClientRect();
+        var x = evt.clientX - (bounds.left + bounds.width / 2);
+        var y = evt.clientY - (bounds.top + bounds.height / 2);
+        app.servo.setangle = Math.round(100 * Math.atan2(-x, -y) * 180 / Math.PI) / 100;
+    }
+
+    var dragging = false;
+    var servosvg = document.getElementById("servosvg");
+    servosvg.addEventListener("mousedown", function(e) {
+        dragging = true;
+        servodrag(servosvg, e);
     });
+    servosvg.addEventListener("mousemove", function(e) {
+        if (dragging) servodrag(servosvg, e);
+    });
+    
+    servosvg.addEventListener("mouseup", function(e) {
+        dragging = false;
+
+    });
+    /*
+    servosvg.addEventListener("mouseleave", function(e) {
+        dragging = false;
+    });
+    */
 </script>
