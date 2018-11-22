@@ -11,6 +11,23 @@ void wait_callback() {
   ESP.wdtFeed();
 }
 
+cfg_motor default_motor() {
+  return (cfg_motor){
+    .mode = MODE_VOLTAGE,
+    .stepsize = STEP_128,
+    .maxspeed = 10000.0,
+    .minspeed = 0.0,
+    .accel = 50.0,
+    .decel = 50.0,
+    .kthold = 0.25,
+    .ktrun = 0.5,
+    .ktaccel = 0.8,
+    .ktdecel = 0.8,
+    .fullstepspeed = 1000.0,
+    .fsboost = true
+  };
+}
+
 void printalarms(ps_alarms * a) {
   Serial.println("Alarms:");
   Serial.print("Command Error: "); Serial.println(a->command_error);
@@ -24,12 +41,40 @@ void printalarms(ps_alarms * a) {
 ESP8266WebServer server(80);
 StaticJsonBuffer<1024> jsonbuf;
 
+cfg_motor motorcfg;
+
+
+#define json_ok() \
+  "{\"status\": \"ok\"}"
+#define json_error(msg) \
+  "{\"status\":\"error\",\"message\":\"" msg "\"}"
+
+
 void json_addheaders() {
   server.sendHeader("Access-Control-Allow-Credentials", "true");
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.sendHeader("Access-Control-Allow-Methods", "GET");
   server.sendHeader("Access-Control-Allow-Headers", "application/json");
 }
+
+const char * json_serialize(ps_direction dir) {
+  switch (dir) {
+    case FWD:   return "forward";
+    case REV:   return "reverse";
+    default:    return "";
+  }
+}
+
+const char * json_serialize(ps_movement m) {
+  switch (m) {
+    case M_STOPPED:     return "idle";
+    case M_ACCEL:       return "accelerating";
+    case M_DECEL:       return "decelerating";
+    case M_CONSTSPEED:  return "spinning";
+    default:            return "";
+  }
+}
+
 
 void jsonwifi_init() {
   server.on("/api/wifi/scan", [](){
@@ -72,6 +117,41 @@ void jsonmotor_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
+
+  server.on("/api/motor/status", [](){
+    json_addheaders();
+    ps_status status = ps_getstatus(server.arg("clearerrors") == "true");
+    JsonObject& root = jsonbuf.createObject();
+    JsonObject& alarms = root.createNestedObject("alarms");
+    alarms["commanderror"] = status.alarms.command_error;
+    alarms["overcurrent"] = status.alarms.overcurrent;
+    alarms["undervoltage"] = status.alarms.undervoltage;
+    alarms["thermalshutdown"] = status.alarms.thermal_shutdown;
+    alarms["thermalwarning"] = status.alarms.thermal_warning;
+    alarms["stalldetect"] = status.alarms.stall_detect;
+    alarms["switch"] = status.alarms.user_switch;
+    root["direction"] = json_serialize(status.direction);
+    root["movement"] = json_serialize(status.movement);
+    root["hiz"] = status.hiz;
+    root["busy"] = status.busy;
+    root["switch"] = status.user_switch;
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/motor/command/speed", [](){
+    json_addheaders();
+    if (!server.hasArg("speed") || !server.hasArg("direction")) {
+      server.send(200, "application/json", json_error("speed and direction args not specified"));
+      return;
+    }
+
+    float speed = server.arg("speed").toFloat();
+    ps_direction direction = server.arg("direction") != "forward"? REV : FWD;
+    ps_run(direction, speed);
+    server.send(200, "application/json", json_ok());
+  });
 }
 
 void json_init() {
@@ -94,7 +174,21 @@ void json_init() {
 void setup() {
   Serial.begin(115200);
 
-  // Check reset
+  // Initialize FS
+  {
+    SPIFFS.begin();
+
+    // Check reset
+
+    // Create default config if needed
+    
+  }
+
+  // Read configuration
+  {
+    //File wificfg_fp = SPIFFS.open("/wifi.json", "r");
+    motorcfg = default_motor();
+  }
 
   // Wifi connection
   {
@@ -116,6 +210,31 @@ void setup() {
   {
     json_init();
     server.begin();
+  }
+
+  // Initialize SPI and Stepper Motor
+  {
+    ps_spiinit();
+    ps_setsync(SYNC_BUSY);
+    ps_setmode(motorcfg.mode);
+    ps_setstepsize(motorcfg.stepsize);
+    ps_setmaxspeed(motorcfg.maxspeed);
+    ps_setminspeed(motorcfg.minspeed, true);
+    ps_setaccel(motorcfg.accel);
+    ps_setdecel(motorcfg.decel);
+    ps_setfullstepspeed(motorcfg.fullstepspeed, false);
+    
+    ps_setslewrate(SR_520);
+  
+    ps_setocd(500, true);
+    ps_vm_setpwmfreq(0, 1);                   // V
+    //ps_cm_setpredict(true);                   // C
+    ps_setvoltcomp(false);
+    ps_setswmode(SW_USER);
+    ps_setclocksel(CLK_INT16);
+  
+    ps_setktvals(motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
+    ps_setalarmconfig(true, true, true, true);
   }
 
 #if 0

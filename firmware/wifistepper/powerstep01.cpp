@@ -202,6 +202,7 @@ ps_status ps_getstatus(bool clear_errors) {
     .direction = (ps_direction)reg.dir,
     .movement = (ps_movement)reg.mot_status,
     .hiz = (bool)reg.hiz,
+    .busy = !(bool)reg.busy,
     .user_switch = (bool)reg.sw_f,
     .step_clock = (bool)reg.stck_mod,
     .alarms = {

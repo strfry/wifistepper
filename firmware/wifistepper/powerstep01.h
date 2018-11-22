@@ -1,3 +1,5 @@
+#ifndef __POWERSTEP01_H
+#define __POWERSTEP01_H
 
 typedef enum __ps_dir {
   REV       = 0x0,
@@ -26,6 +28,7 @@ typedef struct __ps_status {
   ps_direction direction;
   ps_movement movement;
   bool hiz;
+  bool busy;
   bool user_switch;
   bool step_clock;
   ps_alarms alarms;
@@ -233,3 +236,4 @@ void ps_waitbusy(ps_waitcb waitf =NULL);
 void ps_reset();
 void ps_nop();
 
+#endif
