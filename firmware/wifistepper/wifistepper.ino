@@ -1,54 +1,104 @@
 //#include <Arduino.h>
 #include <FS.h>
 #include <ArduinoJson.h>
-//#include <ESPAsyncWebServer.h>
 #include <ESP8266WebServer.h>
 
 #include "powerstep01.h"
 #include "wifistepper.h"
 
-void wait_callback() {
-  ESP.wdtFeed();
+#define MOTOR_ADCCOEFF    2.65625
+
+struct {
+  ps_mode mode;
+  ps_stepsize stepsize;
+  float maxspeed, minspeed;
+  float accel, decel;
+  float kthold, ktrun, ktaccel, ktdecel;
+  float fsspeed;
+  bool fsboost;
+
+  bool reverse;
+} motorcfg = {
+  .mode = MODE_VOLTAGE,
+  .stepsize = STEP_128,
+  .maxspeed = 10000.0,
+  .minspeed = 0.0,
+  .accel = 50.0,
+  .decel = 50.0,
+  .kthold = 0.25,
+  .ktrun = 0.5,
+  .ktaccel = 0.8,
+  .ktdecel = 0.8,
+  .fsspeed = 1000.0,
+  .fsboost = true,
+  .reverse = false
+};
+
+void motorcfg_update() {
+  ps_setsync(SYNC_BUSY);
+  ps_setmode(motorcfg.mode);
+  ps_setstepsize(motorcfg.stepsize);
+  ps_setmaxspeed(motorcfg.maxspeed);
+  ps_setminspeed(motorcfg.minspeed, true);
+  ps_setaccel(motorcfg.accel);
+  ps_setdecel(motorcfg.decel);
+  ps_setfullstepspeed(motorcfg.fsspeed, motorcfg.fsboost);
+  
+  ps_setslewrate(SR_520);
+
+  ps_setocd(500, true);
+  ps_vm_setpwmfreq(0, 1);                   // V
+  //ps_cm_setpredict(true);                   // C
+  ps_setvoltcomp(false);
+  ps_setswmode(SW_USER);
+  ps_setclocksel(CLK_INT16);
+
+  ps_setktvals(motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
+  ps_setalarmconfig(true, true, true, true);
 }
 
-cfg_motor default_motor() {
-  return (cfg_motor){
-    .mode = MODE_VOLTAGE,
-    .stepsize = STEP_128,
-    .maxspeed = 10000.0,
-    .minspeed = 0.0,
-    .accel = 50.0,
-    .decel = 50.0,
-    .kthold = 0.25,
-    .ktrun = 0.5,
-    .ktaccel = 0.8,
-    .ktdecel = 0.8,
-    .fullstepspeed = 1000.0,
-    .fsboost = true
-  };
+ps_direction motorcfg_dir(ps_direction d) {
+  if (!motorcfg.reverse)  return d;
+  switch (d) {
+    case FWD: return REV;
+    case REV: return FWD;
+  }
 }
 
-void printalarms(ps_alarms * a) {
-  Serial.println("Alarms:");
-  Serial.print("Command Error: "); Serial.println(a->command_error);
-  Serial.print("Overcurrent: "); Serial.println(a->overcurrent);
-  Serial.print("Undervoltage: "); Serial.println(a->undervoltage);
-  Serial.print("Thermal Shutdown: "); Serial.println(a->thermal_shutdown);
-  Serial.println();
-}
-
-//AsyncWebServer server(80);
 ESP8266WebServer server(80);
-StaticJsonBuffer<1024> jsonbuf;
+StaticJsonBuffer<2048> jsonbuf;
 
-cfg_motor motorcfg;
 
+ps_mode parse_mode(const String& m, ps_mode d) {
+  if (m == "voltage")       return MODE_VOLTAGE;
+  else if (m == "current")  return MODE_CURRENT;
+  else                      return d;
+}
+
+ps_stepsize parse_stepsize(int s, ps_stepsize d) {
+  switch (s) {
+    case 1:   return STEP_1;
+    case 2:   return STEP_2;
+    case 4:   return STEP_4;
+    case 8:   return STEP_8;
+    case 16:  return STEP_16;
+    case 32:  return STEP_32;
+    case 64:  return STEP_64;
+    case 128: return STEP_128;
+    default:  return d;
+  }
+}
+
+ps_direction parse_direction(const String& s, ps_direction d) {
+  if (s == "forward")       return FWD;
+  else if (s == "reverse")  return REV;
+  else                      return d;
+}
 
 #define json_ok() \
   "{\"status\": \"ok\"}"
 #define json_error(msg) \
   "{\"status\":\"error\",\"message\":\"" msg "\"}"
-
 
 void json_addheaders() {
   server.sendHeader("Access-Control-Allow-Credentials", "true");
@@ -57,8 +107,30 @@ void json_addheaders() {
   server.sendHeader("Access-Control-Allow-Headers", "application/json");
 }
 
-const char * json_serialize(ps_direction dir) {
-  switch (dir) {
+const char * json_serialize(ps_mode m) {
+  switch (m) {
+    case MODE_VOLTAGE:  return "voltage";
+    case MODE_CURRENT:  return "current";
+    default:            return "";
+  }
+}
+
+int json_serialize(ps_stepsize s) {
+  switch (s) {
+    case STEP_1:    return 1;
+    case STEP_2:    return 2;
+    case STEP_4:    return 4;
+    case STEP_8:    return 8;
+    case STEP_16:   return 16;
+    case STEP_32:   return 32;
+    case STEP_64:   return 64;
+    case STEP_128:  return 128;
+    default:        return 0;
+  }
+}
+
+const char * json_serialize(ps_direction d) {
+  switch (d) {
     case FWD:   return "forward";
     case REV:   return "reverse";
     default:    return "";
@@ -79,7 +151,6 @@ const char * json_serialize(ps_movement m) {
 void jsonwifi_init() {
   server.on("/api/wifi/scan", [](){
     json_addheaders();
-    
     int n = WiFi.scanNetworks();
     JsonObject& root = jsonbuf.createObject();
     JsonArray& networks = root.createNestedArray("networks");
@@ -110,14 +181,42 @@ void jsonmotor_init() {
   server.on("/api/motor/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-
-
-    
+    root["mode"] = json_serialize(motorcfg.mode);
+    root["stepsize"] = json_serialize(motorcfg.stepsize);
+    root["maxspeed"] = motorcfg.maxspeed;
+    root["minspeed"] = motorcfg.minspeed;
+    root["accel"] = motorcfg.accel;
+    root["decel"] = motorcfg.decel;
+    root["kthold"] = motorcfg.kthold;
+    root["ktrun"] = motorcfg.ktrun;
+    root["ktaccel"] = motorcfg.ktaccel;
+    root["ktdecel"] = motorcfg.ktdecel;
+    root["fsspeed"] = motorcfg.fsspeed;
+    root["fsboost"] = motorcfg.fsboost;
+    root["reverse"] = motorcfg.reverse;
+    root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-
+  server.on("/api/motor/set", [](){
+    json_addheaders();
+    if (server.hasArg("mode"))      motorcfg.mode = parse_mode(server.arg("mode"), motorcfg.mode);
+    if (server.hasArg("stepsize"))  motorcfg.stepsize = parse_stepsize(server.arg("stepsize").toInt(), motorcfg.stepsize);
+    if (server.hasArg("maxspeed"))  motorcfg.maxspeed = server.arg("maxspeed").toFloat();
+    if (server.hasArg("minspeed"))  motorcfg.minspeed = server.arg("minspeed").toFloat();
+    if (server.hasArg("accel"))     motorcfg.accel = server.arg("accel").toFloat();
+    if (server.hasArg("decel"))     motorcfg.decel = server.arg("decel").toFloat();
+    if (server.hasArg("kthold"))    motorcfg.kthold = server.arg("kthold").toFloat();
+    if (server.hasArg("ktrun"))     motorcfg.ktrun = server.arg("ktrun").toFloat();
+    if (server.hasArg("ktaccel"))   motorcfg.ktaccel = server.arg("ktaccel").toFloat();
+    if (server.hasArg("ktdecel"))   motorcfg.ktdecel = server.arg("ktdecel").toFloat();
+    if (server.hasArg("fsspeed"))   motorcfg.fsspeed = server.arg("fsspeed").toFloat();
+    if (server.hasArg("fsboost"))   motorcfg.fsboost = server.arg("fsboost") == "true";
+    if (server.hasArg("reverse"))   motorcfg.reverse = server.arg("reverse") == "true";
+    motorcfg_update();
+    server.send(200, "application/json", json_ok());
+  });
   server.on("/api/motor/status", [](){
     json_addheaders();
     ps_status status = ps_getstatus(server.arg("clearerrors") == "true");
@@ -130,7 +229,7 @@ void jsonmotor_init() {
     alarms["thermalwarning"] = status.alarms.thermal_warning;
     alarms["stalldetect"] = status.alarms.stall_detect;
     alarms["switch"] = status.alarms.user_switch;
-    root["direction"] = json_serialize(status.direction);
+    root["direction"] = json_serialize(motorcfg_dir(status.direction));
     root["movement"] = json_serialize(status.movement);
     root["hiz"] = status.hiz;
     root["busy"] = status.busy;
@@ -140,16 +239,83 @@ void jsonmotor_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/motor/command/speed", [](){
+  server.on("/api/motor/adc", [](){
     json_addheaders();
-    if (!server.hasArg("speed") || !server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("speed and direction args not specified"));
+    int adc = ps_readadc();
+    JsonObject& root = jsonbuf.createObject();
+    if (server.hasArg("raw") && server.arg("raw") == "true") {
+      root["value"] = adc;
+    } else {
+      root["value"] = (float)adc * MOTOR_ADCCOEFF;
+    }
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/motor/abspos/reset", [](){
+    json_addheaders();
+    ps_resetpos();
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/abspos/set", [](){
+    json_addheaders();
+    if (!server.hasArg("position")) {
+      server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-
-    float speed = server.arg("speed").toFloat();
-    ps_direction direction = server.arg("direction") != "forward"? REV : FWD;
-    ps_run(direction, speed);
+    ps_setpos(server.arg("position").toInt());
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/abspos/get", [](){
+    json_addheaders();
+    int32_t pos = ps_getpos();
+    JsonObject& root = jsonbuf.createObject();
+    root["position"] = pos;
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/motor/mark/set", [](){
+    json_addheaders();
+    if (!server.hasArg("position")) {
+      server.send(200, "application/json", json_error("position arg must be specified"));
+      return;
+    }
+    ps_setmark(server.arg("position").toInt());
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/mark/get", [](){
+    json_addheaders();
+    int32_t pos = ps_getmark();
+    JsonObject& root = jsonbuf.createObject();
+    root["position"] = pos;
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/motor/command/run", [](){
+    json_addheaders();
+    if (!server.hasArg("speed") || !server.hasArg("direction")) {
+      server.send(200, "application/json", json_error("speed, direction args must be specified"));
+      return;
+    }
+    ps_run(motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("speed").toFloat());
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/command/goto", [](){
+    json_addheaders();
+    if (!server.hasArg("position")) {
+      server.send(200, "application/json", json_error("position arg must be specified"));
+      return;
+    }
+    if (server.hasArg("direction")) {
+      ps_goto(server.arg("position").toInt(), motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
+    } else {
+      ps_goto(server.arg("position").toInt());
+    }
     server.send(200, "application/json", json_ok());
   });
 }
@@ -187,7 +353,7 @@ void setup() {
   // Read configuration
   {
     //File wificfg_fp = SPIFFS.open("/wifi.json", "r");
-    motorcfg = default_motor();
+    //motorcfg = default_motor();
   }
 
   // Wifi connection
@@ -215,65 +381,13 @@ void setup() {
   // Initialize SPI and Stepper Motor
   {
     ps_spiinit();
-    ps_setsync(SYNC_BUSY);
-    ps_setmode(motorcfg.mode);
-    ps_setstepsize(motorcfg.stepsize);
-    ps_setmaxspeed(motorcfg.maxspeed);
-    ps_setminspeed(motorcfg.minspeed, true);
-    ps_setaccel(motorcfg.accel);
-    ps_setdecel(motorcfg.decel);
-    ps_setfullstepspeed(motorcfg.fullstepspeed, false);
-    
-    ps_setslewrate(SR_520);
-  
-    ps_setocd(500, true);
-    ps_vm_setpwmfreq(0, 1);                   // V
-    //ps_cm_setpredict(true);                   // C
-    ps_setvoltcomp(false);
-    ps_setswmode(SW_USER);
-    ps_setclocksel(CLK_INT16);
-  
-    ps_setktvals(motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
-    ps_setalarmconfig(true, true, true, true);
+    motorcfg_update();
   }
 
-#if 0
-  // Initialize SPI and Stepper Motor
+  // Clear any errors, final init
   {
-    ps_spiinit();
-  
-    ps_setsync(SYNC_BUSY);
-    ps_setmode(MODE_VOLTAGE);                 // V
-    //ps_setmode(MODE_CURRENT);                 // C
-    //ps_setstepsize(STEP_16);                  // C
-    ///ps_setstepsize(STEP_128);                 // V
-    ps_setstepsize(STEP_1);                 // V
-    
-    ps_setmaxspeed(1000);
-    ps_setminspeed(10, true);
-    ps_setaccel(50);
-    ps_setdecel(50);
-  
-    ps_setfullstepspeed(2000, false);
-    
-    ps_setslewrate(SR_520);
-  
-    ps_setocd(500, true);
-    ps_vm_setpwmfreq(0, 1);                   // V
-    //ps_cm_setpredict(true);                   // C
-    ps_setvoltcomp(false);
-    ps_setswmode(SW_USER);
-    ps_setclocksel(CLK_INT16);
-  
-    ps_setktvals(0.3, 0.3, 0.5, 0.5);    // V
-    //ps_setktvals(0.55, 0.55, 0.55, 0.55);     // C
-    ps_setalarmconfig(true, true, true, true);
-    
     ps_getstatus(true);
-  
-    ps_run(FWD, 15000);
   }
-#endif
 }
 
 void loop() {

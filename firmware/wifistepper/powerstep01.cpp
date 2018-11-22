@@ -6,7 +6,7 @@
 #define PS_PIN_RST      (15)
 #define PS_PIN_CS       (4)
 
-#define PS_DEBUG
+//#define PS_DEBUG
 
 uint8_t _ps_xferbyte(uint8_t b) {
   digitalWrite(PS_PIN_CS, LOW);
