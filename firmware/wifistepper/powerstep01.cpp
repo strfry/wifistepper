@@ -10,7 +10,7 @@
 
 uint8_t _ps_xferbyte(uint8_t b) {
   digitalWrite(PS_PIN_CS, LOW);
-  SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+  SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE2));
   b = SPI.transfer(b);
   SPI.endTransaction();
   digitalWrite(PS_PIN_CS, HIGH);
