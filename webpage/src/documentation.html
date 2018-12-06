@@ -5,10 +5,58 @@ layout: default
 ---
 <h1 class="title is-3">{% mdicon book-open-variant %}Documentation</h1>
 <hr />
-
-<!--
-- hookup-guide
-- high-voltage
-- hardware-reset
--->
-
+<div class="message">
+    <div class="message-header"><span class="title is-5" id="hookup-guide">{% mdicon wrench %}Hookup guide</span></div>
+    <div class="message-body content">
+        <p>
+            This board is a WiFi module connected to stepper motor driver. It combines both the driver control logic (such as velocity commands, absolute position commands, etc.) with the current/voltage H-Bridge controller that drives a single stepper motor. To get started, you'll need:
+        </p>
+        <ol>
+            <li><strong><u>12V to 85V DC voltage source.</u></strong> You can use a standard laptop power brick with a barrel connector (5.5mm OD x 2.5mm ID center positive) or any power supply that can drive enough current (you probably want at least 2-3 amps).</li>
+            <li><strong><u>Bipolar Stepper Motor.</u></strong> There are many different kinds. For beginners we recommend a NEMA 17 because it's a good tradeoff between size and power. If you use a unipolar stepper motor you'll need to wire the leads so that it is electrically identical to a bipolar motor.</li>
+        </ol>
+        <p>
+            For convienence, we've added a barrel connector jack. You can use either the screw terminals <i>or</i> barrel jack for voltage input (they are connected in parallel). Diode <strong>D0</strong> provides reverse polarity "protection". That's in quotes because it's more like a fuse. If you happen to accidentally reverse the power and ground leads, the diode will blow, shorting VIN to ground. This does protect the onboard circutry, however you do need to fix it before the board will work again. You can either replace the diode (recommended), or desolder it altogether (in which case try not to reverse the input polarity again!). If you do replace it, the mfg part number is <i>LL4148</i>.
+        </p>
+        <p>
+            There will be two pairs (four wires) from your stepper motor that you'll need to connect to the board. They'll most likely be all different colors, so determining which are the pairs is important. The easiest way is to look at the datasheet that came with your stepper motor. If you don't want to do that, connect an ohm meter to two pairs and test for connectivity. Pairs could read anywhere fom 0 to 10 ohms. Repeat the test using all combinations of wires until you've found the pairs. Both pairs A &amp; B will be wired to the board as shown in the following figure.
+        </p>
+            <figure>
+                <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMMAAAC0CAMAAAAehmjhAAAAqFBMVEXMzMwAAAAAAP//mTP///8TExOAgIAICAhcXFwNDQ1hYWElJSV1dXUsLCz29vakpKQ9PT0FBQWpqak4ODjBwcFpaWmcnJxQUFBISEjJycnFxcWnp6eFhYXt7e0DAwPy8vLQ0NDPz8+RkZFVVVXDw8NAQEC+vr59fX16enpeXl6goKAbGxvg4ODAwMC4uLi0tLSIiIg7OzuSkpKtra1KSkowMDDT09NwcHDFDeEGAAAEo0lEQVR42u2b6XbaMBBG9aXygs1izN6wtGlos3Xf3v/NijFBYktsqc2MqO6fmDnHSDdY0ngsC4/H4/F4zh9QcgYKgHfwDvwcRE2YtewdeLTsHXi07B14tOwdeLTsHXi07B14tOwdeLTsHXi07B14tOwdeLTsHXi0/P865GGcpUEEREGaxWHumsNkOg6wRzCeTtxxGI4iHCUaDcVzvHqCF3O46uEJelfPGZxu+aUcOhmeIes8pSAEuUOCCiRPKJA7dFqoRKtzSoHcIURlwqMOgtxhgBoMjijQO8SoRXzoIKgdYtQkZucwQG0GzBxCGBCycujAiA6nMd2CES1Gc2sCQxI2a1wHxnS45BoZjMmY5HxXsOCKR+7dgwW9o/dAL+0whBVDDr/DCFaMGIyHSQQrogn9vDSFJVP69WEMS8b063QASwLyfCnHI1LKBCvGqwPsogLHyKnz1lDr6KK/7tKipkNI7RBrHb2TKRC072o6xNQOmdbRpQyB33JZdrnbfNtuv23OAblGixSh6NtsY5ZRO6SaAx4egF8PWDt0P8o17+cbBxVZa+XbYZNSj+lAdwjlsifD0qEpZ0kQJAvZRBE4iDyMG/sTE5VDpDuk8m4o07LLb+QtViTybemwH1EpSkS9xkF3wPVi0S+P0JYBVgSyvQ4cRBrYIpQEA4dEyqSiAxR6wkR+LaGxWDTweC3F2pUzP4hgS0SdeweHi8B2TMdBcDuTTWAmx3sR3SGgvgdKTzl0+5uZtAvkxYEW2XVIqX+H7JQDus037fabZhfAfT6TUovsOmTU4yGGNTH1vBTCmpB6fchhTS78PRCne9Gii67XBMwcXjcar/nUZswcpkC4cwZJjczO4SfQ2nWgqFVajekcrRYu9TNoa8YmDu9wE+KdfgZN7d5ijbtuRB9Xo/padyB5hlI519ilTBN+FPnOh+IYGgTPsp7J+U7TKsbTd7QsHeyfKVbNvQ+5xIZLdQbNs92K90BHR3SJGtUAwTN2m9+h38Dn4u9nbEc1QLDXwWY83KD3OL1/UA40e06UQr2WU3wpD74gVQ4Ee3+qrw+C/x4s8Yp+j671XjgGDrZ7El+x2CtdY28oW4fqe3Q5O1TbK83cofKedaZj2vbdgZoOqibA6B0OozVuCoSc3qWpl2uomgCrd5rq5XyqJsDJoV7urWoCrBwKi6roNQFeDnVaVjUBlx20mgAKHHRQNQF7h4s1dgEdg5qAwTftGag/hgGFYU3AzEEpqCPDgMK4JmDgoCvox0YBhXlNwNRB9UF9MgiQv/N6sfexfoDc4WK/QyYBaoe/EPAO3uFsHSrgHbyDd/AO3uGMHE5wgWqYfYd38A78HASpg/jnXDD5DuGsA1ZEaXPiusOKWy3goIMQ/QEarjuIPiLXHfoDLN12WNEdvXfeAfcHW0MJHMzY/NtfX37FDbmDOWVvP+Ge/Fqyd+g67lBcS6nTDmvm3xx3mAfLO/q51QRueWtNvIN3YIt34IF32HAGNQFhXRNw26GsCbjuUNQEXHcoagJuO6iagIUDHXpNwGG0mgAKhINsawJn4NAV7qJqAu6iagLusq0JeDwej8fzn/EHDRtKWouaxdYAAAAASUVORK5CYII=">
+                <figcaption>Stepper Motor Windings</figcaption>
+            </figure>
+        <p>
+            Polarity is not important because the software has a <strong>Reverse Wires</strong> configuration setting that will reverse the direction in software. <i>(Reverse polarity = reverse direction)</i>. If you don't want to use that configuration setting and the motor is spinning backwards, choose either A or B wires (but not both), and reverse the (+) plus and (-) minus colors.
+        </p>
+    </div>
+</div>
+<div class="message">
+    <div class="message-header"><span class="title is-5">{% mdicon wifi %}WiFi Configuration</span></div>
+    <div class="message-body content">
+        <p></p>
+    </div>
+</div>
+<div class="message">
+    <div class="message-header"><span class="title is-5" id="high-voltage">{% mdicon flash %}High Voltage Operation (50 volts and above)</span></div>
+    <div class="message-body content">
+        <p>
+            With proper configuration, this board can handle input voltages up to 85 volts. However, board modification is needed when driving 50 volts and higher. This is due to two factors: 1) Input ratings on the barrel connector 2) the maximum input voltage of the DC-DC regulator.
+        </p>
+        <ol>
+            <li>Use <strong>only</strong> the screw terminals for voltage input. (The barrel connector is not rated for more than 50 volts)</li>
+            <li>Desolder resistor <strong>R0</strong> (located mid-board next to DC-DC regulator) and provide 3.3 volt logic supply seperately to one of the breakout pins labeled <strong>3V3</strong> and <strong>GND</strong> on either side of the board. (The DC-DC regulator is only rated to ~50 volts input)</li>
+        </ol>
+    </div>
+</div>
+<div class="message">
+    <div class="message-header"><span class="title is-5">{% mdicon tilde %}Voltage and Current Modes</span></div>
+    <div class="message-body content">
+        <p></p>
+    </div>
+</div>
+<div class="message">
+    <div class="message-header"><span class="title is-5" id="hardware-reset">{% mdicon bomb %}Hardware Reset</span></div>
+    <div class="message-body content">
+        <p></p>
+    </div>
+</div>

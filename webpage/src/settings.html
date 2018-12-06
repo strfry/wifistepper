@@ -7,9 +7,19 @@ css:
 layout: default
 ---
 <h1 class="title is-3">{% mdicon lock %}Settings</h1>
-<hr />
-
 <div id="settings">
+    <div class="box properties">
+        {% raw %}
+        <div class="level">
+            <div class="level-item">
+                <span><span class="entry">Hostname:</span> <span v-if="browser.mdns.enabled" class="value">{{ browser.mdns.hostname }}.local</span><span v-else class="value">(mDNS not enabled)</span></span>
+            </div>
+            <div class="level-item">
+                <span><span class="entry">IP:</span> <span class="value">{{ wifi.ip }}</span></span>
+            </div>
+        </div>
+        {% endraw %}
+    </div>
     <div class="message">
         <div class="message-header"><span class="title is-5">{% mdicon wifi %}Wifi Connection</span></div>
         <div class="message-body">
@@ -18,45 +28,56 @@ layout: default
                     Mode:
                     <span class="select">
                         <select v-model="wifi.mode">
-                            <option value="softap">Soft AP</option>
+                            <option value="accesspoint">Access Point</option>
                             <option value="station">Station</option>
                         </select>
                     </span>
                     {% mdicon help-circle-outline %}
                 </div>
-                <div v-if="wifi.mode == 'softap'">
-                    <div class="field control">
-                        <input class="is-checkradio has-background-color is-white" id="wifi-softap-encryption" type="checkbox" v-model="wifi.ap.encryption" />
-                        <label for="wifi-softap-encryption"><strong>Enable WPA2-PSK Encryption</strong></label>
-                    </div>
-                    <div class="field control">
-                        <input class="input" type="text" placeholder="AP Password" v-model="wifi.ap.password" v-bind:disabled="!wifi.ap.encryption" />
-                    </div>
-                    <div class="is-divider" data-content="Advanced"></div>
+                <div v-if="wifi.mode == 'accesspoint'">
                     <div class="field is-horizontal">
-                        <div class="field-label is-normal"><label class="label">AP Mac</label></div>
+                        <div class="field-label is-normal"><label class="label">SSID</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" placeholder="Auto" v-model="wifi.ap.mac" /></span>
+                                <span class="control is-expanded"><input class="input" type="text" placeholder="Network Name" maxlength="31" v-model="wifi.accesspoint.ssid" /></span>
                             </div>
                         </div>
                     </div>
+                    <div class="field is-horizontal is-spaced-mobile">
+                        <div class="field-label is-normal"><label class="label">Password</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control is-expanded">
+                                    <input class="input" type="text" placeholder="WPA2-PSK Password" maxlength="63" v-model="wifi.accesspoint.password" v-bind:disabled="!wifi.accesspoint.encryption" />
+                                </span>
+                            </div>
+                            <div class="field">
+                                <span class="control">
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-password-enable" type="checkbox" v-model="wifi.accesspoint.encryption" />
+                                    <label class="is-checkradio-enable" for="wifi-password-enable"><strong>Enabled</strong></label>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="is-divider" data-content="Advanced"></div>
                     <div class="field is-horizontal">
                         <div class="field-label"></div>
                         <div class="field-body">
                             <div class="field">
                                 <span class="control">
-                                    <input class="is-checkradio has-background-color is-white" id="wifi-broadcast-enable" type="checkbox" v-model="wifi.ap.broadcast" />
-                                    <label for="wifi-broadcast-enable"><strong>Broadcast SSID</strong></label>
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-broadcast-enable" type="checkbox" v-model="wifi.accesspoint.broadcast" />
+                                    <label class="is-checkradio-enable" for="wifi-broadcast-enable"><strong>Broadcast SSID</strong></label>
                                 </span>
                             </div>
                         </div>
                     </div>
-                    <div class="field is-horizontal">
+                    <div class="field is-horizontal is-spaced-mobile">
                         <div class="field-label is-normal"><label class="label">Channel</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" style="width: 75px;" type="number" v-model="wifi.ap.channel" /></span>
+                                <span class="control">
+                                    <input class="input" style="width: 75px;" type="number" min="1" max="13" step="1" v-model="wifi.accesspoint.channel" />
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -68,22 +89,22 @@ layout: default
                             <div class="field has-addons">
                                 <span class="control" style="width: 100%;">
                                     <div class="select is-fullwidth">
-                                        <select v-model="wifi.station.network">
-                                            {% raw %}<option v-for="network in wifi.detect.networks" v-bind:value="network.mac">{{ network.ssid }}</option>{% endraw %}
+                                        <select v-model="wifi.station.ssid">
+                                            {% raw %}<option v-for="network in wifi.detected" v-bind:value="network.ssid">{{ network.ssid }}</option>{% endraw %}
                                         </select>
                                     </div>
                                 </span>
-                                <span class="control"><button class="button is-primary" style="border-color: #666;" v-on:click="wifiscan">{% mdicon refresh, .baseline, .inline %}</button></span>
+                                <span class="control"><button class="button is-primary" style="border-color: #666;" v-on:click="scanwifi">{% mdicon refresh, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
-                    <div v-if="wifi.station.encryption" class="field is-horizontal">
+                    <div v-if="wifi.station.encryption" class="field is-horizontal is-spaced-mobile">
                         <div class="field-label is-normal">
                             <label class="label">Password</label>
                         </div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" placeholder="Empty" v-model="wifi.station.password" /></span>
+                                <span class="control"><input class="input" type="text" placeholder="Empty" maxlength="63" v-model="wifi.station.password" /></span>
                             </div>
                         </div>
                     </div>
@@ -92,14 +113,35 @@ layout: default
                         <div class="field-label is-normal"><label class="label">IP Address</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" placeholder="Auto" v-model="wifi.station.ip" /></span>
+                                <span class="control"><input class="input" type="text" placeholder="Auto" maxlength="15" v-model="wifi.station.forceip" /></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal is-spaced-mobile">
+                        <div class="field-label is-normal"><label class="label">Revert AP</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control">
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-revertap-enable" type="checkbox" v-model="wifi.station.revertap" />
+                                    <label class="is-checkradio-enable" for="wifi-revertap-enable"><strong>Enabled</strong></label>
+                                </span>
                             </div>
                         </div>
                     </div>
                 </div>
                 <hr />
                 <div class="field has-text-centered">
-                    <span class="control"><button class="button is-primary is-medium" v-on:click="">Apply</button></span>
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="writewifi">Apply</button></span>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': wifi.changemodal}">
+                    <div class="modal-background" v-on:click="wifi.changemodal = false"></div>
+                        <div class="modal-content">
+                            <div class="box has-text-centered">
+                                <div class="title is-4">{% mdicon sync-alert %}Wifi Settings Changed</div>
+                                <div>You may need to modify your network connections and reconnect.</div>
+                            </div>
+                        </div>
+                    <button class="modal-close is-large" v-on:click="wifi.changemodal = false"></button>
                 </div>
             </div>
         </div>
@@ -108,36 +150,91 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon application %}Browser &amp; API Interface</span></div>
         <div class="message-body">
             <div class="field is-horizontal">
-                <div class="field-label"></div>
+                <div class="field-label is-normal"><label class="label">HTTP</label></div>
                 <div class="field-body">
                     <div class="field">
                         <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-enable" type="checkbox" v-model="browser.enabled" />
-                            <label for="browser-enable"><strong>Browser Access Enabled</strong></label>
+                            <input class="is-checkradio has-background-color is-white" id="browser-http-enable" type="checkbox" v-model="browser.http.enabled" />
+                            <label class="is-checkradio-enable" for="browser-http-enable"><strong>Enabled</strong></label>
                         </span>
-                        <span v-if="!browser.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable browser access through this interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
+                        <span v-if="!browser.http.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable access through the http interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
                     </div>
                 </div>
             </div>
-            <div class="field is-horizontal">
-                <div class="field-label is-normal"><label class="label">HT Access</label></div>
+            <div class="field is-horizontal is-spaced-mobile">
+                <div class="field-label is-normal"><label class="label">HTTPS</label></div>
                 <div class="field-body">
                     <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Username" v-model="browser.htacess.username" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" v-model="browser.htacess.password" /></span>
-                    </div>
-                    <div class="field">
                         <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-htaccess-enable" type="checkbox" v-model="browser.htacess.enabled" />
-                            <label for="browser-htaccess-enable"><strong>Enabled</strong></label>
+                            <input class="is-checkradio has-background-color is-white" id="browser-https-enable" type="checkbox" v-model="browser.https.enabled" />
+                            <label class="is-checkradio-enable" for="browser-https-enable"><strong>Enabled</strong></label>
                         </span>
                     </div>
                 </div>
+            </div>
+            <div class="field is-horizontal is-spaced-mobile">
+                <div class="field-label is-normal"><label class="label">mDNS</label></div>
+                <div class="field-body">
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Hostname" maxlength="23" v-model="browser.mdns.hostname" v-bind:disabled="!browser.mdns.enabled" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control">
+                            <input class="is-checkradio has-background-color is-white" id="browser-mdns-enable" type="checkbox" v-model="browser.mdns.enabled" />
+                            <label class="is-checkradio-enable" for="browser-mdns-enable"><strong>Enabled</strong></label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="field is-horizontal is-spaced-mobile">
+                <div class="field-label is-normal"><label class="label">Authentication</label></div>
+                <div class="field-body">
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="browser.auth.username" v-bind:disabled="!browser.auth.enabled" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.auth.password" v-bind:disabled="!browser.auth.enabled" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control">
+                            <input class="is-checkradio has-background-color is-white" id="browser-auth-enable" type="checkbox" v-model="browser.auth.enabled" />
+                            <label class="is-checkradio-enable" for="browser-auth-enable"><strong>Enabled</strong></label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="field is-horizontal is-spaced-mobile">
+                <div class="field-label is-normal"><label class="label">Arduino OTA</label></div>
+                <div class="field-body">
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Hostname" maxlength="23" v-model="browser.ota.hostname" v-bind:disabled="!browser.ota.enabled" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.ota.password" v-bind:disabled="!browser.ota.enabled" /></span>
+                    </div>
+                    <div class="field">
+                        <span class="control">
+                            <input class="is-checkradio has-background-color is-white" id="browser-ota-enable" type="checkbox" v-model="browser.ota.enabled" />
+                            <label class="is-checkradio-enable" for="browser-ota-enable"><strong>Enabled</strong></label>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-left: auto; margin-right: auto; max-width: 800px;">
+                <hr />
             </div>
             <div class="field has-text-centered">
-                <span class="control"><button class="button is-primary is-medium" v-on:click="">Apply</button></span>
+                <span class="control"><button class="button is-primary is-medium" v-on:click="writebrowser">Apply</button></span>
+            </div>
+            <div class="modal" v-bind:class="{'is-active': browser.changemodal}">
+                <div class="modal-background" v-on:click="browser.changemodal = false"></div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Browser Settings Changed</div>
+                            <div>You may need to refresh the page to see changes.</div>
+                        </div>
+                    </div>
+                <button class="modal-close is-large" v-on:click="browser.changemodal = false"></button>
             </div>
         </div>
     </div>
@@ -155,48 +252,70 @@ layout: default
     </div>
 </div>
 <script>
+    function merge(src, dest, keys) {
+        for (i in keys) {
+            dest[keys[i]] = src[keys[i]];
+        }
+    }
     var app = new Vue({
         el: '#settings',
         data: {
             wifi: {
+                ip: '',
                 mode: null,
-                ap: {
-                    encryption: false,
+                detected: [],
+                changemodal: false,
+                accesspoint: {
+                    ssid: '',
                     password: '',
-                    mac: '',
+                    encryption: false,
                     broadcast: true,
-                    channel: 1,
+                    channel: 1
                 },
                 station: {
-                    network: null,
-                    encryption: false,
+                    ssid: '',
                     password: '',
-                    ip: ''
-                },
-                detect: {
-                    networks: []
+                    encryption: false,
+                    forceip: '',
+                    revertap: true
                 }
             },
 
             browser: {
-                enabled: true,
-                htacess: {
+                changemodal: false,
+                http: {
+                    enabled: true,
+                },
+                https: {
+                    enabled: false,
+                },
+                mdns: {
+                    enabled: true,
+                    hostname: '',
+                },
+                auth: {
                     enabled: false,
                     username: '',
                     password: ''
-                }
+                },
+                ota: {
+                    enabled: true,
+                    hostname: '',
+                    password: ''
+                },
+
             }
         },
         watch: {
             'wifi.mode': function(newv) {
                 if (newv == 'station') {
-                    this.wifiscan();
+                    this.scanwifi();
                 }
             },
-            'wifi.station.network': function(newv) {
-                for (var i = 0; i < this.wifi.detect.networks.length; i++) {
-                    if (this.wifi.station.network == this.wifi.detect.networks[i].mac) {
-                        this.wifi.station.encryption = this.wifi.detect.networks[i].encryption;
+            'wifi.station.ssid': function(newv) {
+                for (var i = 0; i < this.wifi.detected.length; i++) {
+                    if (this.wifi.station.ssid == this.wifi.detected[i]['ssid']) {
+                        this.wifi.station.encryption = this.wifi.detected[i]['encryption'];
                     }
                 }
             }
@@ -204,22 +323,86 @@ layout: default
         computed: {
         },
         methods: {
-            wifiscan: function() {
+            scanwifi: function() {
                 console.log("Initiating Wifi Scan");
-                axios.get("{{ site.apiurl }}/api/wifi/scan", {
-                    params: {}
-                }).then(function (r) {
+                axios.get("{{ site.apiurl }}/api/wifi/scan").then(function (r) {
                     if (r.data.status == 'ok') {
                         var networks = r.data.networks;
                         networks.sort(function(a, b){return b['rssi']-a['rssi'];});
-                        app.wifi.detect.networks = networks;
+                        app.wifi.detected = networks;
                     }
-                }).catch(function (e) {
-                    console.log(e);
                 });
+            },
+            writewifi: function() {
+                console.log("Writing wifi settings");
+                if (this.wifi.mode == 'accesspoint') {
+                    axios.get("{{ site.apiurl }}/api/wifi/set/accesspoint", {
+                        params: {
+                            ssid: this.wifi.accesspoint.ssid,
+                            password: this.wifi.accesspoint.encryption? this.wifi.accesspoint.password : '',
+                            broadcast: this.wifi.accesspoint.broadcast,
+                            channel: this.wifi.accesspoint.channel,
+                            restart: true
+                        }
+                    });
+
+                } else if (this.wifi.mode == 'station') {
+                    axios.get("{{ site.apiurl }}/api/wifi/set/station", {
+                        params: {
+                            ssid: this.wifi.station.ssid,
+                            password: this.wifi.station.encryption? this.wifi.station.password : '',
+                            forceip: this.wifi.station.forceip,
+                            revertap: this.wifi.station.revertap,
+                            restart: true
+                        }
+                    });
+                }
+                this.wifi.changemodal = true;
+            },
+            writebrowser: function() {
+                console.log("Writing browser settings");
+                axios.get("{{ site.apiurl }}/api/browser/set", {
+                    params: {
+                        http_enabled: this.browser.http.enabled,
+                        https_enabled: this.browser.https.enabled,
+                        mdns_enabled: this.browser.mdns.enabled,
+                        mdns_hostname: this.browser.mdns.hostname,
+                        auth_enabled: this.browser.auth.enabled,
+                        auth_username: this.browser.auth.username,
+                        auth_password: this.browser.auth.password,
+                        ota_enabled: this.browser.ota.enabled,
+                        ota_hostname: this.browser.ota.hostname,
+                        ota_password: this.browser.ota.password
+                    }
+                });
+                this.browser.changemodal = true;
             }
         },
         mounted: function () {
+            axios.get("{{ site.apiurl }}/api/wifi/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    var d = r.data;
+                    app.wifi.ip = d['ip'];
+                    app.wifi.mode = d['mode'];
+                    if (d['mode'] == 'accesspoint')     merge(d, app.wifi.accesspoint, ['ssid', 'password', 'encryption', 'broadcast', 'channel']);
+                    else if (d['mode'] == 'station')    merge(d, app.wifi.station, ['ssid', 'password', 'encryption', 'forceip', 'revertap']);
+                }
+            });
+            axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    var d = r.data;
+                    app.browser.http.enabled = d['http_enabled'];
+                    app.browser.https.enabled = d['https_enabled'];
+                    app.browser.mdns.enabled = d['mdns_enabled'];
+                    app.browser.mdns.hostname = d['mdns_hostname'];
+                    app.browser.auth.enabled = d['auth_enabled'];
+                    app.browser.auth.username = d['auth_username'];
+                    app.browser.auth.password = d['auth_password'];
+                    app.browser.ota.enabled = d['ota_enabled'];
+                    app.browser.ota.hostname = d['ota_hostname'];
+                    app.browser.ota.password = d['ota_password'];
+                }
+            });
         }
     });
 </script>

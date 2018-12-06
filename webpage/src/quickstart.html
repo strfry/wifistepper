@@ -4,6 +4,7 @@ menu: quickstart
 css:
     - bulma-tooltip
     - bulma-checkradio
+    - bulma-switch
 bulmajs:
     - notification
 layout: default
@@ -11,26 +12,24 @@ layout: default
 {% include helptext.html %}
 <h1 class="title is-1">{% mdicon logo %}Wifi Stepper Quickstart Guide</h1>
 <div id="profiles">
-    <div class="box">
-        {% raw %}
+    <div class="box properties">
         <div class="level">
             <div class="level-item">
-                <span><span style="color: #999;">Voltage:</span> <span style="font-weight: bold; color: #c00;">~{{ voltage }} V</span> <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
+                <span><span class="entry">Voltage:</span> {% raw %}<span class="value" style="color: #c00;">~{{ voltage }} V</span>{% endraw %} <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
             </div>
             <div class="level-item">
-                <span><span style="color: #999;">Motor:</span> <span style="font-weight: bold;">{{ movement.charAt(0).toUpperCase() + movement.slice(1) }} {{ direction.charAt(0).toUpperCase() + direction.slice(1) }}</span></span>
+                <span><span class="entry">Motor:</span> {% raw %}<span class="value">{{ movement.charAt(0).toUpperCase() + movement.slice(1) }} {{ direction.charAt(0).toUpperCase() + direction.slice(1) }}</span>{% endraw %}</span>
             </div>
             <div class="level-item">
-                <span><span style="color: #999;">Status:</span> <span v-if="busy" style="font-weight: bold; color: #69f;">Busy</span><span v-else style="font-weight: bold; color: #0c6;">Idle</span></span>
+                <span><span class="entry">Status:</span> <span v-if="busy" class="value" style="color: #69f;">Busy</span><span v-else class="value" style="color: #0c6;">Idle</span></span>
             </div>
             <div class="level-item">
-                <span><span style="color: #999;">Bridge State:</span> <span v-if="hiz" style="font-weight: bold; color: #f93;">High Z</span><span v-else style="font-weight: bold;">Active</span></span>
+                <span><span class="entry">Bridge State:</span> <span v-if="hiz" class="value" style="color: #f93;">High Z</span><span v-else class="value">Active</span></span>
             </div>
             <div class="level-item">
-                <span><span style="color: #999;">ADC:</span> <span style="font-weight: bold;">{{ adc }} V</span></span>
+                <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ adc }} V</span>{% endraw %} <button class="button is-small is-light" v-on:click="readadc">{% mdicon refresh, .baseline, .inline %}</button></span>
             </div>
         </div>
-        {% endraw %}
     </div>
     <div class="notification is-warning" v-if="$cookies.get('help-hookup') !== 'hide'">
         <button class="delete" v-on:click="$cookies.set('help-hookup', 'hide', Infinity)"></button>
@@ -44,7 +43,7 @@ layout: default
             {% mdicon arrow-right-drop-circle, .inline %}
             Set up
             <span class="select">
-                <select v-model="profile" v-bind:style="profile == 'none'? {'color': '#e60000'} : {}">
+                <select v-model="profile" v-bind:style="profile == 'none'? {'color': '#e60000'} : {}" v-on:change="updatepreset">
                     <option value="none">Select...</option>
                     <option value="servo">Servo Control</option>
                     <option value="speed">Speed Control</option>
@@ -55,8 +54,8 @@ layout: default
         <span class="nobreak">
             on a
             <span class="select">
-                <select v-model="preset.size">
-                    <option value="nema-14">NEMA 14</option>
+                <select v-model="preset.size" v-on:change="updatepreset">
+                    <option value="nema-11">NEMA 11</option>
                     <option value="nema-17">NEMA 17</option>
                     <option value="nema-23">NEMA 23</option>
                     <option value="nema-34">NEMA 34</option>
@@ -66,7 +65,7 @@ layout: default
         <span class="nobreak">
             with
             <span class="select">
-                <select v-model="preset.voltage">
+                <select v-model="preset.voltage" v-on:change="updatepreset">
                     <option value="12">~12 V</option>
                     <option value="24">~24 V</option>
                     <option value="48">~48 V</option>
@@ -78,7 +77,7 @@ layout: default
         <span class="nobreak">
             under
             <span class="select">
-                <select v-model="mode">
+                <select v-model="mode" v-on:change="updatepreset">
                     <option value="current">Current</option>
                     <option value="voltage">Voltage</option>
                 </select>
@@ -123,7 +122,7 @@ layout: default
                             <line transform="rotate(-30)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
                             <line transform="rotate(-15)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
                         </g>
-                        <g v-bind:style="preset.size == 'nema-14' || preset.size == 'nema-17'? {} : {'display': 'none'}">
+                        <g v-bind:style="preset.size == 'nema-11' || preset.size == 'nema-17'? {} : {'display': 'none'}">
                             <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
                             <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
                             <circle r="25" cx="0" cy="0" style="fill: #b3b3b3; stroke: #666; stroke-width: 1.5;" />
@@ -140,7 +139,7 @@ layout: default
                             <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                             <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                         </g>
-                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
+                        <g v-bind:transform="'rotate(' + (-servo.getangle) + ')'">
                             <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
                             <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
                         </g>
@@ -156,17 +155,41 @@ layout: default
                 <div class="field has-addons">
                     <span class="control"><span class="button is-static">Position:</span></span>
                     <span class="control"><input class="input" style="width: 100px;" type="number" v-model="servo.setangle" min="-180" max="180" step="1" /></span>
-                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="getangle" min="-180" max="180" readonly /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="servo.getangle" min="-180" max="180" readonly /></span>
                     <span class="control"><span class="button is-static">degrees</span></span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
-                        <button class="button" style="color: #fff;" v-on:click="reverse = !reverse" v-bind:style="reverse? {'background-color': '#00c'} : {'background-color': '#66f'}">{% mdicon swap-horizontal, .baseline %}Reverse Toggle</button>
+                        <span class="select">
+                            <select v-model="stepsize">
+                                <option value="1">1/1</option>
+                                <option value="2">1/2</option>
+                                <option value="4">1/4</option>
+                                <option value="8">1/8</option>
+                                <option value="16">1/16</option>
+                                <option value="32" v-if="mode == 'voltage'">1/32</option>
+                                <option value="64" v-if="mode == 'voltage'">1/64</option>
+                                <option value="128" v-if="mode == 'voltage'">1/128</option>
+                            </select>
+                        </span>
                     </span>
                     <span class="control">
-                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reverse_toggle }}" style="border-color: #dbdbdb;">{% mdicon help-circle, .baseline, .inline %}</button>
+                        <span class="button is-static">Resolution</span>
                     </span>
+                    <span class="control">
+                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepsize }}">{% mdicon help-circle, .baseline, .inline %}</button>
+                    </span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <span class="button" style="background-color: #66f;">
+                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" />
+                            <label class="is-checkradio-label" for="reverse1-enable">Reverse Wires</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
             </div>
         </div>
@@ -176,7 +199,7 @@ layout: default
             <div class="column has-text-centered is-half">
                 <figure class="image">
                     <svg id="speedsvg" width="300" height="300" viewbox="-80 -80 160 160">
-                        <g v-bind:style="preset.size == 'nema-14' || preset.size == 'nema-17'? {} : {'display': 'none'}">
+                        <g v-bind:style="preset.size == 'nema-11' || preset.size == 'nema-17'? {} : {'display': 'none'}">
                             <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
                             <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
                             <circle r="25" cx="0" cy="0" style="fill: #b3b3b3; stroke: #666; stroke-width: 1.5;" />
@@ -193,30 +216,26 @@ layout: default
                             <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                             <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                         </g>
-                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
+                        <g v-bind:transform="'rotate(' + (-speed.getangle) + ')'">
                             <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
                             <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
                         </g>
                     </svg>
                 </figure>
                 <div>
-                    <button class="button is-large" style="background-color: #093;">{% mdicon rotate-left, .baseline, .inline %}</button>
-                    <button class="button is-large" style="background-color: #900;">{% mdicon stop, .baseline, .inline %}</button>
-                    <button class="button is-large" style="background-color: #093;">{% mdicon rotate-right, .baseline %}</button>
+                    <button class="button is-large" style="background-color: #093;" v-on:click="writespeed(true, 'forward')">{% mdicon rotate-left, .baseline, .inline %}</button>
+                    <button class="button is-large" style="background-color: #900;" v-on:click="writespeed(false, '')">{% mdicon stop, .baseline, .inline %}</button>
+                    <button class="button is-large" style="background-color: #093;" v-on:click="writespeed(true, 'reverse')">{% mdicon rotate-right, .baseline %}</button>
                 </div>
             </div>
             <div class="column">
+                {% raw %}<div v-if="(speed.setrpm / 60 * 200) > maxspeed" class="help is-danger">Warning: Speed is greater than <span style="font-weight: bold;">Max Speed</span> setting (<span style="font-weight: bold;">{{ maxspeed }}</span> steps/sec).</div>{% endraw %}
                 <div class="field has-addons">
                     <span class="control"><span class="button is-static">Speed:</span></span>
-                    <span class="control"><input class="input" type="number" min="0" max="100" step="10" v-model="speed.setrpm" /></span>
+                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="speed.setrpm" min="0" max="2000" step="10" v-on:change="writespeed(speed.running, speed.direction)" /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="Math.round(speed.getrpm)" readonly /></span>
                     <span class="control"><span class="button is-static">RPM</span></span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_speed }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                </div>
-                <div class="field has-addons">
-                    <span class="control"><span class="button is-static">Position:</span></span>
-                    <span class="control"><input class="input" style="color: #999;" type="number" min="-180" max="180" v-bind:value="getangle" readonly /></span>
-                    <span class="control"><span class="button is-static">degrees</span></span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_getangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetrpm }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
                     <span class="control"><span class="button is-static">Microstep:</span></span>
@@ -243,11 +262,22 @@ layout: default
                 </div>
                 <div class="field has-addons">
                     <span class="control">
-                        <button class="button" style="color: #fff;" v-on:click="reverse = !reverse" v-bind:style="reverse? {'background-color': '#00c'} : {'background-color': '#66f'}">{% mdicon swap-horizontal, .baseline %}Reverse Toggle</button>
+                        <span class="button is-label">
+                            <label class="is-switch-label" for="speed-hizstop">Hard Stop</label>
+                            <input class="switch" id="speed-hizstop" type="checkbox" v-model="speed.hiz" />
+                            <label class="is-switch-label" for="speed-hizstop">High Z Stop</label>
+                        </span>
                     </span>
-                    <span class="control">
-                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reverse_toggle }}" style="border-color: #dbdbdb;">{% mdicon help-circle, .baseline, .inline %}</button>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_hizstop }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <span class="button" style="background-color: #66f;">
+                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" />
+                            <label class="is-checkradio-label" for="reverse1-enable">Reverse Wires</label>
+                        </span>
                     </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
             </div>
         </div>
@@ -273,7 +303,17 @@ layout: default
         </div>
     </div>
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon settings %}Motor Configuration</span></div>
+        <div class="message-header">
+            <div class="columns" style="width: 100%;">
+                <div class="column">
+                    <span class="title is-5">{% mdicon settings %}Motor Configuration</span>
+                </div>
+                <div class="column is-one-third has-text-right">
+                    <input class="is-checkradio is-white" id="profile-enable" type="checkbox" v-model="preset.enable" />
+                    <label for="profile-enable"><strong>Enable Profile Presets</strong></label>
+                </div>
+            </div>
+        </div>
         <div class="message-body">
             <div class="columns is-multiline">
                 <!-- Min / Max Speed -->
@@ -406,7 +446,6 @@ layout: default
                                         <label for="fsboost-enable"><strong>Boost Mode</strong></label>
                                     </span>
                                 </span>
-                                <span class="control"></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_fsboost }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
@@ -440,10 +479,11 @@ layout: default
     var app = new Vue({
         el: '#profiles',
         data: {
-            profile: 'servo',
+            profile: 'none',
             preset: {
+                enable: true,
                 size: 'nema-17',
-                voltage: 12
+                voltage: 24
             },
             mode: 'voltage',
             flags: {
@@ -455,18 +495,21 @@ layout: default
                 thermalshutdown: false,
                 stalldetect: false
             },
-
             servo: {
                 setangle: 0,
+                getangle: 0
             },
-
             speed: {
+                running: false,
+                direction: '?',
+                hiz: true,
                 setrpm: 0,
+
+                getrpm: 0,
+                getangle: 0
             },
 
             stepsize: 1,
-            getangle: 0,
-
             maxspeed: 0,
             minspeed: 0,
             accel: 0,
@@ -479,16 +522,27 @@ layout: default
             fsboost: false,
 
             reverse: false,
-            direction: '',
+            direction: '?',
             movement: '',
-            hiz: false,
+            hiz: true,
             busy: false,
-            voltage: 0,
-            adc: 0
+            voltage: '?',
+            adc: 0,
         },
         watch: {
         },
         methods: {
+            animate: function() {
+                if (this.profile == 'speed' && this.speed.getrpm > 0) {
+                    this.speed.getangle += this.speed.getrpm / 60 / 30 * 360 * (this.speed.direction == 'forward'? 1 : -1);
+                }
+            },
+            updatepreset: function() {
+                if (this.preset.enable) {
+                    // TODO
+                }
+                this.writemotor(null);
+            },
             readstatus: function(clearerrors) {
                 axios.get("{{ site.apiurl }}/api/motor/status", {params: {clearerrors: clearerrors}}).then(function (r) {
                     if (r.data.status == 'ok') {
@@ -497,8 +551,14 @@ layout: default
                     }
                 });
             },
-            readposition: function() {
-
+            readstate: function() {
+                axios.get("{{ site.apiurl }}/api/motor/state").then(function (r) {
+                    if (r.data.status == 'ok') {
+                        app.busy = r.data.busy;
+                        app.speed.getrpm = r.data.speed * 60 / 200;
+                        //app.speed.getangle = r.data.position / 200 / app.stepsize * 360;
+                    }
+                });
             },
             readmotor: function() {
                 axios.get("{{ site.apiurl }}/api/motor/get").then(function (r) {
@@ -525,6 +585,20 @@ layout: default
                         app.preset.voltage = [12, 24, 48, 50][index];
                     }
                 });
+            },
+            writeservo: function() {
+                var abspos = Math.round(this.servo.setangle / 360 * 200 * this.stepsize);
+                axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {position: abspos}});
+            },
+            writespeed: function(cmdrun, direction) {
+                if (!cmdrun) {
+                    axios.get("{{ site.apiurl }}/api/motor/command/" + (this.speed.hiz? "hiz" : "stop"), {params: {soft: true}});
+                } else {
+                    var steps_per_sec = Math.round(this.speed.setrpm / 60 * 200);
+                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {speed: steps_per_sec, direction: direction}});
+                }
+                this.speed.running = cmdrun;
+                this.speed.direction = direction;
             }
         },
         mounted: function () {
@@ -533,15 +607,19 @@ layout: default
                 setTimeout(pollstatus, 2000);
             }.bind(this);
 
-            var pollpos = function() {
-                this.readposition();
-                setTimeout(pollpos, 300);
+            var pollstate = function() {
+                this.readstate();
+                setTimeout(pollstate, 500);
             }.bind(this);
+
+            setInterval(function() {
+                this.animate();
+            }.bind(this), 33);
 
             this.readmotor();
             this.readadc();
             pollstatus();
-            pollpos();
+            pollstate();
         }
     });
 
@@ -550,6 +628,7 @@ layout: default
         var x = evt.clientX - (bounds.left + bounds.width / 2);
         var y = evt.clientY - (bounds.top + bounds.height / 2);
         app.servo.setangle = Math.round(100 * Math.atan2(-x, -y) * 180 / Math.PI) / 100;
+        app.writeservo();
     }
 
     var dragging = false;

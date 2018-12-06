@@ -2,6 +2,7 @@
 ---
 $body-background-color: #383838;
 $text: #fff;
+$text-strong: #fff;
 $background-hover: #666;
 $background-dark: #222;
 $background-header: #333;
@@ -79,6 +80,22 @@ $button-static-background-color: #4d4d4d;
     fill: $text;
 }
 
+/*.content {
+    p { margin-left: 2rem; }
+    ol {
+        margin-left: 4rem;
+        li { padding-left: 1rem; }
+    }
+}*/
+
+@include mobile {
+    .is-spaced-mobile {
+            margin-top: 25px;
+            padding-top: 10px;
+            border-top: 1px solid $hr-background-color;
+    }
+}
+
 .field-label {
     flex-basis: 80px !important;
     white-space: nowrap;
@@ -111,6 +128,28 @@ button.button {
     }
 }
 
+.button.is-label {
+    color: $button-static-color;
+    border-color: $button-static-border-color;
+    background-color: $button-static-background-color;
+    border-right-width: 0px;
+}
+
+.is-switch-label {
+    padding-top: 0.1rem !important;
+    padding-right: 0.4rem;
+}
+
+.is-checkradio-label {
+    color: $text;
+    &::before { top: 0.2rem !important; }
+    &::after { top: 0.5rem !important; }
+}
+
+.is-checkradio-enable {
+    top: 0.25rem;
+}
+
 .tooltip::before {
     color: #000 !important;
 }
@@ -118,6 +157,11 @@ button.button {
 sup {
     position: relative;
     top: -0.4em;
+}
+
+.properties .level-item {
+    .entry { color: #999; }
+    .value { font-weight: bold; }
 }
 
 .mode-select {
@@ -150,5 +194,15 @@ sup {
             font-weight: bold;
             background-color: #900;
         }
+    }
+}
+
+#speed-hizstop {
+    & + label::before {
+        background-color: #900;
+    }
+
+    &:checked + label::before {
+        background-color: #f93;
     }
 }
