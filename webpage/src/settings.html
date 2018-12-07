@@ -12,7 +12,7 @@ layout: default
         {% raw %}
         <div class="level">
             <div class="level-item">
-                <span><span class="entry">Hostname:</span> <span v-if="browser.mdns.enabled" class="value">{{ browser.mdns.hostname }}.local</span><span v-else class="value">(mDNS not enabled)</span></span>
+                <span><span class="entry">Hostname:</span> <span class="value">{{ browser.hostname }}</span></span>
             </div>
             <div class="level-item">
                 <span><span class="entry">IP:</span> <span class="value">{{ wifi.ip }}</span></span>
@@ -23,7 +23,7 @@ layout: default
     <div class="message">
         <div class="message-header"><span class="title is-5">{% mdicon wifi %}Wifi Connection</span></div>
         <div class="message-body">
-            <div style="margin-left: auto; margin-right: auto; max-width: 500px;">
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="title is-4 has-text-centered mode-select">
                     Mode:
                     <span class="select">
@@ -149,92 +149,94 @@ layout: default
     <div class="message">
         <div class="message-header"><span class="title is-5">{% mdicon application %}Browser &amp; API Interface</span></div>
         <div class="message-body">
-            <div class="field is-horizontal">
-                <div class="field-label is-normal"><label class="label">HTTP</label></div>
-                <div class="field-body">
-                    <div class="field">
-                        <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-http-enable" type="checkbox" v-model="browser.http.enabled" />
-                            <label class="is-checkradio-enable" for="browser-http-enable"><strong>Enabled</strong></label>
-                        </span>
-                        <span v-if="!browser.http.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable access through the http interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
-                    </div>
-                </div>
-            </div>
-            <div class="field is-horizontal is-spaced-mobile">
-                <div class="field-label is-normal"><label class="label">HTTPS</label></div>
-                <div class="field-body">
-                    <div class="field">
-                        <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-https-enable" type="checkbox" v-model="browser.https.enabled" />
-                            <label class="is-checkradio-enable" for="browser-https-enable"><strong>Enabled</strong></label>
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div class="field is-horizontal is-spaced-mobile">
-                <div class="field-label is-normal"><label class="label">mDNS</label></div>
-                <div class="field-body">
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Hostname" maxlength="23" v-model="browser.mdns.hostname" v-bind:disabled="!browser.mdns.enabled" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-mdns-enable" type="checkbox" v-model="browser.mdns.enabled" />
-                            <label class="is-checkradio-enable" for="browser-mdns-enable"><strong>Enabled</strong></label>
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div class="field is-horizontal is-spaced-mobile">
-                <div class="field-label is-normal"><label class="label">Authentication</label></div>
-                <div class="field-body">
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="browser.auth.username" v-bind:disabled="!browser.auth.enabled" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.auth.password" v-bind:disabled="!browser.auth.enabled" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-auth-enable" type="checkbox" v-model="browser.auth.enabled" />
-                            <label class="is-checkradio-enable" for="browser-auth-enable"><strong>Enabled</strong></label>
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div class="field is-horizontal is-spaced-mobile">
-                <div class="field-label is-normal"><label class="label">Arduino OTA</label></div>
-                <div class="field-body">
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Hostname" maxlength="23" v-model="browser.ota.hostname" v-bind:disabled="!browser.ota.enabled" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.ota.password" v-bind:disabled="!browser.ota.enabled" /></span>
-                    </div>
-                    <div class="field">
-                        <span class="control">
-                            <input class="is-checkradio has-background-color is-white" id="browser-ota-enable" type="checkbox" v-model="browser.ota.enabled" />
-                            <label class="is-checkradio-enable" for="browser-ota-enable"><strong>Enabled</strong></label>
-                        </span>
-                    </div>
-                </div>
-            </div>
-            <div style="margin-left: auto; margin-right: auto; max-width: 800px;">
-                <hr />
-            </div>
-            <div class="field has-text-centered">
-                <span class="control"><button class="button is-primary is-medium" v-on:click="writebrowser">Apply</button></span>
-            </div>
-            <div class="modal" v-bind:class="{'is-active': browser.changemodal}">
-                <div class="modal-background" v-on:click="browser.changemodal = false"></div>
-                    <div class="modal-content">
-                        <div class="box has-text-centered">
-                            <div class="title is-4">{% mdicon sync-alert %}Browser Settings Changed</div>
-                            <div>You may need to refresh the page to see changes.</div>
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal"><label class="label">Hostname</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><input class="input" type="text" placeholder="Unknown" maxlength="23" v-model="browser.hostname" /></span>
                         </div>
                     </div>
-                <button class="modal-close is-large" v-on:click="browser.changemodal = false"></button>
+                </div>
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal"><label class="label">HTTP</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="browser-http-enable" type="checkbox" v-model="browser.http.enabled" />
+                                <label class="is-checkradio-enable" for="browser-http-enable"><strong>Enabled</strong></label>
+                            </span>
+                            <span v-if="!browser.http.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable access through the http interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">HTTPS</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="browser-https-enable" type="checkbox" v-model="browser.https.enabled" />
+                                <label class="is-checkradio-enable" for="browser-https-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">mDNS</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="browser-mdns-enable" type="checkbox" v-model="browser.mdns.enabled" />
+                                <label class="is-checkradio-enable" for="browser-mdns-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Authentication</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="browser.auth.username" v-bind:disabled="!browser.auth.enabled" /></span>
+                        </div>
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.auth.password" v-bind:disabled="!browser.auth.enabled" /></span>
+                        </div>
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="browser-auth-enable" type="checkbox" v-model="browser.auth.enabled" />
+                                <label class="is-checkradio-enable" for="browser-auth-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Arduino OTA</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="No Password" maxlength="63" v-model="browser.ota.password" v-bind:disabled="!browser.ota.enabled" /></span>
+                        </div>
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="browser-ota-enable" type="checkbox" v-model="browser.ota.enabled" />
+                                <label class="is-checkradio-enable" for="browser-ota-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="field has-text-centered">
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="writebrowser">Apply</button></span>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': browser.changemodal}">
+                    <div class="modal-background" v-on:click="browser.changemodal = false"></div>
+                        <div class="modal-content">
+                            <div class="box has-text-centered">
+                                <div class="title is-4">{% mdicon sync-alert %}Browser Settings Changed</div>
+                                <div>You may need to refresh the page to see changes.</div>
+                            </div>
+                        </div>
+                    <button class="modal-close is-large" v-on:click="browser.changemodal = false"></button>
+                </div>
             </div>
         </div>
     </div>
@@ -282,6 +284,7 @@ layout: default
             },
 
             browser: {
+                hostname: '',
                 changemodal: false,
                 http: {
                     enabled: true,
@@ -291,7 +294,6 @@ layout: default
                 },
                 mdns: {
                     enabled: true,
-                    hostname: '',
                 },
                 auth: {
                     enabled: false,
@@ -300,7 +302,6 @@ layout: default
                 },
                 ota: {
                     enabled: true,
-                    hostname: '',
                     password: ''
                 },
 
@@ -363,15 +364,14 @@ layout: default
                 console.log("Writing browser settings");
                 axios.get("{{ site.apiurl }}/api/browser/set", {
                     params: {
+                        hostname: this.browser.hostname,
                         http_enabled: this.browser.http.enabled,
                         https_enabled: this.browser.https.enabled,
                         mdns_enabled: this.browser.mdns.enabled,
-                        mdns_hostname: this.browser.mdns.hostname,
                         auth_enabled: this.browser.auth.enabled,
                         auth_username: this.browser.auth.username,
                         auth_password: this.browser.auth.password,
                         ota_enabled: this.browser.ota.enabled,
-                        ota_hostname: this.browser.ota.hostname,
                         ota_password: this.browser.ota.password
                     }
                 });
@@ -391,15 +391,14 @@ layout: default
             axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {
                 if (r.data.status == 'ok') {
                     var d = r.data;
+                    app.browser.hostname = d['hostname'];
                     app.browser.http.enabled = d['http_enabled'];
                     app.browser.https.enabled = d['https_enabled'];
                     app.browser.mdns.enabled = d['mdns_enabled'];
-                    app.browser.mdns.hostname = d['mdns_hostname'];
                     app.browser.auth.enabled = d['auth_enabled'];
                     app.browser.auth.username = d['auth_username'];
                     app.browser.auth.password = d['auth_password'];
                     app.browser.ota.enabled = d['ota_enabled'];
-                    app.browser.ota.hostname = d['ota_hostname'];
                     app.browser.ota.password = d['ota_password'];
                 }
             });

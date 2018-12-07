@@ -15,6 +15,13 @@
         {% for js in page.bulmajs %}
             <script type="module" src="/js/bulmajs/plugins/{{ js }}.js" es6 inline minify></script>
         {% endfor %}
+
+        <!-- Prism code highlighter -->
+        {% if page.prism == true %}
+            <link rel="stylesheet" href="/css/prism{% if jekyll.environment == 'production' %}.min{% endif %}.css" inline />
+            <script src="/js/prism{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+            <script src="/js/clipboard{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+        {% endif %}
     </head>
     <body>
         <nav class="navbar is-black" role="navigation" aria-label="main navigation">

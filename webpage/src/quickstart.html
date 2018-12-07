@@ -7,10 +7,11 @@ css:
     - bulma-switch
 bulmajs:
     - notification
+prism: true
 layout: default
 ---
 {% include helptext.html %}
-<h1 class="title is-1">{% mdicon logo %}Wifi Stepper Quickstart Guide</h1>
+<h1 class="title is-1">{% mdicon logo %}Quickstart Guide</h1>
 <div id="profiles">
     <div class="box properties">
         <div class="level">
@@ -27,7 +28,10 @@ layout: default
                 <span><span class="entry">Bridge State:</span> <span v-if="hiz" class="value" style="color: #f93;">High Z</span><span v-else class="value">Active</span></span>
             </div>
             <div class="level-item">
-                <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ adc }} V</span>{% endraw %} <button class="button is-small is-light" v-on:click="readadc">{% mdicon refresh, .baseline, .inline %}</button></span>
+                <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ adc }} V</span>{% endraw %}</span>
+            </div>
+            <div class="level-item">
+                <span><span class="entry">Switch:</span> {% raw %}<span class="value" v-bind:style="this.switch? {'color': '#09f'} : {}">{{ this.switch? 'Closed' : 'Open' }}</span>{% endraw %}</span>
             </div>
         </div>
     </div>
@@ -47,7 +51,6 @@ layout: default
                     <option value="none">Select...</option>
                     <option value="servo">Servo Control</option>
                     <option value="speed">Speed Control</option>
-                    <option value="waypoints">Waypoints</option>
                 </select>
             </span>
         </span>
@@ -77,7 +80,7 @@ layout: default
         <span class="nobreak">
             under
             <span class="select">
-                <select v-model="mode" v-on:change="updatepreset">
+                <select v-model="mode" v-on:change="updatemode">
                     <option value="current">Current</option>
                     <option value="voltage">Voltage</option>
                 </select>
@@ -153,9 +156,15 @@ layout: default
             </div>
             <div class="column">
                 <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <button class="button" style="color: #fff; background-color: #ff5c33;">{% mdicon restore, .baseline %}Reset Position</button>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_resetpos }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
                     <span class="control"><span class="button is-static">Position:</span></span>
-                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="servo.setangle" min="-180" max="180" step="1" /></span>
-                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="servo.getangle" min="-180" max="180" readonly /></span>
+                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="servo.setangle" step="1" /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="servo.getangle" readonly /></span>
                     <span class="control"><span class="button is-static">degrees</span></span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
@@ -163,7 +172,7 @@ layout: default
                     <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
                         <span class="select">
-                            <select v-model="stepsize">
+                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])">
                                 <option value="1">1/1</option>
                                 <option value="2">1/2</option>
                                 <option value="4">1/4</option>
@@ -185,7 +194,7 @@ layout: default
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
-                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" />
+                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" v-on:click="writemotor(['reverse'])" />
                             <label class="is-checkradio-label" for="reverse1-enable">Reverse Wires</label>
                         </span>
                     </span>
@@ -241,7 +250,7 @@ layout: default
                     <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
                         <span class="select">
-                            <select v-model="stepsize">
+                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])">
                                 <option value="1">1/1</option>
                                 <option value="2">1/2</option>
                                 <option value="4">1/4</option>
@@ -273,17 +282,14 @@ layout: default
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
-                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" />
-                            <label class="is-checkradio-label" for="reverse1-enable">Reverse Wires</label>
+                            <input class="is-checkradio is-white" id="reverse2-enable" type="checkbox" v-model="reverse" v-on:click="writemotor(['reverse'])" />
+                            <label class="is-checkradio-label" for="reverse2-enable">Reverse Wires</label>
                         </span>
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
             </div>
         </div>
-    </div>
-    <div v-bind:style="profile == 'waypoints'? {} : {'display': 'none'}">
-        [waypoints]
     </div>
     <hr />
     <div class="level warnings">
@@ -299,7 +305,7 @@ layout: default
             </div>
         </div>
         <div class="level-right">
-            <div class="level-item"><button class="button is-dark" v-on:click="readstatus(true)">Clear Flags</button></div>
+            <div class="level-item"><button class="button is-dark" id="error-clear" v-on:click="readstatus(true)">Clear Flags</button></div>
         </div>
     </div>
     <div class="message">
@@ -441,9 +447,9 @@ layout: default
                         <div class="field-body">
                             <div class="field has-addons">
                                 <span class="control">
-                                    <span class="button">
-                                        <input class="is-checkradio has-background-color is-white" id="fsboost-enable" type="checkbox" v-model="fsboost" />
-                                        <label for="fsboost-enable"><strong>Boost Mode</strong></label>
+                                    <span class="button is-label">
+                                        <input class="is-checkradio is-white" id="fsboost-enable" type="checkbox" v-model="fsboost" />
+                                        <label class="is-checkradio-label" for="fsboost-enable"><strong>Boost Mode</strong></label>
                                     </span>
                                 </span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_fsboost }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
@@ -455,6 +461,10 @@ layout: default
             <hr />
             <div class="field is-grouped is-grouped-right">
                 <span class="control">
+                    <input class="is-checkradio is-white" id="eeprom-save" type="checkbox" v-model="save" />
+                    <label for="eeprom-save" style="top: 0.7rem;"><strong>EEPROM Save</strong></label>
+                </span>
+                <span class="control">
                     <button class="button is-medium is-primary" v-on:click="writemotor(null)">Commit</button>
                 </span>
                 <span class="control">
@@ -464,9 +474,128 @@ layout: default
         </div>
     </div>
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon console %}Quick Code</span></div>
-        <div class="message-body">
-            [Body]
+        <div class="message-header">
+            <div class="columns" style="width: 100%;">
+                <div class="column">
+                    <span class="title is-5">{% mdicon console %}Quick Code</span>
+                </div>
+                <div class="column is-one-third has-text-right">
+                    <ul class="header-tabs">
+                        <li><a v-bind:class="{'is-active': code.language == 'bash'}" v-on:click="code.language = 'bash'">Bash</a></li>
+                        <li><a v-bind:class="{'is-active': code.language == 'python'}" v-on:click="code.language = 'python'">Python</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="message-body" style="position: relative;">
+<pre style="display: none;" id="code-bash">{% raw %}
+# Using curl for network and jq for json parsing
+HOST="{{ browser.hostname }}.local"  # or "{{ browser.ip }}"
+PROTOCOL="http"  # or https
+
+# Write motor configuration
+MODE="{{ mode }}"
+STEPSIZE="{{ stepsize }}"
+MAXSPEED="{{ maxspeed }}"
+MINSPEED="{{ minspeed }}"
+ACCEL="{{ accel }}"
+DECEL="{{ decel }}"
+KTHOLD="{{ kthold }}"
+KTRUN="{{ ktrun }}"
+KTACCEL="{{ ktaccel }}"
+KTDECEL="{{ ktdecel }}"
+FSSPEED="{{ fsspeed }}"
+FSBOOST="{{ fsboost }}"
+REVERSE="{{ reverse }}"
+SAVE_EEPROM="{{ save }}"
+curl "${PROTOCOL}://${HOST}/api/motor/set?\
+mode=${MODE}&stepsize=${STEPSIZE}&\
+maxspeed=${MAXSPEED}&minspeed=${MINSPEED}&accel=${ACCEL}&decel=${DECEL}&\
+kthold=${KTHOLD}&ktrun=${KTRUN}&ktaccel=${KTACCEL}&ktdecel=${KTDECEL}&\
+fsspeed=${FSSPEED}&fsboost=${FSBOOST}&\
+reverse=${REVERSE}&save=${SAVE_EEPROM}"
+
+# Read motor configuration
+curl "${PROTOCOL}://${HOST}/api/motor/get" | jq
+# Returns object with keys: mode, stepsize, maxspeed, minspeed, accel, decel,
+#   kthold, ktrun, ktaccel, ktdecel, fsspeed, fsboost, reverse
+
+# Zero position
+
+
+# Send servo command
+
+
+# Send speed command
+
+
+# Stop
+STOP_BRIDGE="{{ speed.hiz? 'hiz' : 'stop' }}"
+STOP_SOFT="true"
+curl "${PROTOCOL}://${HOST}/api/motor/command/${STOP_BRIDGE}?soft=${STOP_SOFT}"
+
+# Read status
+curl "${PROTOCOL}://${HOST}/api/motor/status" | jq
+# Returns object with keys: direction, movement, hiz, busy, switch,
+#   flags:{ switch, commanderror, overcurrent, undervoltage, thermalwarning,
+#   thermalshutdown, stalldetect }
+
+# Read state
+curl "${PROTOCOL}://${HOST}/api/motor/state" | jq
+# Returns object with keys: [TODO LIST KEYS!]
+
+{% endraw %}</pre>
+<pre style="display: none;" id="code-python">{% raw %}
+from goodrobotics import WSX100 as WifiStepper
+
+host = "{{ browser.hostname }}.local"  # or "{{ browser.ip }}"
+protocol = WifiStepper.HTTP  # or HTTPS, CRYPTO
+username = None # Required when auth enabled
+password = None
+MOTOR = WifiStepper(host, protocol)
+if not MOTOR.connect(username, password):
+    raise Exception('Failed to connect')
+
+# Write configuration
+MOTOR.writeConfig(
+    mode='{{ mode }}', stepsize={{ stepsize }},
+    maxspeed={{ maxspeed }}, minspeed={{ minspeed }}, accel={{ accel }}, decel={{ decel }},
+    kthold={{ kthold }}, ktrun={{ ktrun }}, ktaccel={{ ktaccel }}, ktdecel={{ ktdecel }},
+    fsseed={{ fsspeed }}, fsboost={{ fsboost | pybool }},
+    reverse={{ reverse | pybool }}, save={{ save | pybool }}
+)
+
+# Read configuration
+config = MOTOR.readConfig()
+# config is a dict() with keys: mode, stepsize, maxspeed, minspeed, accel, decel,
+#   kthold, ktrun, ktaccel, ktdecel, fsspeed, fsboost, reverse
+
+# Zero servo position
+
+
+# Send servo command
+
+
+# Send speed command
+
+
+# Stop motor
+MOTOR.stop(bridge={{ !speed.hiz | pybool }}, soft=True)
+
+# Read status
+status = MOTOR.getStatus()
+# status is a dict() with keys: direction, movement, hiz, busy, switch,
+#   flags=dict( switch, commanderror, overcurrent, undervoltage, thermalwarning,
+#   thermalshutdown, stalldetect )
+
+# Read state
+state = MOTOR.getState()
+# state is a dict() with keys: [TODO LIST KEYS!]
+
+{% endraw %}</pre>
+            <button class="button is-primary" id="code-copy" style="position: absolute; top: 35px; right: 50px;">{% mdicon content-copy, .baseline %}Copy</button>
+            <pre v-bind:style="code.language == 'bash'? {} : {'display': 'none'}" class="code"><code class="language-bash" id="code-bash-render"></code></pre>
+            <pre v-bind:style="code.language == 'python'? {} : {'display': 'none'}" class="code"><code class="language-python" id="code-python-render"></code></pre>
         </div>
     </div>
 </div>
@@ -475,6 +604,13 @@ layout: default
         for (i in keys) {
             dest[keys[i]] = src[keys[i]];
         }
+    }
+    function unwrap(newv, oldv) {
+        var a = Math.sign(oldv - newv) * 360;
+        while (Math.abs(oldv - newv) > 180) {
+            newv += a;
+        }
+        return newv;
     }
     var app = new Vue({
         el: '#profiles',
@@ -504,7 +640,6 @@ layout: default
                 direction: '?',
                 hiz: true,
                 setrpm: 0,
-
                 getrpm: 0,
                 getangle: 0
             },
@@ -520,14 +655,24 @@ layout: default
             ktdecel: 0.0,
             fsspeed: 0,
             fsboost: false,
+            save: true,
 
             reverse: false,
             direction: '?',
             movement: '',
             hiz: true,
             busy: false,
+            switch: false,
             voltage: '?',
             adc: 0,
+
+            code:  {
+                language: 'bash'
+            },
+            browser: {
+                hostname: '<hostname>',
+                ip: '<ip>'
+            }
         },
         watch: {
         },
@@ -542,6 +687,24 @@ layout: default
                     // TODO
                 }
                 this.writemotor(null);
+            },
+            updatemode: function() {
+                this.writemotor(['mode']);
+                this.updatepreset();
+            },
+            updatecode: function() {
+                if (this.code.language == 'bash') {
+                    var src = document.getElementById('code-bash');
+                    var dst = document.getElementById('code-bash-render');
+                    dst.textContent = src.textContent;
+                    Prism.highlightElement(dst);
+
+                } else if (this.code.language == 'python') {
+                    var src = document.getElementById('code-python');
+                    var dst = document.getElementById('code-python-render');
+                    dst.textContent = src.textContent;
+                    Prism.highlightElement(dst);
+                }
             },
             readstatus: function(clearerrors) {
                 axios.get("{{ site.apiurl }}/api/motor/status", {params: {clearerrors: clearerrors}}).then(function (r) {
@@ -570,10 +733,8 @@ layout: default
             writemotor: function(keys) {
                 keys = keys || ['maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost'];
                 var params = {};
-                merge(this, params, keys);
-                axios.get("{{ site.apiurl }}/api/motor/set", {params: params}).then(function (r) {
-                    //
-                });
+                merge(this, params, keys + ['save']);
+                axios.get("{{ site.apiurl }}/api/motor/set", {params: params});
             },
             readadc: function() {
                 axios.get("{{ site.apiurl }}/api/motor/adc").then(function (r) {
@@ -601,6 +762,13 @@ layout: default
                 this.speed.direction = direction;
             }
         },
+        filters: {
+            pybool: function(v) {
+                if (v.toString() == 'true') return 'True';
+                if (v.toString() == 'false') return 'False';
+                return v;
+            }
+        },
         mounted: function () {
             var pollstatus = function() {
                 this.readstatus();
@@ -620,6 +788,17 @@ layout: default
             this.readadc();
             pollstatus();
             pollstate();
+
+            axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    merge(r.data, app.browser, ['hostname', 'ip']);
+                }
+            });
+
+            this.updatecode();
+        },
+        updated: function() {
+            this.updatecode();
         }
     });
 
@@ -627,7 +806,7 @@ layout: default
         var bounds = svg.getBoundingClientRect();
         var x = evt.clientX - (bounds.left + bounds.width / 2);
         var y = evt.clientY - (bounds.top + bounds.height / 2);
-        app.servo.setangle = Math.round(100 * Math.atan2(-x, -y) * 180 / Math.PI) / 100;
+        app.servo.setangle = Math.round(100 * unwrap(Math.atan2(-x, -y) * 180 / Math.PI, app.servo.setangle)) / 100;
         app.writeservo();
     }
 
@@ -650,4 +829,12 @@ layout: default
         dragging = false;
     });
     */
+
+    new ClipboardJS('#code-copy', {
+        text: function(trigger) {
+            if (app.code.language == 'bash')    return document.getElementById('code-bash').textContent;
+            if (app.code.language == 'python')  return document.getElementById('code-python').textContent;
+            return "";
+        }
+    });
 </script>

@@ -96,6 +96,34 @@ $button-static-background-color: #4d4d4d;
     }
 }
 
+.header-tabs {
+    float: right;
+    li {
+        float: left;
+
+        a {
+            display: block;
+            margin-top: -12px;
+            padding: 12px;
+            text-decoration: none !important;
+
+            &:hover {
+                background-color: $background-hover;
+                border-bottom: 2px solid $text;
+            }
+
+            &.is-active {
+                background-color: $background-active;
+                border-bottom: 2px solid $text;
+            }
+        }
+
+        @include tablet {
+            a { margin-bottom: -12px; }
+        }
+    }
+}
+
 .field-label {
     flex-basis: 80px !important;
     white-space: nowrap;
@@ -113,6 +141,13 @@ $button-static-background-color: #4d4d4d;
 
 input.input {
     font-weight: bold;
+}
+
+pre.code {
+    overflow: scroll;
+    max-height: 450px;
+    padding: 10px;
+    background-color: $background-dark;
 }
 
 .select select {
@@ -205,4 +240,8 @@ sup {
     &:checked + label::before {
         background-color: #f93;
     }
+}
+
+#error-clear {
+    border: 1px solid $button-static-border-color;
 }
