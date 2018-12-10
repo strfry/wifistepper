@@ -1,0 +1,60 @@
+---
+title: Troubleshoot
+menu: troubleshoot
+layout: default
+---
+<div class="message">
+    <div class="message-header"><h1 class="title is-3">{% mdicon led-off %}Issues &amp; Troubleshoot</h1></div>
+    <div class="message-body">
+        <div id="troubleshoot">
+            <table class="table is-fullwidth is-striped">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Issue</th>
+                        <th>Possible Cause</th>
+                        <th>Possible Solution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>#1</strong></td>
+                        <td>Motor stalls or doesn't move when commanded.</td>
+                        <td>The voltage/current limit may be too low.</td>
+                        <td>Increase the <strong>KT Values</strong> (KT Hold, KT Run, KT Accel, KT Decel) to appropriate levels. The values range from <strong>0</strong> to <strong>1</strong> and are read as a perentage (1 = 100%) of the input voltage or current rating depending on the mode selected.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#2</strong></td>
+                        <td>Motor get's too warm/hot after short amount of time.</td>
+                        <td>The voltage/current limit may be to high.</td>
+                        <td>Decrease the <strong>KT Values</strong> (KT Hold, KT Run, KT Accel, KT Decel) to appropriate levels. KT values too high may cause damage to the motor. See issue <strong>#1</strong> for details about KT Values.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#3</strong></td>
+                        <td><strong>Command Error</strong> flag is thrown repeatedly.</td>
+                        <td>Some commands can only be given during certian times/modes of operation.</td>
+                        <td>Some commands (such as configuration write) can only be given when the motor is not in motion. Other commands (such as ... TODO) can only be given when the motor is not "Busy". For a complete list of command conflicts, see documentation. TODO.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#4</strong></td>
+                        <td><strong>Under Voltage</strong> flag is thrown whenever motor is commanded.</td>
+                        <td>Your power supply may be entering CC mode and dropping the voltage.</td>
+                        <td>The power supply may be hitting the current limits. If the power supply is already at peak current, it may not be powerful enough for your current application. However, first try lowering the KT Values to command less voltage/current.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#5</strong></td>
+                        <td><strong>Over Current</strong> flag is thrown whenever motor is commanded</td>
+                        <td>The voltage mode jumper may be soldered.</td>
+                        <td>The jumper on the bottom side if the board may be soldered over, bypassing the current sense resistor. While it is more efficient running in voltage mode, this jumper <strong>must</strong> be "open" for current mode. Remove any residual solder bridging the jumper.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#6</strong></td>
+                        <td><strong>Over Current</strong> flag is thrown whenever motor is commanded</td>
+                        <td>You may be commanding too much current</td>
+                        <td>Lower the <strong>KT Values</strong> to appropriate levels. See issue <strong>#2</strong>.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

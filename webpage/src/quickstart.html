@@ -11,7 +11,7 @@ prism: true
 layout: default
 ---
 {% include helptext.html %}
-<h1 class="title is-1">{% mdicon logo %}Quickstart Guide</h1>
+<h1 class="title is-1">{% mdicon logo %}Quick Start Guide</h1>
 <div id="profiles">
     <div class="box properties">
         <div class="level">
@@ -19,7 +19,7 @@ layout: default
                 <span><span class="entry">Voltage:</span> {% raw %}<span class="value" style="color: #c00;">~{{ voltage }} V</span>{% endraw %} <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
             </div>
             <div class="level-item">
-                <span><span class="entry">Motor:</span> {% raw %}<span class="value">{{ movement.charAt(0).toUpperCase() + movement.slice(1) }} {{ direction.charAt(0).toUpperCase() + direction.slice(1) }}</span>{% endraw %}</span>
+                <span><span class="entry">Motor:</span> {% raw %}<span class="value">{{ movement | capitalize }} {{ getdirection | capitalize }}</span>{% endraw %}</span>
             </div>
             <div class="level-item">
                 <span><span class="entry">Status:</span> <span v-if="busy" class="value" style="color: #69f;">Busy</span><span v-else class="value" style="color: #0c6;">Idle</span></span>
@@ -51,13 +51,14 @@ layout: default
                     <option value="none">Select...</option>
                     <option value="servo">Servo Control</option>
                     <option value="speed">Speed Control</option>
+                    <option value="extstepclock">External Step Clock</option>
                 </select>
             </span>
         </span>
         <span class="nobreak">
             on a
             <span class="select">
-                <select v-model="preset.size" v-on:change="updatepreset">
+                <select v-model="preset.size" v-on:change="updatepreset" v-bind:disabled="!hiz">
                     <option value="nema-11">NEMA 11</option>
                     <option value="nema-17">NEMA 17</option>
                     <option value="nema-23">NEMA 23</option>
@@ -68,7 +69,7 @@ layout: default
         <span class="nobreak">
             with
             <span class="select">
-                <select v-model="preset.voltage" v-on:change="updatepreset">
+                <select v-model="preset.voltage" v-on:change="updatepreset" v-bind:disabled="!hiz">
                     <option value="12">~12 V</option>
                     <option value="24">~24 V</option>
                     <option value="48">~48 V</option>
@@ -80,7 +81,7 @@ layout: default
         <span class="nobreak">
             under
             <span class="select">
-                <select v-model="mode" v-on:change="updatemode">
+                <select v-model="mode" v-on:change="updatemode" v-bind:disabled="!hiz">
                     <option value="current">Current</option>
                     <option value="voltage">Voltage</option>
                 </select>
@@ -125,6 +126,11 @@ layout: default
                             <line transform="rotate(-30)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
                             <line transform="rotate(-15)" x1="0" y1="-95" x2="0" y2="-100" style="stroke-width: 1;" />
                         </g>
+                        <g>
+                            <text x="-103" y="0" text-anchor="end" alignment-baseline="middle" style="fill: #ccc; font-size: 0.6rem; user-select: none; pointer-events: none;">90&deg;</text>
+                            <text x="0" y="103" text-anchor="middle" alignment-baseline="hanging" style="fill: #ccc; font-size: 0.6rem; user-select: none; pointer-events: none;">180&deg;</text>
+                            <text x="103" y="0" text-anchor="start" alignment-baseline="middle" style="fill: #ccc; font-size: 0.6rem; user-select: none; pointer-events: none;">-90&deg;</text>
+                        </g>
                         <g v-bind:style="preset.size == 'nema-11' || preset.size == 'nema-17'? {} : {'display': 'none'}">
                             <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
                             <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
@@ -142,14 +148,17 @@ layout: default
                             <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                             <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                         </g>
-                        <g v-bind:transform="'rotate(' + (-servo.getangle) + ')'">
+                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
                             <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
                             <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
                         </g>
-                        <g v-bind:transform="'rotate(' + (-servo.setangle) + ')'">
+                        <g v-bind:transform="'rotate(' + (-setangle) + ')'">
                             <line x1="0" y1="-14" x2="0" y2="-90" style="stroke: #fff; stroke-width: 5;" />
                             <line x1="0" y1="-14" x2="0" y2="-90" style="stroke: #000; stroke-dasharray: 10, 5; stroke-width: 5;" />
-                            <rect x="-7" y="-97" height="14" width="14" style="stroke: #000000; stroke-width: 1; fill: #6666ff; cursor: move;" />
+                            <rect x="-7" y="-97" height="14" width="14" style="stroke: #000; stroke-width: 1; fill: #66f; cursor: move;" />
+                        </g>
+                        <g v-if="setangle == 0">
+                            <text x="20" y="-87" style="fill: #999; font-weight: bold; font-size: 0.8rem;">&#8672; Grab handle</text>
                         </g>
                     </svg>
                 </figure>
@@ -157,14 +166,14 @@ layout: default
             <div class="column">
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
-                        <button class="button" style="color: #fff; background-color: #ff5c33;">{% mdicon restore, .baseline %}Reset Position</button>
+                        <button class="button" style="color: #fff; background-color: #ff5c33;" v-on:click="writeresetpos">{% mdicon restore, .baseline %}Reset Position</button>
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_resetpos }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
                     <span class="control"><span class="button is-static">Position:</span></span>
-                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="servo.setangle" step="1" /></span>
-                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="servo.getangle" readonly /></span>
+                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="setangle" step="1" /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="getangle" readonly /></span>
                     <span class="control"><span class="button is-static">degrees</span></span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetangle }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
@@ -172,7 +181,7 @@ layout: default
                     <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
                         <span class="select">
-                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])">
+                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])" v-bind:disabled="!hiz">
                                 <option value="1">1/1</option>
                                 <option value="2">1/2</option>
                                 <option value="4">1/4</option>
@@ -194,12 +203,13 @@ layout: default
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
-                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" v-on:click="writemotor(['reverse'])" />
+                            <input class="is-checkradio is-white" id="reverse1-enable" type="checkbox" v-model="reverse" v-bind:disabled="!hiz" />
                             <label class="is-checkradio-label" for="reverse1-enable">Reverse Wires</label>
                         </span>
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
+                <button class="button is-large" style="background-color: #900;" v-on:click="writestop(true, false)">{% mdicon stop, .baseline, .inline %}</button>
             </div>
         </div>
     </div>
@@ -225,24 +235,28 @@ layout: default
                             <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                             <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
                         </g>
-                        <g v-bind:transform="'rotate(' + (-speed.getangle) + ')'">
+                        <g>
+                            <text x="0" y="63" text-anchor="middle" style="fill: #000; font-size: 0.8rem; user-select: none; pointer-events: none;">&#8592;&nbsp;&nbsp;&#8594;</text>
+                            <text x="0" y="63" text-anchor="middle" style="fill: #000; font-size: 0.8rem; user-select: none; pointer-events: none;">-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+</text>
+                        </g>
+                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
                             <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
                             <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
                         </g>
                     </svg>
                 </figure>
                 <div>
-                    <button class="button is-large" style="background-color: #093;" v-on:click="writespeed(true, 'forward')">{% mdicon rotate-left, .baseline, .inline %}</button>
-                    <button class="button is-large" style="background-color: #900;" v-on:click="writespeed(false, '')">{% mdicon stop, .baseline, .inline %}</button>
-                    <button class="button is-large" style="background-color: #093;" v-on:click="writespeed(true, 'reverse')">{% mdicon rotate-right, .baseline %}</button>
+                    <button class="button is-large" style="color: #fff; background-color: #093;" v-on:click="writespeed('forward')">{% mdicon rotate-left, .baseline, .inline %}F</button>
+                    <button class="button is-large" style="background-color: #900;" v-on:click="writestop(speed.hiz, true)">{% mdicon stop, .baseline, .inline %}</button>
+                    <button class="button is-large" style="color: #fff; background-color: #093;" v-on:click="writespeed('reverse')">{% mdicon rotate-right, .baseline %}R</button>
                 </div>
             </div>
             <div class="column">
-                {% raw %}<div v-if="(speed.setrpm / 60 * 200) > maxspeed" class="help is-danger">Warning: Speed is greater than <span style="font-weight: bold;">Max Speed</span> setting (<span style="font-weight: bold;">{{ maxspeed }}</span> steps/sec).</div>{% endraw %}
+                {% raw %}<div v-if="setstepss > maxspeed" class="help is-danger">Warning: Speed is greater than <span style="font-weight: bold;">Max Speed</span> setting (<span style="font-weight: bold;">{{ maxspeed }}</span> steps/sec).</div>{% endraw %}
                 <div class="field has-addons">
                     <span class="control"><span class="button is-static">Speed:</span></span>
-                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="speed.setrpm" min="0" max="2000" step="10" v-on:change="writespeed(speed.running, speed.direction)" /></span>
-                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="Math.round(speed.getrpm)" readonly /></span>
+                    <span class="control"><input class="input" style="width: 100px;" type="number" v-model="setrpm" min="0" max="3000" step="10" /></span>
+                    <span class="control"><input class="input" style="color: #999; width: 100px;" type="number" v-bind:value="Math.round(getrpm)" readonly /></span>
                     <span class="control"><span class="button is-static">RPM</span></span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_setgetrpm }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
@@ -250,7 +264,7 @@ layout: default
                     <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
                         <span class="select">
-                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])">
+                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])" v-bind:disabled="!hiz">
                                 <option value="1">1/1</option>
                                 <option value="2">1/2</option>
                                 <option value="4">1/4</option>
@@ -280,14 +294,110 @@ layout: default
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_hizstop }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
+                    <span class="control">
+                        <span class="button is-label">
+                            <input class="is-checkradio is-white" id="stopswitch-enable" type="checkbox" v-model="speed.stopswitch" v-bind:disabled="!hiz" />
+                            <label class="is-checkradio-label" for="stopswitch-enable">Stop on switch</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
-                            <input class="is-checkradio is-white" id="reverse2-enable" type="checkbox" v-model="reverse" v-on:click="writemotor(['reverse'])" />
+                            <input class="is-checkradio is-white" id="reverse2-enable" type="checkbox" v-model="reverse" v-bind:disabled="!hiz" />
                             <label class="is-checkradio-label" for="reverse2-enable">Reverse Wires</label>
                         </span>
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
+            </div>
+        </div>
+    </div>
+    <div v-bind:style="profile == 'extstepclock'? {} : {'display': 'none'}">
+        <div class="columns">
+            <div class="column has-text-centered is-half">
+                <figure class="image">
+                    <svg id="speedsvg" width="300" height="300" viewbox="-80 -80 160 160">
+                        <g v-bind:style="preset.size == 'nema-11' || preset.size == 'nema-17'? {} : {'display': 'none'}">
+                            <path d="m-50,-70 h100 l20,20 v100 l-20,20 h-100 l-20,-20 v-100 l20,-20 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="40" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="25" cx="0" cy="0" style="fill: #b3b3b3; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="-50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="-50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                            <circle r="4" cx="50" cy="50" style="fill: #666; stroke: #808080; stroke-width: 1.5;" />
+                        </g>
+                        <g v-bind:style="preset.size == 'nema-23' || preset.size == 'nema-34'? {} : {'display': 'none'}">
+                            <path d="m-70,-70 h140 v140 h-140 v-140 z" style="stroke: #666; stroke-width: 1.5; fill: #b3b3b3;" />
+                            <circle r="50" cx="0" cy="0" style="fill: #ccc; stroke: #666; stroke-width: 1.5;" />
+                            <circle r="6" cx="-60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="-60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="-60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                            <circle r="6" cx="60" cy="60" style="fill: #666; stroke: #808080; stroke-width: 2.5;" />
+                        </g>
+                        <g>
+                            <text x="0" y="63" text-anchor="middle" style="fill: #000; font-size: 0.8rem; user-select: none; pointer-events: none;">&#8592;&nbsp;&nbsp;&#8594;</text>
+                            <text x="0" y="63" text-anchor="middle" style="fill: #000; font-size: 0.8rem; user-select: none; pointer-events: none;">-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+</text>
+                        </g>
+                        <g v-bind:transform="'rotate(' + (-getangle) + ')'">
+                            <path d="m-9,-12 a15,15,0,1,0,18,0 h-18 z" style="stroke: #000; stroke-width: 2; fill: #800000;" />
+                            <path d="m-7,-15 v-35 l-5,0 l12,-25 12,25 -5,0 v35 h-14 z" style="stroke: #000; stroke-width: 1; fill: #008000;" />
+                        </g>
+                    </svg>
+                </figure>
+            </div>
+            <div class="column">
+                <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <button class="button" style="color: #fff; background-color: #ff5c33;" v-on:click="writeresetpos">{% mdicon restore, .baseline %}Reset Position</button>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_resetpos }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control">
+                        <span class="button is-label">
+                            <label class="is-switch-label" for="extstepclock-direction">Forward</label>
+                            <input class="switch" id="extstepclock-direction" type="checkbox" v-model="extstepclock.stepreverse" v-bind:disabled="!hiz" />
+                            <label class="is-switch-label" for="extstepclock-direction">Reverse</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepclockdir }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control"><span class="button is-static">Microstep:</span></span>
+                    <span class="control">
+                        <span class="select">
+                            <select v-model="stepsize" v-on:change="writemotor(['stepsize'])" v-bind:disabled="!hiz">
+                                <option value="1">1/1</option>
+                                <option value="2">1/2</option>
+                                <option value="4">1/4</option>
+                                <option value="8">1/8</option>
+                                <option value="16">1/16</option>
+                                <option value="32" v-if="mode == 'voltage'">1/32</option>
+                                <option value="64" v-if="mode == 'voltage'">1/64</option>
+                                <option value="128" v-if="mode == 'voltage'">1/128</option>
+                            </select>
+                        </span>
+                    </span>
+                    <span class="control">
+                        <span class="button is-static">Resolution</span>
+                    </span>
+                    <span class="control">
+                        <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepsize }}">{% mdicon help-circle, .baseline, .inline %}</button>
+                    </span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <span class="button" style="background-color: #66f;">
+                            <input class="is-checkradio is-white" id="reverse2-enable" type="checkbox" v-model="reverse" v-bind:disabled="!hiz" />
+                            <label class="is-checkradio-label" for="reverse2-enable">Reverse Wires</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <button class="button is-large" style="background-color: #093;" v-on:click="writestepclock">{% mdicon play, .baseline, .inline %}</button>
+                <button class="button is-large" style="background-color: #900;" v-on:click="writestop(true, false)">{% mdicon stop, .baseline, .inline %}</button>
             </div>
         </div>
     </div>
@@ -322,6 +432,38 @@ layout: default
         </div>
         <div class="message-body">
             <div class="columns is-multiline">
+                <!-- Overcurrent -->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Over Current:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" v-model="ocd" min="0" max="1000" step="50" /></span>
+                                <span class="control"><span class="button is-static">mV</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ocd }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label">&nbsp;</div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control">
+                                    <span class="button is-label">
+                                        <input class="is-checkradio is-white" id="ocd-shutdown" type="checkbox" v-model="ocdshutdown" />
+                                        <label class="is-checkradio-label" for="ocd-shutdown"><strong>Over Current Shutdown</strong></label>
+                                    </span>
+                                </span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ocdshutdown }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="columns is-multiline">
                 <!-- Min / Max Speed -->
                 <div class="column is-half">
                     <div class="field is-horizontal">
@@ -354,7 +496,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">Acceleration:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" v-model="accel" /></span>
+                                <span class="control"><input class="input" type="number" v-model="accel" min="0" step="50" /></span>
                                 <span class="control"><span class="button is-static">steps/s<sup>2</sup></span></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_accel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
@@ -366,7 +508,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">Deceleration:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" v-model="decel" /></span>
+                                <span class="control"><input class="input" type="number" v-model="decel" min="0" step="50" /></span>
                                 <span class="control"><span class="button is-static">steps/s<sup>2</sup></span></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_decel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
@@ -459,18 +601,54 @@ layout: default
                 </div>
             </div>
             <hr />
+            <div class="subtitle is-5" style="padding-left: 1rem;">Current Mode Settings:</div>
+            <div class="columns is-multiline">
+                <!-- Switching Period-->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Switching Period:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="4" max="124" step="4" v-model="cm_switchperiod" /></span>
+                                <span class="control"><span class="button is-static">&mu;s</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_switchperiod }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
+            <div class="subtitle is-5" style="padding-left: 1rem;">Voltage Mode Settings:</div>
+            <div class="columns is-multiline">
+                <!-- PWM Freqency-->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">PWM Frequency:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="5" max="70" step="1" v-model="vm_pwmfreq" /></span>
+                                <span class="control"><span class="button is-static">&mu;s</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_pwmfreq }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <hr />
             <div class="field is-grouped is-grouped-right">
                 <span class="control">
                     <input class="is-checkradio is-white" id="eeprom-save" type="checkbox" v-model="save" />
                     <label for="eeprom-save" style="top: 0.7rem;"><strong>EEPROM Save</strong></label>
                 </span>
                 <span class="control">
-                    <button class="button is-medium is-primary" v-on:click="writemotor(null)">Commit</button>
+                    <button class="button is-medium is-primary" v-on:click="writemotor(null)" v-bind:disabled="!hiz || !initialload">Write</button>
                 </span>
                 <span class="control">
-                    <button class="button is-medium is-light" v-on:click="readmotor">Revert</button>
+                    <button class="button is-medium is-light" v-on:click="readmotor(false)" v-bind:disabled="!hiz || !initialload">Read</button>
                 </span>
             </div>
+            <div v-if="!hiz" class="help has-text-right">Only available when motor is not running.</div>
+            <div v-if="!initialload" class="help has-text-right">Only available after configuration data loaded.</div>
         </div>
     </div>
     <div class="message">
@@ -490,12 +668,20 @@ layout: default
         <div class="message-body" style="position: relative;">
 <pre style="display: none;" id="code-bash">{% raw %}
 # Using curl for network and jq for json parsing
-HOST="{{ browser.hostname }}.local"  # or "{{ browser.ip }}"
+HOST="{{ browser.hostname }}.local"  # or "{{ wifi.ip }}"
 PROTOCOL="http"  # or https
+
+# Ping motor api
+curl -sS "${PROTOCOL}://${HOST}/api/ping" | jq
+# All successful api calls will return 'status: ok'. This means
+#  that the command was successfully interpreted and executed.
+#  However, errors may still be thrown during execution.
 
 # Write motor configuration
 MODE="{{ mode }}"
 STEPSIZE="{{ stepsize }}"
+OCD="{{ ocd }}"
+OCDSHUTDOWN="{{ ocdshutdown }}"
 MAXSPEED="{{ maxspeed }}"
 MINSPEED="{{ minspeed }}"
 ACCEL="{{ accel }}"
@@ -506,49 +692,63 @@ KTACCEL="{{ ktaccel }}"
 KTDECEL="{{ ktdecel }}"
 FSSPEED="{{ fsspeed }}"
 FSBOOST="{{ fsboost }}"
+CM_SWITCHPERIOD="{{ cm_switchperiod }}"
+VM_PWMFREQ="{{ vm_pwmfreq }}"
 REVERSE="{{ reverse }}"
 SAVE_EEPROM="{{ save }}"
-curl "${PROTOCOL}://${HOST}/api/motor/set?\
+curl -sS "${PROTOCOL}://${HOST}/api/motor/set?\
 mode=${MODE}&stepsize=${STEPSIZE}&\
+ocd=${OCD}&ocdshutdown=${OCDSHUTDOWN}&\
 maxspeed=${MAXSPEED}&minspeed=${MINSPEED}&accel=${ACCEL}&decel=${DECEL}&\
 kthold=${KTHOLD}&ktrun=${KTRUN}&ktaccel=${KTACCEL}&ktdecel=${KTDECEL}&\
 fsspeed=${FSSPEED}&fsboost=${FSBOOST}&\
-reverse=${REVERSE}&save=${SAVE_EEPROM}"
+cm_switchperiod=${CM_SWITCHPERIOD}&\
+vm_pwmfreq=${VM_PWMFREQ}&\
+reverse=${REVERSE}&save=${SAVE_EEPROM}" | jq
 
 # Read motor configuration
-curl "${PROTOCOL}://${HOST}/api/motor/get" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/get" | jq
 # Returns object with keys: mode, stepsize, maxspeed, minspeed, accel, decel,
 #   kthold, ktrun, ktaccel, ktdecel, fsspeed, fsboost, reverse
 
 # Zero position
-
+curl -sS "${PROTOCOL}://${HOST}/api/motor/pos/reset" | jq
 
 # Send servo command
-
+POSITION="{{ setpos }}"  # ANGLE / 360 * 200 * STEPSIZE; ANGLE={{ setangle }}, STEPSIZE={{ stepsize }}
+curl -sS "${PROTOCOL}://${HOST}/api/motor/command/goto?position=${POSITION}" | jq
 
 # Send speed command
+STEPS_PER_SEC="{{ setstepss }}"  # RPM / 60 * 200; RPM={{ setrpm }}
+DIRECTION="{{ setdirection }}"
+STOPSWITCH="{{ speed.stopswitch }}"
+curl -sS "${PROTOCOL}://${HOST}/api/motor/command/run?stepss=${STEPS_PER_SEC}&\
+direction=${DIRECTION}&stopswitch=${STOPSWITCH}" | jq
 
+# Send stepclock command
+DIRECTION="{{ setdirection }}"
+curl -sS "${PROTOCOL}://${HOST}/api/motor/command/stepclock?direction=${DIRECTION}" | jq
 
 # Stop
 STOP_BRIDGE="{{ speed.hiz? 'hiz' : 'stop' }}"
 STOP_SOFT="true"
-curl "${PROTOCOL}://${HOST}/api/motor/command/${STOP_BRIDGE}?soft=${STOP_SOFT}"
+curl -sS "${PROTOCOL}://${HOST}/api/motor/command/${STOP_BRIDGE}?soft=${STOP_SOFT}" | jq
 
 # Read status
-curl "${PROTOCOL}://${HOST}/api/motor/status" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/status" | jq
 # Returns object with keys: direction, movement, hiz, busy, switch,
 #   flags:{ switch, commanderror, overcurrent, undervoltage, thermalwarning,
 #   thermalshutdown, stalldetect }
 
 # Read state
-curl "${PROTOCOL}://${HOST}/api/motor/state" | jq
-# Returns object with keys: [TODO LIST KEYS!]
+curl -sS "${PROTOCOL}://${HOST}/api/motor/state" | jq
+# Returns object with keys: position, mark, speed, busy
 
 {% endraw %}</pre>
 <pre style="display: none;" id="code-python">{% raw %}
 from goodrobotics import WSX100 as WifiStepper
 
-host = "{{ browser.hostname }}.local"  # or "{{ browser.ip }}"
+host = "{{ browser.hostname }}.local"  # or "{{ wifi.ip }}"
 protocol = WifiStepper.HTTP  # or HTTPS, CRYPTO
 username = None # Required when auth enabled
 password = None
@@ -600,18 +800,82 @@ state = MOTOR.getState()
     </div>
 </div>
 <script>
-    function merge(src, dest, keys) {
+    // Websocket
+    var socket = (function() {
+        var sock = new WebSocket('{{ site.wsurl }}:81');
+        sock.binaryType = "arraybuffer";
+        sock.onmessage = function(message) {
+            var v = new DataView(message.data);
+            if (v.getUint8(0) == 0x11) {
+                // Read status reply
+                app.getdirection = v.getUint8(1) == 0x66? 'forward' : 'reverse';
+                switch (v.getUint8(2)) {
+                    case 0x78:      app.movement = 'idle';          break;
+                    case 0x61:      app.movement = 'accelerating';  break;
+                    case 0x64:      app.movement = 'decelerating';  break;
+                    case 0x73:      app.movement = 'spinning';      break;
+                }
+                app.hiz = v.getUint8(3) == 0x1;
+                app.busy = v.getUint8(4) == 0x1;
+                app.switch = v.getUint8(5) == 0x1;
+                app.stepclock = v.getUint8(6) == 0x1;
+                app.flags.commanderror = v.getUint8(7) == 0x1;
+                app.flags.overcurrent = v.getUint8(8) == 0x1;
+                app.flags.undervoltage = v.getUint8(9) == 0x1;
+                app.flags.thermalshutdown = v.getUint8(10) == 0x1;
+                app.flags.thermalwarning = v.getUint8(11) == 0x1;
+                app.flags.stalldetect = v.getUint8(12) == 0x1;
+                app.flags.switch = v.getUint8(13) == 0x1;
+
+            } else if (v.getUint8(0) == 0x12) {
+                // Read state reply
+                app.busy = v.getUint8(13) == 0x1;
+                app.getrpm = v.getFloat32(9, true) * 60 / 200;
+                app.getangle = v.getInt32(1, true) / 200 / app.stepsize * 360;
+            }
+        }
+
+        return {
+            send: function(ba) {
+                if (sock.readyState != sock.OPEN) {
+                    return false;
+                }
+                sock.send(ba);
+                return true;
+            }
+        };
+    })();
+
+    // Vue
+    function merge(src, dest, keys, round) {
         for (i in keys) {
-            dest[keys[i]] = src[keys[i]];
+            var v = src[keys[i]];
+            if (round && round[i]) v = Math.round(v / round[i]) * round[i];
+            dest[keys[i]] = v;
         }
     }
-    function unwrap(newv, oldv) {
-        var a = Math.sign(oldv - newv) * 360;
-        while (Math.abs(oldv - newv) > 180) {
-            newv += a;
+
+    function throttle(func, delay, check) {
+        var onindex = 0;
+        var lastcall = 0
+        return function() {
+            var context = this, args = arguments;
+            var myindex = ++onindex;
+
+            var checkfunc = function() {
+                if (onindex != myindex) return;
+                var now = new Date().getTime();
+                if ((now - lastcall) >= delay) {
+                    lastcall = now;
+                    func.apply(context, args);
+                } else {
+                    setTimeout(checkfunc, check);
+                }
+            }
+            checkfunc();
         }
-        return newv;
     }
+
     var app = new Vue({
         el: '#profiles',
         data: {
@@ -622,6 +886,7 @@ state = MOTOR.getState()
                 voltage: 24
             },
             mode: 'voltage',
+            protocol: 'ws',
             flags: {
                 switch: false,
                 commanderror: false,
@@ -632,19 +897,27 @@ state = MOTOR.getState()
                 stalldetect: false
             },
             servo: {
-                setangle: 0,
-                getangle: 0
             },
             speed: {
-                running: false,
-                direction: '?',
                 hiz: true,
-                setrpm: 0,
-                getrpm: 0,
-                getangle: 0
+                stopswitch: false
+            },
+            extstepclock: {
+                stepreverse: false
             },
 
+            setdirection: 'forward',
+            setrpm: 30,
+            setangle: 0,
+
+            getdirection: '?',
+            getrpm: 0,
+            getangle: 0,
+
+            initialload: false,
             stepsize: 1,
+            ocd: 0,
+            ocdshutdown: false,
             maxspeed: 0,
             minspeed: 0,
             accel: 0,
@@ -655,14 +928,16 @@ state = MOTOR.getState()
             ktdecel: 0.0,
             fsspeed: 0,
             fsboost: false,
+            cm_switchperiod: 0,
+            vm_pwmfreq: 0,
             save: true,
 
             reverse: false,
-            direction: '?',
             movement: '',
             hiz: true,
             busy: false,
             switch: false,
+            stepclock: false,
             voltage: '?',
             adc: 0,
 
@@ -670,21 +945,57 @@ state = MOTOR.getState()
                 language: 'bash'
             },
             browser: {
-                hostname: '<hostname>',
+                hostname: '<hostname>'
+            },
+            wifi: {
                 ip: '<ip>'
             }
         },
+        computed: {
+            setpos: function() {
+                return Math.round(this.setangle / 360 * 200 * this.stepsize);
+            },
+            setstepss: function() {
+                return this.setrpm / 60 * 200;
+            }
+        },
         watch: {
+            profile: function(newv, oldv) {
+                if (newv != oldv) {
+                    this.writestop(true, false);
+                }
+
+                if (newv == 'servo') {
+                    this.writeresetpos();
+                }
+            },
+            stepsize: function(newv, oldv) {
+                if (newv != oldv) {
+                    this.writeresetpos();
+                }
+            },
+            setangle: function(newv) {
+                this.writeservo();
+            },
+            setrpm: function(newv) {
+                this.writespeed(this.setdirection);
+            },
+            reverse: function(newv) {
+                this.writemotor(['reverse'])
+            }
         },
         methods: {
             animate: function() {
-                if (this.profile == 'speed' && this.speed.getrpm > 0) {
-                    this.speed.getangle += this.speed.getrpm / 60 / 30 * 360 * (this.speed.direction == 'forward'? 1 : -1);
+                if (this.profile == 'speed' && this.getrpm > 0) {
+                    this.getangle += this.getrpm / 60 / 30 * 360 * (this.setdirection == 'reverse'? -1 : 1);
                 }
             },
             updatepreset: function() {
                 if (this.preset.enable) {
                     // TODO
+                }
+                if (this.mode == 'current' && this.stepsize > 16) {
+                    this.stepsize = 16;
                 }
                 this.writemotor(null);
             },
@@ -707,33 +1018,55 @@ state = MOTOR.getState()
                 }
             },
             readstatus: function(clearerrors) {
-                axios.get("{{ site.apiurl }}/api/motor/status", {params: {clearerrors: clearerrors}}).then(function (r) {
-                    if (r.data.status == 'ok') {
-                        merge(r.data, app, ['direction', 'movement', 'hiz', 'busy', 'switch']);
-                        merge(r.data.alarms, app.flags, ['switch', 'commanderror', 'overcurrent', 'undervoltage', 'thermalwarning', 'thermalshutdown', 'stalldetect']);
-                    }
-                });
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(2);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x11);
+                    v.setUint8(1, clearerrors? 0x01 : 0x0);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') {
+                    axios.get("{{ site.apiurl }}/api/motor/status", {params: {clearerrors: clearerrors}}).then(function (r) {
+                        if (r.data.status == 'ok') {
+                            app.getdirection = r.data.direction;
+                            merge(r.data, app, ['movement', 'hiz', 'busy', 'switch', 'stepclock']);
+                            merge(r.data.alarms, app.flags, ['switch', 'commanderror', 'overcurrent', 'undervoltage', 'thermalwarning', 'thermalshutdown', 'stalldetect']);
+                        }
+                    });
+                }
             },
             readstate: function() {
-                axios.get("{{ site.apiurl }}/api/motor/state").then(function (r) {
-                    if (r.data.status == 'ok') {
-                        app.busy = r.data.busy;
-                        app.speed.getrpm = r.data.speed * 60 / 200;
-                        //app.speed.getangle = r.data.position / 200 / app.stepsize * 360;
-                    }
-                });
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(1);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x12);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') {
+                    axios.get("{{ site.apiurl }}/api/motor/state").then(function (r) {
+                        if (r.data.status == 'ok') {
+                            app.busy = r.data.busy;
+                            app.getrpm = r.data.stepss * 60 / 200;
+                            app.getangle = r.data.position / 200 / app.stepsize * 360;
+                        }
+                    });
+                }
             },
-            readmotor: function() {
-                axios.get("{{ site.apiurl }}/api/motor/get").then(function (r) {
+            readmotor: function(cached) {
+                axios.get("{{ site.apiurl }}/api/motor/get", {params: {cached: cached}}).then(function (r) {
                     if (r.data.status == 'ok') {
-                        merge(r.data, app, ['mode', 'stepsize', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'reverse']);
+                        merge(r.data, app,
+                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'vm_pwmfreq', 'reverse'],
+                            [null, null, 20, null, 20, 20, 10, 10, 0.01, 0.01, 0.01, 0.01, 20, null, 4, 0.01, null]
+                        );
+                        app.initialload = true;
                     }
                 });
             },
             writemotor: function(keys) {
-                keys = keys || ['maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost'];
+                keys = keys || ['maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'cm_switchperiod', 'vm_pwmfreq', 'fsboost'];
                 var params = {};
-                merge(this, params, keys + ['save']);
+                merge(this, params, keys.concat(['save']));
                 axios.get("{{ site.apiurl }}/api/motor/set", {params: params});
             },
             readadc: function() {
@@ -747,22 +1080,77 @@ state = MOTOR.getState()
                     }
                 });
             },
-            writeservo: function() {
-                var abspos = Math.round(this.servo.setangle / 360 * 200 * this.stepsize);
-                axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {position: abspos}});
-            },
-            writespeed: function(cmdrun, direction) {
-                if (!cmdrun) {
-                    axios.get("{{ site.apiurl }}/api/motor/command/" + (this.speed.hiz? "hiz" : "stop"), {params: {soft: true}});
-                } else {
-                    var steps_per_sec = Math.round(this.speed.setrpm / 60 * 200);
-                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {speed: steps_per_sec, direction: direction}});
+            writestop: function(hiz, soft) {
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(2);
+                    var v = new DataView(ba);
+                    v.setUint8(0, hiz? 0x22 : 0x21);
+                    v.setUint8(1, 0x01);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') {
+                    axios.get("{{ site.apiurl }}/api/motor/command/" + (hiz? "hiz" : "stop"), {params: {soft: soft}});
                 }
-                this.speed.running = cmdrun;
-                this.speed.direction = direction;
-            }
+            },
+            writeresetpos: function() {
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(5);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x31);
+                    v.setInt32(1, 0, true);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') { 
+                    axios.get("{{ site.apiurl }}/api/motor/pos/reset");
+                }
+                this.getangle = 0;
+            },
+            writeservo: throttle(function() {
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(5);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x23);
+                    v.setInt32(1, this.setpos, true);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') { 
+                    axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {position: this.setpos}});
+                }
+            }, 250, 30),
+            writespeed: throttle(function(direction) {
+                this.setdirection = direction;
+
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(7);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x24);
+                    v.setUint8(1, this.setdirection == 'forward'? 0x66 : 0x72);
+                    v.setFloat32(2, this.setstepss, true);
+                    v.setUint8(6, this.speed.stopswitch? 0x01 : 0x0);
+                    socket.send(ba);
+                } else if (this.protocol == 'http') {
+                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {stepss: this.setstepss, direction: this.setdirection, stopswitch: this.stopswitch}});
+                }
+            }, 250, 100),
+            writestepclock: throttle(function() {
+                this.setdirection = this.extstepclock.stepreverse ? 'reverse' : 'forward';
+
+                if (this.protocol == 'ws') {
+                    var ba = new ArrayBuffer(2);
+                    var v = new DataView(ba);
+                    v.setUint8(0, 0x25);
+                    v.setUint8(1, this.setdirection == 'forward'? 0x66 : 0x72);
+                    socket.send(ba);
+
+                } else if (this.protocol == 'http') {
+                    axios.get("{{ site.apiurl }}/api/motor/command/stepclock", {params: {direction: this.setdirection}});
+                }
+            }, 1000, 100)
         },
         filters: {
+            capitalize: function(s) {
+                return s.charAt(0).toUpperCase() + s.slice(1);
+            },
             pybool: function(v) {
                 if (v.toString() == 'true') return 'True';
                 if (v.toString() == 'false') return 'False';
@@ -772,26 +1160,32 @@ state = MOTOR.getState()
         mounted: function () {
             var pollstatus = function() {
                 this.readstatus();
-                setTimeout(pollstatus, 2000);
+                setTimeout(pollstatus, 500);
             }.bind(this);
 
             var pollstate = function() {
                 this.readstate();
-                setTimeout(pollstate, 500);
+                setTimeout(pollstate, 300);
             }.bind(this);
 
             setInterval(function() {
                 this.animate();
             }.bind(this), 33);
 
-            this.readmotor();
+            this.readmotor(false);
             this.readadc();
             pollstatus();
             pollstate();
 
             axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {
                 if (r.data.status == 'ok') {
-                    merge(r.data, app.browser, ['hostname', 'ip']);
+                    merge(r.data, app.browser, ['hostname']);
+                }
+            });
+
+            axios.get("{{ site.apiurl }}/api/wifi/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    merge(r.data, app.wifi, ['ip']);
                 }
             });
 
@@ -802,12 +1196,20 @@ state = MOTOR.getState()
         }
     });
 
+    // Servo svg
+    function unwrap(newv, oldv) {
+        var a = Math.sign(oldv - newv) * 360;
+        while (Math.abs(oldv - newv) > 180) {
+            newv += a;
+        }
+        return newv;
+    }
+
     function servodrag(svg, evt) {
         var bounds = svg.getBoundingClientRect();
         var x = evt.clientX - (bounds.left + bounds.width / 2);
         var y = evt.clientY - (bounds.top + bounds.height / 2);
-        app.servo.setangle = Math.round(100 * unwrap(Math.atan2(-x, -y) * 180 / Math.PI, app.servo.setangle)) / 100;
-        app.writeservo();
+        app.setangle = Math.round(100 * unwrap(Math.atan2(-x, -y) * 180 / Math.PI, app.setangle)) / 100;
     }
 
     var dragging = false;
@@ -830,6 +1232,7 @@ state = MOTOR.getState()
     });
     */
 
+    // Clipboard
     new ClipboardJS('#code-copy', {
         text: function(trigger) {
             if (app.code.language == 'bash')    return document.getElementById('code-bash').textContent;
