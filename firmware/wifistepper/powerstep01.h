@@ -136,7 +136,7 @@ ps_slewrate ps_getslewrate();
 void ps_setslewrate(ps_slewrate slew);
 
 /* CONFIG */
-typedef enum __ps_clocksel {
+typedef enum {
   CLK_INT16         = 0x0,
   CLK_INT16_EXT2    = 0x8,
   CLK_INT16_EXT4    = 0x9,
@@ -152,18 +152,28 @@ typedef enum __ps_clocksel {
   CLK_EXT32_OSC     = 0xF
 } ps_clocksel;
 
-typedef enum __ps_swmode {
+typedef enum {
   SW_HARDSTOP       = 0x0,
   SW_USER           = 0x1
 } ps_swmode;
 
+float ps_getclockfreq(ps_clocksel clock);
 ps_clocksel ps_getclocksel();
 void ps_setclocksel(ps_clocksel clock);
 
 ps_swmode ps_getswmode();
 void ps_setswmode(ps_swmode swmode);
 
-void ps_vm_setpwmfreq(uint8_t div, uint8_t mul);
+typedef struct {
+  uint8_t div;
+  uint8_t mul;
+} ps_pwmfreq;
+
+float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_pwmfreq * coeffs);
+ps_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq);
+
+ps_pwmfreq ps_vm_getpwmfreq();
+void ps_vm_setpwmfreq(ps_pwmfreq * coeffs);
 
 /* KTVLAS */
 typedef struct __ps_ktvals {
@@ -194,8 +204,8 @@ void ps_cm_setctrltimes(float min_on_us, float min_off_us, float fast_off_us, fl
 bool ps_cm_getpredict();
 void ps_cm_setpredict(bool enable_predict);
 
-float ps_cm_getswitchfreq();
-void ps_cm_setswitchfreq(float switching_khz);
+float ps_cm_getswitchperiod();
+void ps_cm_setswitchperiod(float period_us);
 
 /* MOVE */
 uint32_t ps_move(ps_direction dir, uint32_t steps);

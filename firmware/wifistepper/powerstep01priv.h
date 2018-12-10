@@ -228,8 +228,11 @@ typedef union __ps_config_reg {
   ps_config_com_reg com;
 } ps_config_reg;
 
+#define CM_TSW_COEFF        (0.25)
+#define CM_TSW_MASK         (0x1F)
+
 /* KVALS */
-#define KTVALS_COEFF       (0.00392)
+#define KTVALS_COEFF        (0.00392)
 
 /* REG TFAST */
 typedef struct __attribute__((packed)) __ps_tfast_reg {

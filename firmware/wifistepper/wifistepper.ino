@@ -11,10 +11,14 @@
 #define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
 #define MOTOR_ADCCOEFF    (2.65625)
+#define MOTOR_CLOCK       (CLK_INT16)
 
 #define FNAME_WIFICFG     "/wificfg.json"
 #define FNAME_BROWSERCFG  "/browsercfg.json"
 #define FNAME_MOTORCFG    "/motorcfg.json"
+
+#define PORT_HTTP     80
+#define PORT_HTTPWS   81
 
 #define LEN_HOSTNAME  24
 #define LEN_USERNAME  64
@@ -22,8 +26,8 @@
 #define LEN_PASSWORD  64
 #define LEN_IP        16
 
-ESP8266WebServer server(80);
-WebSocketsServer websocket(81);
+ESP8266WebServer server(PORT_HTTP);
+WebSocketsServer websocket(PORT_HTTPWS);
 StaticJsonBuffer<2048> jsonbuf;
 StaticJsonBuffer<1024> configbuf;
 
@@ -33,6 +37,19 @@ typedef enum {
   M_ACCESSPOINT = 0x0,
   M_STATION = 0x1
 } wifi_mode;
+
+typedef enum {
+  WS_READSTATUS = 0x11,
+  WS_READSTATE = 0x12,
+  
+  WS_CMDSTOP = 0x21,
+  WS_CMDHIZ = 0x22,
+  WS_CMDGOTO = 0x23,
+  WS_CMDRUN = 0x24,
+  WS_STEPCLOCK = 0x25,
+
+  WS_POS = 0x31,
+} ws_opcode;
 
 struct {
   wifi_mode mode;
@@ -63,51 +80,57 @@ struct {
 };
 
 struct {
+  char hostname[LEN_HOSTNAME];
   bool http_enabled;
   bool https_enabled;
   bool mdns_enabled;
-  char mdns_hostname[LEN_HOSTNAME];
   bool auth_enabled;
   char auth_username[LEN_USERNAME];
   char auth_password[LEN_PASSWORD];
   bool ota_enabled;
-  char ota_hostname[LEN_HOSTNAME];
   char ota_password[LEN_PASSWORD];
 } browsercfg = {
+  .hostname = {'w','s','x','1','0','0',0},
   .http_enabled = true,
   .https_enabled = false,
   .mdns_enabled = true,
-  .mdns_hostname = {'w','s','x','1','0','0',0},
   .auth_enabled = false,
   .auth_username = {0},
   .auth_password = {0},
   .ota_enabled = true,
-  .ota_hostname = {'w','s','x','1','0','0','-','o','t','a',0},
   .ota_password = {0}
 };
 
 struct {
   ps_mode mode;
   ps_stepsize stepsize;
+  float ocd;
+  bool ocdshutdown;
   float maxspeed, minspeed;
   float accel, decel;
   float kthold, ktrun, ktaccel, ktdecel;
   float fsspeed;
   bool fsboost;
+  float cm_switchperiod;
+  float vm_pwmfreq;
   bool reverse;
 } motorcfg = {
-  .mode = MODE_VOLTAGE,
-  .stepsize = STEP_128,
+  .mode = MODE_CURRENT,
+  .stepsize = STEP_16,
+  .ocd = 600.0,
+  .ocdshutdown = true,
   .maxspeed = 10000.0,
   .minspeed = 0.0,
-  .accel = 50.0,
-  .decel = 50.0,
-  .kthold = 0.25,
-  .ktrun = 0.5,
-  .ktaccel = 0.8,
-  .ktdecel = 0.8,
-  .fsspeed = 1000.0,
+  .accel = 1000.0,
+  .decel = 1000.0,
+  .kthold = 0.2,
+  .ktrun = 0.2,
+  .ktaccel = 0.2,
+  .ktdecel = 0.2,
+  .fsspeed = 2000.0,
   .fsboost = true,
+  .cm_switchperiod = 4,
+  .vm_pwmfreq = 23.4,
   .reverse = false
 };
 
@@ -115,7 +138,7 @@ struct {
 
 struct {
   int pos, mark;
-  float speed;
+  float stepss;
   bool busy;
 } statecache = { 0 };
 
@@ -140,20 +163,46 @@ void wificfg_save() {
 
 void browsercfg_save() {
   JsonObject& root = jsonbuf.createObject();
+  root["hostname"] = browsercfg.hostname;
   root["http_enabled"] = browsercfg.http_enabled;
   root["https_enabled"] = browsercfg.https_enabled;
   root["mdns_enabled"] = browsercfg.mdns_enabled;
-  root["mdns_hostname"] = browsercfg.mdns_hostname;
   root["auth_enabled"] = browsercfg.auth_enabled;
   root["auth_username"] = browsercfg.auth_username;
   root["auth_password"] = browsercfg.auth_password;
   root["ota_enabled"] = browsercfg.ota_enabled;
-  root["ota_hostname"] = browsercfg.ota_hostname;
   root["ota_password"] = browsercfg.ota_password;
   JsonVariant v = root;
   File cfg = SPIFFS.open(FNAME_BROWSERCFG, "w");
   root.printTo(cfg);
   jsonbuf.clear();
+}
+
+void motorcfg_read() {
+  motorcfg.mode = ps_getmode();
+  motorcfg.stepsize = ps_getstepsize();
+  ps_ocd ocd = ps_getocd();
+  motorcfg.ocd = ocd.millivolts;
+  motorcfg.ocdshutdown = ocd.shutdown;
+  motorcfg.maxspeed = ps_getmaxspeed();
+  ps_minspeed minspeed = ps_getminspeed();
+  motorcfg.minspeed = minspeed.steps_per_sec;
+  motorcfg.accel = ps_getaccel();
+  motorcfg.decel = ps_getdecel();
+  ps_ktvals ktvals = ps_getktvals();
+  motorcfg.kthold = ktvals.hold;
+  motorcfg.ktrun = ktvals.run;
+  motorcfg.ktaccel = ktvals.accel;
+  motorcfg.ktdecel = ktvals.decel;
+  ps_fullstepspeed fullstepspeed = ps_getfullstepspeed();
+  motorcfg.fsspeed = fullstepspeed.steps_per_sec;
+  motorcfg.fsboost = fullstepspeed.boost_mode;
+  if (motorcfg.mode == MODE_VOLTAGE) {
+    ps_pwmfreq pwmfreq = ps_vm_getpwmfreq();
+    motorcfg.vm_pwmfreq = ps_vm_coeffs2pwmfreq(MOTOR_CLOCK, &pwmfreq) / 1000.0;
+  } else {
+    motorcfg.cm_switchperiod = ps_cm_getswitchperiod();
+  }
 }
 
 void motorcfg_update() {
@@ -168,12 +217,17 @@ void motorcfg_update() {
   
   ps_setslewrate(SR_520);
 
-  ps_setocd(500, true);
-  ps_vm_setpwmfreq(0, 1);                   // V
-  //ps_cm_setpredict(true);                   // C
+  ps_setocd(motorcfg.ocd, motorcfg.ocdshutdown);
+  if (motorcfg.mode == MODE_VOLTAGE) {
+    ps_pwmfreq pwmfreq = ps_vm_pwmfreq2coeffs(MOTOR_CLOCK, motorcfg.vm_pwmfreq * 1000.0);
+    ps_vm_setpwmfreq(&pwmfreq);
+  } else {
+    ps_cm_setpredict(true);                   // C
+    ps_cm_setswitchperiod(motorcfg.cm_switchperiod);
+  }
   ps_setvoltcomp(false);
   ps_setswmode(SW_USER);
-  ps_setclocksel(CLK_INT16);
+  ps_setclocksel(MOTOR_CLOCK);
 
   ps_setktvals(motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
   ps_setalarmconfig(true, true, true, true);
@@ -183,6 +237,8 @@ void motorcfg_save() {
   JsonObject& root = jsonbuf.createObject();
   root["mode"] = json_serialize(motorcfg.mode);
   root["stepsize"] = json_serialize(motorcfg.stepsize);
+  root["ocd"] = motorcfg.ocd;
+  root["ocdshutdown"] = motorcfg.ocdshutdown;
   root["maxspeed"] = motorcfg.maxspeed;
   root["minspeed"] = motorcfg.minspeed;
   root["accel"] = motorcfg.accel;
@@ -193,6 +249,8 @@ void motorcfg_save() {
   root["ktdecel"] = motorcfg.ktdecel;
   root["fsspeed"] = motorcfg.fsspeed;
   root["fsboost"] = motorcfg.fsboost;
+  root["cm_switchperiod"] = motorcfg.cm_switchperiod;
+  root["vm_pwmfreq"] = motorcfg.vm_pwmfreq;
   root["reverse"] = motorcfg.reverse;
   JsonVariant v = root;
   File cfg = SPIFFS.open(FNAME_MOTORCFG, "w");
@@ -206,6 +264,10 @@ ps_direction motorcfg_dir(ps_direction d) {
     case FWD: return REV;
     case REV: return FWD;
   }
+}
+
+int motorcfg_pos(int p) {
+  return motorcfg.reverse? -p : p;
 }
 
 wifi_mode parse_wifimode(const char * m) {
@@ -375,15 +437,14 @@ void jsonbrowser_init() {
   server.on("/api/browser/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
+    root["hostname"] = browsercfg.hostname;
     root["http_enabled"] = browsercfg.http_enabled;
     root["https_enabled"] = browsercfg.https_enabled;
     root["mdns_enabled"] = browsercfg.mdns_enabled;
-    root["mdns_hostname"] = browsercfg.mdns_hostname;
     root["auth_enabled"] = browsercfg.auth_enabled;
     root["auth_username"] = browsercfg.auth_username;
     root["auth_password"] = browsercfg.auth_password;
     root["ota_enabled"] = browsercfg.ota_enabled;
-    root["ota_hostname"] = browsercfg.ota_hostname;
     root["ota_password"] = browsercfg.ota_password;
     root["status"] = "ok";
     JsonVariant v = root;
@@ -392,15 +453,14 @@ void jsonbrowser_init() {
   });
   server.on("/api/browser/set", [](){
     json_addheaders();
+    if (server.hasArg("hostname"))      strlcpy(browsercfg.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("http_enabled"))  browsercfg.http_enabled = server.arg("http_enabled") == "true";
     if (server.hasArg("https_enabled")) browsercfg.https_enabled = server.arg("https_enabled") == "true";
     if (server.hasArg("mdns_enabled"))  browsercfg.mdns_enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("mdns_hostname")) strlcpy(browsercfg.mdns_hostname, server.arg("mdns_hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("auth_enabled"))  browsercfg.auth_enabled = server.arg("auth_enabled") == "true";
     if (server.hasArg("auth_username")) strlcpy(browsercfg.auth_username, server.arg("auth_username").c_str(), LEN_USERNAME);
     if (server.hasArg("auth_password")) strlcpy(browsercfg.auth_password, server.arg("auth_password").c_str(), LEN_PASSWORD);
     if (server.hasArg("ota_enabled"))   browsercfg.ota_enabled = server.arg("ota_enabled") == "true";
-    if (server.hasArg("ota_hostname"))  strlcpy(browsercfg.ota_hostname, server.arg("ota_hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("ota_password"))  strlcpy(browsercfg.ota_password, server.arg("ota_password").c_str(), LEN_PASSWORD);
     browsercfg_save();
     flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
@@ -411,9 +471,14 @@ void jsonbrowser_init() {
 void jsonmotor_init() {
   server.on("/api/motor/get", [](){
     json_addheaders();
+    if (!server.hasArg("cached") || server.arg("cached") != "true") {
+      motorcfg_read();
+    }
     JsonObject& root = jsonbuf.createObject();
     root["mode"] = json_serialize(motorcfg.mode);
     root["stepsize"] = json_serialize(motorcfg.stepsize);
+    root["ocd"] = motorcfg.ocd;
+    root["ocdshutdown"] = motorcfg.ocdshutdown;
     root["maxspeed"] = motorcfg.maxspeed;
     root["minspeed"] = motorcfg.minspeed;
     root["accel"] = motorcfg.accel;
@@ -424,6 +489,8 @@ void jsonmotor_init() {
     root["ktdecel"] = motorcfg.ktdecel;
     root["fsspeed"] = motorcfg.fsspeed;
     root["fsboost"] = motorcfg.fsboost;
+    root["cm_switchperiod"] = motorcfg.cm_switchperiod;
+    root["vm_pwmfreq"] = motorcfg.vm_pwmfreq;
     root["reverse"] = motorcfg.reverse;
     root["status"] = "ok";
     JsonVariant v = root;
@@ -434,6 +501,8 @@ void jsonmotor_init() {
     json_addheaders();
     if (server.hasArg("mode"))      motorcfg.mode = parse_motormode(server.arg("mode"), motorcfg.mode);
     if (server.hasArg("stepsize"))  motorcfg.stepsize = parse_stepsize(server.arg("stepsize").toInt(), motorcfg.stepsize);
+    if (server.hasArg("ocd"))       motorcfg.ocd = server.arg("ocd").toFloat();
+    if (server.hasArg("ocdshutdown")) motorcfg.ocdshutdown = server.arg("ocdshutdown") == "true";
     if (server.hasArg("maxspeed"))  motorcfg.maxspeed = server.arg("maxspeed").toFloat();
     if (server.hasArg("minspeed"))  motorcfg.minspeed = server.arg("minspeed").toFloat();
     if (server.hasArg("accel"))     motorcfg.accel = server.arg("accel").toFloat();
@@ -444,6 +513,8 @@ void jsonmotor_init() {
     if (server.hasArg("ktdecel"))   motorcfg.ktdecel = server.arg("ktdecel").toFloat();
     if (server.hasArg("fsspeed"))   motorcfg.fsspeed = server.arg("fsspeed").toFloat();
     if (server.hasArg("fsboost"))   motorcfg.fsboost = server.arg("fsboost") == "true";
+    if (server.hasArg("cm_switchperiod")) motorcfg.cm_switchperiod = server.arg("cm_switchperiod").toFloat();
+    if (server.hasArg("vm_pwmfreq")) motorcfg.vm_pwmfreq = server.arg("vm_pwmfreq").toFloat();
     if (server.hasArg("reverse"))   motorcfg.reverse = server.arg("reverse") == "true";
     motorcfg_update();
     if (server.hasArg("save") && server.arg("save") == "true") {
@@ -455,6 +526,12 @@ void jsonmotor_init() {
     json_addheaders();
     ps_status status = ps_getstatus(server.arg("clearerrors") == "true");
     JsonObject& root = jsonbuf.createObject();
+    root["direction"] = json_serialize(motorcfg_dir(status.direction));
+    root["movement"] = json_serialize(status.movement);
+    root["hiz"] = status.hiz;
+    root["busy"] = status.busy;
+    root["switch"] = status.user_switch;
+    root["stepclock"] = status.step_clock;
     JsonObject& alarms = root.createNestedObject("alarms");
     alarms["commanderror"] = status.alarms.command_error;
     alarms["overcurrent"] = status.alarms.overcurrent;
@@ -463,11 +540,6 @@ void jsonmotor_init() {
     alarms["thermalwarning"] = status.alarms.thermal_warning;
     alarms["stalldetect"] = status.alarms.stall_detect;
     alarms["switch"] = status.alarms.user_switch;
-    root["direction"] = json_serialize(motorcfg_dir(status.direction));
-    root["movement"] = json_serialize(status.movement);
-    root["hiz"] = status.hiz;
-    root["busy"] = status.busy;
-    root["switch"] = status.user_switch;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -476,9 +548,9 @@ void jsonmotor_init() {
   server.on("/api/motor/state", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["position"] = statecache.pos;
-    root["mark"] = statecache.mark;
-    root["speed"] = statecache.speed;
+    root["position"] = motorcfg_pos(statecache.pos);
+    root["mark"] = motorcfg_pos(statecache.mark);
+    root["stepss"] = statecache.stepss;
     root["busy"] = statecache.busy;
     root["status"] = "ok";
     JsonVariant v = root;
@@ -499,18 +571,18 @@ void jsonmotor_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/motor/abspos/reset", [](){
+  server.on("/api/motor/pos/reset", [](){
     json_addheaders();
     ps_resetpos();
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/motor/abspos/set", [](){
+  server.on("/api/motor/pos/set", [](){
     json_addheaders();
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    ps_setpos(server.arg("position").toInt());
+    ps_setpos(motorcfg_pos(server.arg("position").toInt()));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/mark/set", [](){
@@ -519,16 +591,20 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    ps_setmark(server.arg("position").toInt());
+    ps_setmark(motorcfg_pos(server.arg("position").toInt()));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/run", [](){
     json_addheaders();
-    if (!server.hasArg("speed") || !server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("speed, direction args must be specified"));
+    if (!server.hasArg("stepss") || !server.hasArg("direction")) {
+      server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional stopswitch"));
       return;
     }
-    ps_run(motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("speed").toFloat());
+    if (server.hasArg("stopswitch") && server.arg("stopswitch") == "true") {
+      ps_gountil(POS_RESET, motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
+    } else {
+      ps_run(motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
+    }
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/goto", [](){
@@ -538,10 +614,19 @@ void jsonmotor_init() {
       return;
     }
     if (server.hasArg("direction")) {
-      ps_goto(server.arg("position").toInt(), motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
+      ps_goto(motorcfg_pos(server.arg("position").toInt()), motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
     } else {
-      ps_goto(server.arg("position").toInt());
+      ps_goto(motorcfg_pos(server.arg("position").toInt()));
     }
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/command/stepclock", [](){
+    json_addheaders();
+    if (!server.hasArg("direction")) {
+      server.send(200, "application/json", json_error("direction arg must be specified"));
+      return;
+    }
+    ps_stepclock(motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/stop", [](){
@@ -582,8 +667,168 @@ void json_init() {
   });
 }
 
-void ws_event(uint8_t num, WStype_t type, uint8_t * payload, size_t len) {
+typedef union {
+  float f32;
+  int i32;
+  uint8_t b[4];
+} wsc4_t;
+
+float ws_buf2float(uint8_t * b) {
+  wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
+  return c.f32;
+}
+
+void ws_packfloat(float f, uint8_t * b) {
+  wsc4_t c; c.f32 = f;
+  b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
+}
+
+int ws_buf2int(uint8_t * b) {
+  wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
+  return c.i32;
+}
+
+void ws_packint(int i, uint8_t * b) {
+  wsc4_t c; c.i32 = i;
+  b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
+}
+
+void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
+  if (len < 1) return;
   
+  switch(type) {
+    case WStype_TEXT: {
+      // TODO - create text interface
+      /*
+      Serial.print("WS Text ");
+      Serial.println(len);
+      for (int i=0; i<len; i++) {
+        Serial.printf("R[%d] = 0x", i);
+        Serial.println(data[i], HEX);
+      }
+      websocket.sendBIN(num, data, len);
+      */
+      break;
+    }
+
+    case WStype_BIN: {
+      switch (data[0]) {
+        case WS_READSTATUS: {
+          ps_status status = ps_getstatus(data[1]);
+          uint8_t movement = '?';
+          switch (status.movement) {
+            case M_STOPPED:     movement = 'x';   break;
+            case M_ACCEL:       movement = 'a';   break;
+            case M_DECEL:       movement = 'd';   break;
+            case M_CONSTSPEED:  movement = 's';   break;
+          }
+          
+          uint8_t buf[14] = {0};
+          buf[0] = WS_READSTATUS;
+          buf[1] = motorcfg_dir(status.direction) == FWD? 'f' : 'r';
+          buf[2] = movement;
+          buf[3] = status.hiz? 0x1 : 0x0;
+          buf[4] = status.busy? 0x1 : 0x0;
+          buf[5] = status.user_switch? 0x1 : 0x0;
+          buf[6] = status.step_clock? 0x1 : 0x0;
+          buf[7] = status.alarms.command_error? 0x1 : 0x0;
+          buf[8] = status.alarms.overcurrent? 0x1 : 0x0;
+          buf[9] = status.alarms.undervoltage? 0x1 : 0x0;
+          buf[10] = status.alarms.thermal_shutdown? 0x1 : 0x0;
+          buf[11] = status.alarms.thermal_warning? 0x1 : 0x0;
+          buf[12] = status.alarms.stall_detect? 0x1 : 0x0;
+          buf[13] = status.alarms.user_switch? 0x1 : 0x0;
+          websocket.sendBIN(num, buf, sizeof(buf));
+          break;
+        }
+
+        case WS_READSTATE: {
+          uint8_t buf[1+4+4+4+1] = {0};
+          buf[0] = WS_READSTATE;
+          ws_packint(motorcfg_pos(statecache.pos), &buf[1]);
+          ws_packint(motorcfg_pos(statecache.mark), &buf[1+4]);
+          ws_packfloat(statecache.stepss, &buf[1+4+4]);
+          buf[1+4+4+4] = statecache.busy? 0x1 : 0x0;
+          websocket.sendBIN(num, buf, sizeof(buf));
+          break;
+        }
+
+        case WS_CMDSTOP: {
+          if (len != 2) {
+            Serial.print("Bad CMDSTOP length");
+            return;
+          }
+          
+          if (data[1])  ps_softstop();
+          else          ps_hardstop();
+          break;
+        }
+
+        case WS_CMDHIZ: {
+          if (len != 2) {
+            Serial.print("Bad CMDHIZ length");
+            return;
+          }
+          
+          if (data[1])  ps_softhiz();
+          else          ps_hardhiz();
+          break;
+        }
+
+        case WS_CMDGOTO: {
+          if (len != 5) {
+            Serial.print("Bad CMDGOTO length");
+            return;
+          }
+
+          int32_t pos = ws_buf2int(&data[1]);
+          ps_goto(motorcfg_pos(pos));
+          break;
+        }
+
+        case WS_CMDRUN: {
+          if (len != 7) {
+            Serial.print("Bad CMDRUN length");
+            return;
+          }
+          
+          ps_direction dir = data[1] == 'r'? REV : FWD;
+          float stepss = ws_buf2float(&data[2]);
+          bool stopswitch = data[6] == 0x1;
+          if (stopswitch) {
+            ps_gountil(POS_RESET, motorcfg_dir(dir), stepss);
+          } else {
+            ps_run(motorcfg_dir(dir), stepss);
+          }
+          break;
+        }
+
+        case WS_STEPCLOCK: {
+          if (len != 2) {
+            Serial.print("Bad STEPCLOCK length");
+            return;
+          }
+
+          ps_direction dir = data[1] == 'r'? REV : FWD;
+          ps_stepclock(motorcfg_dir(dir));
+          break;
+        }
+
+        case WS_POS: {
+          if (len != 5) {
+            Serial.print("Bad POS length");
+            return;
+          }
+
+          int pos = ws_buf2int(&data[1]);
+          if (pos == 0)   ps_resetpos();
+          else            ps_setpos(pos);
+          break;
+        }
+      }
+      break;
+    }
+  }
 }
 
 void setup() {
@@ -643,15 +888,14 @@ void setup() {
       std::unique_ptr<char[]> buf(new char[size]);
       fp.readBytes(buf.get(), size);
       JsonObject& root = jsonbuf.parseObject(buf.get());
+      if (root.containsKey("hostname"))       strlcpy(browsercfg.hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
       if (root.containsKey("http_enabled"))   browsercfg.http_enabled = root["http_enabled"].as<bool>();
       if (root.containsKey("https_enabled"))  browsercfg.https_enabled = root["https_enabled"].as<bool>();
       if (root.containsKey("mdns_enabled"))   browsercfg.mdns_enabled = root["mdns_enabled"].as<bool>();
-      if (root.containsKey("mdns_hostname"))  strlcpy(browsercfg.mdns_hostname, root["mdns_hostname"].as<char *>(), LEN_HOSTNAME);
       if (root.containsKey("auth_enabled"))   browsercfg.auth_enabled = root["auth_enabled"].as<bool>();
       if (root.containsKey("auth_username"))  strlcpy(browsercfg.auth_username, root["auth_username"].as<char *>(), LEN_USERNAME);
       if (root.containsKey("auth_password"))  strlcpy(browsercfg.auth_password, root["auth_password"].as<char *>(), LEN_PASSWORD);
       if (root.containsKey("ota_enabled"))    browsercfg.ota_enabled = root["ota_enabled"].as<bool>();
-      if (root.containsKey("ota_hostname"))   strlcpy(browsercfg.ota_hostname, root["ota_hostname"].as<char *>(), LEN_HOSTNAME);
       if (root.containsKey("ota_password"))   strlcpy(browsercfg.ota_password, root["ota_password"].as<char *>(), LEN_PASSWORD);
       jsonbuf.clear();
     }
@@ -660,7 +904,7 @@ void setup() {
   // Wifi connection
   {
     if (browsercfg.mdns_enabled)
-      WiFi.hostname(browsercfg.mdns_hostname);
+      WiFi.hostname(browsercfg.hostname);
     
     if (wificfg.mode == M_STATION) {
       Serial.println("Station Mode");
@@ -703,13 +947,13 @@ void setup() {
   // Initialize web services
   {
     if (browsercfg.mdns_enabled) {
-      if (!MDNS.begin(browsercfg.mdns_hostname)) {
+      if (!MDNS.begin(browsercfg.hostname)) {
         Serial.println("Error: Could not start mDNS.");
       }
     }
 
     if (browsercfg.ota_enabled) {
-      ArduinoOTA.setHostname(browsercfg.ota_hostname);
+      ArduinoOTA.setHostname(browsercfg.hostname);
       if (browsercfg.ota_password[0] != 0)
         ArduinoOTA.setPassword(browsercfg.ota_password);
       ArduinoOTA.begin();
@@ -733,6 +977,8 @@ void setup() {
       JsonObject& root = jsonbuf.parseObject(buf.get());
       if (root.containsKey("mode"))       motorcfg.mode = motorcfg.mode = parse_motormode(root["mode"], motorcfg.mode);
       if (root.containsKey("stepsize"))   motorcfg.stepsize = parse_stepsize(root["stepsize"].as<int>(), motorcfg.stepsize);
+      if (root.containsKey("ocd"))        motorcfg.ocd = root["ocd"].as<float>();
+      if (root.containsKey("ocdshutdown")) motorcfg.ocdshutdown = root["ocdshutdown"].as<bool>();
       if (root.containsKey("maxspeed"))   motorcfg.maxspeed = root["maxspeed"].as<float>();
       if (root.containsKey("minspeed"))   motorcfg.minspeed = root["minspeed"].as<float>();
       if (root.containsKey("accel"))      motorcfg.accel = root["accel"].as<float>();
@@ -743,6 +989,8 @@ void setup() {
       if (root.containsKey("ktdecel"))    motorcfg.ktdecel = root["ktdecel"].as<float>();
       if (root.containsKey("fsspeed"))    motorcfg.fsspeed = root["fsspeed"].as<float>();
       if (root.containsKey("fsboost"))    motorcfg.fsboost = root["fsboost"].as<bool>();
+      if (root.containsKey("cm_switchperiod")) motorcfg.cm_switchperiod = root["cm_switchperiod"].as<float>();
+      if (root.containsKey("vm_pwmfreq")) motorcfg.vm_pwmfreq = root["vm_pwmfreq"].as<float>();
       if (root.containsKey("reverse"))    motorcfg.reverse = root["reverse"].as<bool>();
       jsonbuf.clear();
     }
@@ -768,7 +1016,7 @@ void loop() {
     ps_status status = ps_getstatus();
     statecache.pos = ps_getpos();
     statecache.mark = ps_getmark();
-    statecache.speed = ps_getspeed();
+    statecache.stepss = ps_getspeed();
     statecache.busy = status.busy;
     last_statepoll = now;
   }

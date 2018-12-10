@@ -1,4 +1,5 @@
 #include <SPI.h>
+#include <float.h>
 
 #include "powerstep01.h"
 #include "powerstep01priv.h"
@@ -397,6 +398,29 @@ void ps_setocd(float millivolts, bool shutdown) {
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
+float ps_getclockfreq(ps_clocksel clock) {
+  switch (clock) {
+    case CLK_EXT8_XTAL:
+    case CLK_EXT8_OSC:
+      return 8000000;
+    case CLK_INT16:
+    case CLK_INT16_EXT2:
+    case CLK_INT16_EXT4:
+    case CLK_INT16_EXT16:
+    case CLK_EXT16_XTAL:
+    case CLK_EXT16_OSC:
+      return 16000000;
+    case CLK_EXT24_XTAL:
+    case CLK_EXT24_OSC:
+      return 24000000;
+    case CLK_EXT32_XTAL:
+    case CLK_EXT32_OSC:
+      return 32000000;
+    default:
+      return 0;
+  }
+}
+
 ps_clocksel ps_getclocksel() {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
@@ -425,11 +449,46 @@ void ps_setswmode(const ps_swmode swmode) {
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
-void ps_vm_setpwmfreq(uint8_t div, uint8_t mul) {
+#define LEN_PWMFREQ_DIVS    8
+#define LEN_PWMFREQ_MULS    8
+float pwmfreq_divs[LEN_PWMFREQ_DIVS] = {1, 2, 3, 4, 5, 6, 7, 7};
+float pwmfreq_muls[LEN_PWMFREQ_MULS] = {0.625, 0.75, 0.875, 1, 1.25, 1.5, 1.75, 2};
+
+float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_pwmfreq * coeffs) {
+  return (ps_getclockfreq(clock) * pwmfreq_muls[coeffs->mul]) / (512.0 * pwmfreq_divs[coeffs->div]);
+}
+
+ps_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq) {
+  ps_pwmfreq coeffs = {.div = 0, .mul = 0};
+  float best = FLT_MAX;
+  for (size_t d = 0; d < LEN_PWMFREQ_DIVS; d++) {
+    for (size_t m = 0; m < LEN_PWMFREQ_MULS; m++) {
+      ps_pwmfreq check = {.div = d, .mul = m};
+      float result = abs(ps_vm_coeffs2pwmfreq(clock, &check) - pwmfreq);
+      if (result < best) {
+        coeffs = check;
+        best = result;
+      }
+    }
+  }
+  return coeffs;
+}
+
+ps_pwmfreq ps_vm_getpwmfreq() {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  reg.vm.f_pwm_int = div;
-  reg.vm.f_pwm_dec = mul;
+  ps_print(&reg);
+  return (ps_pwmfreq){
+    .div = reg.vm.f_pwm_int,
+    .mul = reg.vm.f_pwm_dec
+  };
+}
+
+void ps_vm_setpwmfreq(ps_pwmfreq * coeffs) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.vm.f_pwm_int = coeffs->div;
+  reg.vm.f_pwm_dec = coeffs->mul;
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
@@ -543,12 +602,18 @@ void ps_cm_setpredict(bool enable_predict) {
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
-float ps_cm_getswitchfreq() {
-  // TODO
+float ps_cm_getswitchperiod() {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (float)reg.cm.tsw / CM_TSW_COEFF;
 }
 
-void ps_cm_setswitchfreq(float switching_khz) {
-  // TODO
+void ps_cm_setswitchperiod(float period_us) {
+  ps_config_reg reg = {};
+  uint8_t tsw = min((int)round(period_us * CM_TSW_COEFF), CM_TSW_MASK);
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.cm.tsw = tsw;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
 int ps_readadc() {
