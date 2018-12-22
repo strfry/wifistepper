@@ -164,17 +164,6 @@ void ps_setclocksel(ps_clocksel clock);
 ps_swmode ps_getswmode();
 void ps_setswmode(ps_swmode swmode);
 
-typedef struct {
-  uint8_t div;
-  uint8_t mul;
-} ps_pwmfreq;
-
-float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_pwmfreq * coeffs);
-ps_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq);
-
-ps_pwmfreq ps_vm_getpwmfreq();
-void ps_vm_setpwmfreq(ps_pwmfreq * coeffs);
-
 /* KTVLAS */
 typedef struct __ps_ktvals {
   float hold;
@@ -189,6 +178,30 @@ void ps_setktvals(float hold, float run, float accel, float decel);
 /* CONFIG */
 bool ps_getvoltcomp();
 void ps_setvoltcomp(bool voltage_compensation);
+
+/* VM */
+typedef struct {
+  uint8_t div;
+  uint8_t mul;
+} ps_vm_pwmfreq;
+
+float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_vm_pwmfreq * coeffs);
+ps_vm_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq);
+ps_vm_pwmfreq ps_vm_getpwmfreq();
+void ps_vm_setpwmfreq(ps_vm_pwmfreq * coeffs);
+
+typedef struct {
+  float slopel;
+  float speedco;
+  float slopehacc;
+  float slopehdec;
+} ps_vm_bemf;
+
+ps_vm_bemf ps_vm_getbemf();
+void ps_vm_setbemf(float slopel, float speedco, float slopehacc, float slopehdec);
+
+float ps_vm_getstall();
+void ps_vm_setstall(float millivolts);
 
 /* CM */
 typedef struct __ps_cm_controltimes {

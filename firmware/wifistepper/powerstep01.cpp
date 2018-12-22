@@ -162,6 +162,13 @@ void ps_print(const ps_alarms_reg * r) {
   Serial.println();
 }
 
+void ps_print(const ps_tfast_reg * r) {
+  Serial.println("TFast:");
+  Serial.print("Off Fast: "); Serial.println(r->toff_fast, BIN);
+  Serial.print("Fast Step: "); Serial.println(r->fast_step, BIN);
+  Serial.println();
+}
+
 void ps_print(const char * name, uint16_t data) {
   Serial.print(name);
   Serial.print(": 0x");
@@ -454,16 +461,16 @@ void ps_setswmode(const ps_swmode swmode) {
 float pwmfreq_divs[LEN_PWMFREQ_DIVS] = {1, 2, 3, 4, 5, 6, 7, 7};
 float pwmfreq_muls[LEN_PWMFREQ_MULS] = {0.625, 0.75, 0.875, 1, 1.25, 1.5, 1.75, 2};
 
-float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_pwmfreq * coeffs) {
+float ps_vm_coeffs2pwmfreq(ps_clocksel clock, ps_vm_pwmfreq * coeffs) {
   return (ps_getclockfreq(clock) * pwmfreq_muls[coeffs->mul]) / (512.0 * pwmfreq_divs[coeffs->div]);
 }
 
-ps_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq) {
-  ps_pwmfreq coeffs = {.div = 0, .mul = 0};
+ps_vm_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq) {
+  ps_vm_pwmfreq coeffs = {.div = 0, .mul = 0};
   float best = FLT_MAX;
   for (size_t d = 0; d < LEN_PWMFREQ_DIVS; d++) {
     for (size_t m = 0; m < LEN_PWMFREQ_MULS; m++) {
-      ps_pwmfreq check = {.div = d, .mul = m};
+      ps_vm_pwmfreq check = {.div = d, .mul = m};
       float result = abs(ps_vm_coeffs2pwmfreq(clock, &check) - pwmfreq);
       if (result < best) {
         coeffs = check;
@@ -474,17 +481,17 @@ ps_pwmfreq ps_vm_pwmfreq2coeffs(ps_clocksel clock, float pwmfreq) {
   return coeffs;
 }
 
-ps_pwmfreq ps_vm_getpwmfreq() {
+ps_vm_pwmfreq ps_vm_getpwmfreq() {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
   ps_print(&reg);
-  return (ps_pwmfreq){
+  return (ps_vm_pwmfreq){
     .div = reg.vm.f_pwm_int,
     .mul = reg.vm.f_pwm_dec
   };
 }
 
-void ps_vm_setpwmfreq(ps_pwmfreq * coeffs) {
+void ps_vm_setpwmfreq(ps_vm_pwmfreq * coeffs) {
   ps_config_reg reg = {};
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
   reg.vm.f_pwm_int = coeffs->div;
@@ -579,15 +586,76 @@ void ps_setktvals(float hold, float run, float accel, float decel) {
   ps_xfer("setparam ktvaldec", CMD_SETPARAM(PARAM_KTVALDEC), &ktdec, 1);
 }
 
-/*
+ps_vm_bemf ps_vm_getbemf() {
+  uint8_t buf[2] = {};
+  uint8_t stslp = 0, fnslpacc = 0, fnslpdec = 0;
+  ps_xfer("getparam stslp", CMD_GETPARAM(PARAM_STSLP), &stslp, 1);
+  ps_xfer("getparam intspeed", CMD_GETPARAM(PARAM_INTSPEED), buf, 2);
+  ps_xfer("getparam fnslpacc", CMD_GETPARAM(PARAM_FNSLPACC), &fnslpacc, 1);
+  ps_xfer("getparam fnslpdec", CMD_GETPARAM(PARAM_FNSLPDEC), &fnslpdec, 1);
+  uint16_t intspeed = ps_get16(buf);
+  return (ps_vm_bemf){
+    .slopel = ((float)stslp) * BEMFSLOPE_COEFF,
+    .speedco = ((float)(intspeed & BEMFSPEEDCO_MASK)) * BEMFSPEEDCO_COEFF,
+    .slopehacc = ((float)fnslpacc) * BEMFSLOPE_COEFF,
+    .slopehdec = ((float)fnslpdec) * BEMFSLOPE_COEFF
+  };
+}
+
+void ps_vm_setbemf(float slopel, float speedco, float slopehacc, float slopehdec) {
+  uint8_t buf[2] = {};
+  uint8_t stslp = min((int)round(slopel / BEMFSLOPE_COEFF), BEMFSLOPE_MASK);
+  uint16_t intspeed = min((int)round(speedco / BEMFSPEEDCO_COEFF), BEMFSPEEDCO_MASK);
+  uint8_t fnslpacc = min((int)round(slopehacc / BEMFSLOPE_COEFF), BEMFSLOPE_MASK);
+  uint8_t fnslpdec = min((int)round(slopehdec / BEMFSLOPE_COEFF), BEMFSLOPE_MASK);
+  ps_set16(intspeed, buf);
+  ps_xfer("setparam stslp", CMD_SETPARAM(PARAM_STSLP), &stslp, 1);
+  ps_xfer("setparam intspeed", CMD_SETPARAM(PARAM_INTSPEED), buf, 2);
+  ps_xfer("setparam fnslpacc", CMD_SETPARAM(PARAM_FNSLPACC), &fnslpacc, 1);
+  ps_xfer("setparam fnslpdec", CMD_SETPARAM(PARAM_FNSLPDEC), &fnslpdec, 1);
+}
+
+float ps_vm_getstall() {
+  uint8_t stallth = 0;
+  ps_xfer("getparam stallth", CMD_GETPARAM(PARAM_STALLTH), &stallth, 1);
+  return ((float)(stallth & STALL_MASK) * STALL_COEFF) + STALL_OFFSET;
+}
+
+void ps_vm_setstall(float millivolts) {
+  if (millivolts < STALL_OFFSET) millivolts = STALL_OFFSET;
+  uint8_t stallth = min((int)round((millivolts - STALL_OFFSET) / STALL_COEFF), STALL_MASK);
+  ps_xfer("setparam stallth", CMD_SETPARAM(PARAM_STALLTH), &stallth, 1);
+}
+
 ps_cm_ctrltimes ps_cm_getctrltimes() {
-  // TODO
+  uint8_t tonmin = 0, toffmin = 0;
+  ps_tfast_reg reg = {};
+  ps_xfer("getparam tonmin", CMD_GETPARAM(PARAM_TONMIN), &tonmin, 1);
+  ps_xfer("getparam toffmin", CMD_GETPARAM(PARAM_TOFFMIN), &toffmin, 1);
+  ps_xferreg("getparam tfast", CMD_GETPARAM(PARAM_TFAST), reg);
+  ps_print(&reg);
+  return (ps_cm_ctrltimes){
+    .min_on_us = ((float)(tonmin & MINCTRL_MASK) * MINCTRL_COEFF) + MINCTRL_OFFSET,
+    .min_off_us = ((float)(toffmin & MINCTRL_MASK) * MINCTRL_COEFF) + MINCTRL_OFFSET,
+    .fast_off_us = ((float)(reg.toff_fast & TFAST_MASK) * TFAST_COEFF) + TFAST_OFFSET,
+    .fast_step_us = ((float)(reg.fast_step & TFAST_MASK) * TFAST_COEFF) + TFAST_OFFSET
+  };
 }
 
 void ps_cm_setctrltimes(float min_on_us, float min_off_us, float fast_off_us, float fast_step_us) {
-  // TODO
+  if (min_on_us < MINCTRL_OFFSET) min_on_us = MINCTRL_OFFSET;
+  if (min_off_us < MINCTRL_OFFSET) min_off_us = MINCTRL_OFFSET;
+  if (fast_off_us < TFAST_OFFSET) fast_off_us = TFAST_OFFSET;
+  if (fast_step_us < TFAST_OFFSET) fast_step_us = TFAST_OFFSET;
+  ps_tfast_reg reg = {};
+  uint8_t tonmin = min((int)round((min_on_us - MINCTRL_OFFSET) / MINCTRL_COEFF), MINCTRL_MASK);
+  uint8_t toffmin = min((int)round((min_off_us - MINCTRL_OFFSET) / MINCTRL_COEFF), MINCTRL_MASK);
+  reg.toff_fast = min((int)round((fast_off_us - TFAST_OFFSET) / TFAST_COEFF), TFAST_MASK);
+  reg.fast_step = min((int)round((fast_step_us - TFAST_OFFSET) / TFAST_COEFF), TFAST_MASK);
+  ps_xfer("setparam tonmin", CMD_SETPARAM(PARAM_TONMIN), &tonmin, 1);
+  ps_xfer("setparam toffmin", CMD_SETPARAM(PARAM_TOFFMIN), &toffmin, 1);
+  ps_xferreg("setparam tfast", CMD_SETPARAM(PARAM_TFAST), reg);
 }
-*/
 
 bool ps_cm_getpredict() {
   ps_config_reg reg = {};

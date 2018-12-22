@@ -234,11 +234,31 @@ typedef union __ps_config_reg {
 /* KVALS */
 #define KTVALS_COEFF        (0.00392)
 
+/* VM BEMF */
+#define BEMFSPEEDCO_COEFF   (0.0596)
+#define BEMFSPEEDCO_MASK    (0x3FFF)
+#define BEMFSLOPE_COEFF     (0.0015)
+#define BEMFSLOPE_MASK      (0xFF)
+
+/* VM STALL */
+#define STALL_COEFF         (31.25)
+#define STALL_OFFSET        (31.25)
+#define STALL_MASK          (0x1F)
+
+/* REG TON_MIN / TOFF_MIN */
+#define MINCTRL_COEFF       (0.5)
+#define MINCTRL_OFFSET      (0.5)
+#define MINCTRL_MASK        (0x7F)
+
 /* REG TFAST */
-typedef struct __attribute__((packed)) __ps_tfast_reg {
+typedef struct __attribute__((packed)) {
   uint8_t fast_step : 4;
   uint8_t toff_fast : 4;
 } ps_tfast_reg;
+
+#define TFAST_COEFF         (2.0)
+#define TFAST_OFFSET        (2.0)
+#define TFAST_MASK          (0x0F)
 
 /* CMD MOVE */
 #define MOVE_MASK         (0x003FFFFF)
