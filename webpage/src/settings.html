@@ -2,10 +2,12 @@
 title: Settings
 menu: settings
 css:
+    - bulma-tooltip
     - bulma-checkradio
     - bulma-divider
 layout: default
 ---
+{% include helptext.html %}
 <h1 class="title is-3">{% mdicon lock %}Settings</h1>
 <div id="settings">
     <div class="box properties">
@@ -30,9 +32,9 @@ layout: default
                         <select v-model="wifi.mode">
                             <option value="accesspoint">Access Point</option>
                             <option value="station">Station</option>
+                            <option value="off">Off</option>
                         </select>
                     </span>
-                    {% mdicon help-circle-outline %}
                 </div>
                 <div v-if="wifi.mode == 'accesspoint'">
                     <div class="field is-horizontal">
@@ -65,8 +67,8 @@ layout: default
                         <div class="field-body">
                             <div class="field">
                                 <span class="control">
-                                    <input class="is-checkradio has-background-color is-white" id="wifi-broadcast-enable" type="checkbox" v-model="wifi.accesspoint.broadcast" />
-                                    <label class="is-checkradio-enable" for="wifi-broadcast-enable"><strong>Broadcast SSID</strong></label>
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-hidden-enable" type="checkbox" v-model="wifi.accesspoint.hidden" />
+                                    <label class="is-checkradio-enable" for="wifi-hidden-enable"><strong>Hidden SSID</strong></label>
                                 </span>
                             </div>
                         </div>
@@ -113,7 +115,23 @@ layout: default
                         <div class="field-label is-normal"><label class="label">IP Address</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" placeholder="Auto" maxlength="15" v-model="wifi.station.forceip" /></span>
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forceip" /></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Subnet</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forcesubnet" /></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Gateway</label></div>
+                        <div class="field-body">
+                            <div class="field">
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forcegateway" /></span>
                             </div>
                         </div>
                     </div>
@@ -125,6 +143,7 @@ layout: default
                                     <input class="is-checkradio has-background-color is-white" id="wifi-revertap-enable" type="checkbox" v-model="wifi.station.revertap" />
                                     <label class="is-checkradio-enable" for="wifi-revertap-enable"><strong>Enabled</strong></label>
                                 </span>
+                                <span class="control"><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_revertap }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
@@ -240,20 +259,39 @@ layout: default
             </div>
         </div>
     </div>
+    <!--
     <div class="message">
         <div class="message-header"><span class="title is-5">{% mdicon lock-plus %}Crypto Authentication</span></div>
-        <div class="message-body">
-            [Body]
+        <div class="message-body" style="color: #666;">
+            <strong>Work in progress:</strong> Crypto chip authentication development is still in progress. Nothing to see here, move along =)
         </div>
     </div>
+    -->
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon update %}Firmware Update and Reset</span></div>
+        <div class="message-header"><span class="title is-5">{% mdicon update %}Reset Device</span></div>
         <div class="message-body">
-            [Body]
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal">Send reset command to motor driver.</div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><button class="button is-primary is-medium" v-on:click="resetmotor">Reset Motor</button></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal">Reset all configuration to factory settings and reset device.</div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><button class="button is-primary is-medium" v-on:click="factoryreset">Factory Reset</button></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
-<script>
+<script minify>
     function merge(src, dest, keys) {
         for (i in keys) {
             dest[keys[i]] = src[keys[i]];
@@ -271,14 +309,16 @@ layout: default
                     ssid: '',
                     password: '',
                     encryption: false,
-                    broadcast: true,
-                    channel: 1
+                    channel: 1,
+                    hidden: false
                 },
                 station: {
                     ssid: '',
                     password: '',
                     encryption: false,
                     forceip: '',
+                    forcesubnet: '',
+                    forcegateway: '',
                     revertap: true
                 }
             },
@@ -336,13 +376,20 @@ layout: default
             },
             writewifi: function() {
                 console.log("Writing wifi settings");
-                if (this.wifi.mode == 'accesspoint') {
+                if (this.wifi.mode == 'off') {
+                    axios.get("{{ site.apiurl }}/api/wifi/set/off", {
+                        params: {
+                            restart: true
+                        }
+                    });
+
+                } else if (this.wifi.mode == 'accesspoint') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/accesspoint", {
                         params: {
                             ssid: this.wifi.accesspoint.ssid,
                             password: this.wifi.accesspoint.encryption? this.wifi.accesspoint.password : '',
-                            broadcast: this.wifi.accesspoint.broadcast,
                             channel: this.wifi.accesspoint.channel,
+                            hidden: this.wifi.accesspoint.hidden,
                             restart: true
                         }
                     });
@@ -353,6 +400,8 @@ layout: default
                             ssid: this.wifi.station.ssid,
                             password: this.wifi.station.encryption? this.wifi.station.password : '',
                             forceip: this.wifi.station.forceip,
+                            forcesubnet: this.wifi.station.forcesubnet,
+                            forcegateway: this.wifi.station.forcegateway,
                             revertap: this.wifi.station.revertap,
                             restart: true
                         }
@@ -376,6 +425,14 @@ layout: default
                     }
                 });
                 this.browser.changemodal = true;
+            },
+            resetmotor: function() {
+                console.log("Reset motor");
+                axios.get("{{ site.apiurl }}/api/motor/reset");
+            },
+            factoryreset: function() {
+                console.log("Factory reset device");
+                axios.get("{{ site.apiurl }}/api/factoryreset");
             }
         },
         mounted: function () {
@@ -384,8 +441,8 @@ layout: default
                     var d = r.data;
                     app.wifi.ip = d['ip'];
                     app.wifi.mode = d['mode'];
-                    if (d['mode'] == 'accesspoint')     merge(d, app.wifi.accesspoint, ['ssid', 'password', 'encryption', 'broadcast', 'channel']);
-                    else if (d['mode'] == 'station')    merge(d, app.wifi.station, ['ssid', 'password', 'encryption', 'forceip', 'revertap']);
+                    if (d['mode'] == 'accesspoint')     merge(d, app.wifi.accesspoint, ['ssid', 'password', 'encryption', 'channel', 'hidden']);
+                    else if (d['mode'] == 'station')    merge(d, app.wifi.station, ['ssid', 'password', 'encryption', 'forceip', 'forcesubnet', 'forcegateway', 'revertap']);
                 }
             });
             axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {

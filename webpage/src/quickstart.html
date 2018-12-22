@@ -16,7 +16,7 @@ layout: default
     <div class="box properties">
         <div class="level">
             <div class="level-item">
-                <span><span class="entry">Voltage:</span> {% raw %}<span class="value" style="color: #c00;">~{{ voltage }} V</span>{% endraw %} <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
+                <span><span class="entry">Input Voltage:</span> {% raw %}<span class="value" style="color: #c00;">~{{ voltage }} V</span>{% endraw %} <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
             </div>
             <div class="level-item">
                 <span><span class="entry">Motor:</span> {% raw %}<span class="value">{{ movement | capitalize }} {{ getdirection | capitalize }}</span>{% endraw %}</span>
@@ -27,15 +27,15 @@ layout: default
             <div class="level-item">
                 <span><span class="entry">Bridge State:</span> <span v-if="hiz" class="value" style="color: #f93;">High Z</span><span v-else class="value">Active</span></span>
             </div>
-            <div class="level-item">
+            <!--<div class="level-item">
                 <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ adc }} V</span>{% endraw %}</span>
-            </div>
+            </div>-->
             <div class="level-item">
                 <span><span class="entry">Switch:</span> {% raw %}<span class="value" v-bind:style="this.switch? {'color': '#09f'} : {}">{{ this.switch? 'Closed' : 'Open' }}</span>{% endraw %}</span>
             </div>
         </div>
     </div>
-    <div class="notification is-warning" v-if="$cookies.get('help-hookup') !== 'hide'">
+    <div class="notification is-warning" v-bind:style="$cookies.get('help-hookup') === 'hide'? {'display': 'none'} : {}">
         <button class="delete" v-on:click="$cookies.set('help-hookup', 'hide', Infinity)"></button>
         <strong>Note:</strong> If this is your first time working with stepper motors, see the <a class="link" href="/documentation#hookup-guide"><strong>Hookup Guide</strong></a> for help wiring a stepper motor and connecting it to this board.
     </div>
@@ -300,7 +300,7 @@ layout: default
                             <label class="is-checkradio-label" for="stopswitch-enable">Stop on switch</label>
                         </span>
                     </span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_reversewires }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stopsw }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
@@ -355,16 +355,6 @@ layout: default
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_resetpos }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
-                    <span class="control">
-                        <span class="button is-label">
-                            <label class="is-switch-label" for="extstepclock-direction">Forward</label>
-                            <input class="switch" id="extstepclock-direction" type="checkbox" v-model="extstepclock.stepreverse" v-bind:disabled="!hiz" />
-                            <label class="is-switch-label" for="extstepclock-direction">Reverse</label>
-                        </span>
-                    </span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepclockdir }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                </div>
-                <div class="field has-addons">
                     <span class="control"><span class="button is-static">Microstep:</span></span>
                     <span class="control">
                         <span class="select">
@@ -386,6 +376,25 @@ layout: default
                     <span class="control">
                         <button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepsize }}">{% mdicon help-circle, .baseline, .inline %}</button>
                     </span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control">
+                        <span class="button is-label">
+                            <label class="is-switch-label" for="extstepclock-direction">Forward</label>
+                            <input class="switch" id="extstepclock-direction" type="checkbox" v-model="extstepclock.stepreverse" v-bind:disabled="!hiz" />
+                            <label class="is-switch-label" for="extstepclock-direction">Reverse</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepclockdir }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                </div>
+                <div class="field has-addons">
+                    <span class="control" style="margin-right: 0px;">
+                        <span class="button is-label">
+                            <input class="is-checkradio is-white" id="directionsw-enable" type="checkbox" v-model="extstepclock.directionsw" v-bind:disabled="!hiz" />
+                            <label class="is-checkradio-label" for="directionsw-enable">Direction on SW</label>
+                        </span>
+                    </span>
+                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_directionsw }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
@@ -412,6 +421,7 @@ layout: default
                 <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': flags.overcurrent}">Over Current</span></div>
                 <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': flags.undervoltage}">Under Voltage</span></div>
                 <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-warning': flags.thermalwarning, 'is-error': flags.thermalshutdown}">Thermal</span></div>
+                <div class="level-item" v-if="mode == 'voltage'"><span class="tag is-medium" v-bind:class="{'is-warning': flags.stalldetect}">Stall Detect</span></div>
             </div>
         </div>
         <div class="level-right">
@@ -425,8 +435,8 @@ layout: default
                     <span class="title is-5">{% mdicon settings %}Motor Configuration</span>
                 </div>
                 <div class="column is-one-third has-text-right">
-                    <input class="is-checkradio is-white" id="profile-enable" type="checkbox" v-model="preset.enable" />
-                    <label for="profile-enable"><strong>Enable Profile Presets</strong></label>
+                    <!--<input class="is-checkradio is-white" id="profile-enable" type="checkbox" v-model="preset.enable" />
+                    <label for="profile-enable"><strong>Enable Profile Presets</strong></label>-->
                 </div>
             </div>
         </div>
@@ -524,8 +534,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Hold:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="kthold" /></span>
-                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="kthold" /></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_kthold }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
@@ -536,8 +545,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Run:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="ktrun" /></span>
-                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktrun" /></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktrun }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
@@ -548,8 +556,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Accel:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="ktaccel" /></span>
-                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktaccel" /></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktaccel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
@@ -560,8 +567,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Decel:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.1" v-model="ktdecel" /></span>
-                                <span class="control"><span class="button is-static">%</span></span>
+                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktdecel" /></span>
                                 <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktdecel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
@@ -601,38 +607,179 @@ layout: default
                 </div>
             </div>
             <hr />
-            <div class="subtitle is-5" style="padding-left: 1rem;">Current Mode Settings:</div>
-            <div class="columns is-multiline">
-                <!-- Switching Period-->
-                <div class="column is-half">
-                    <div class="field is-horizontal">
-                        <div class="field-label is-normal"><label class="label">Switching Period:</label></div>
-                        <div class="field-body">
-                            <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="4" max="124" step="4" v-model="cm_switchperiod" /></span>
-                                <span class="control"><span class="button is-static">&mu;s</span></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_switchperiod }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+            <div v-if="advancedconfig">
+                <div class="title is-5" style="padding-left: 1rem;">Current Mode Settings:</div>
+                <div class="columns is-multiline">
+                    <!-- Switching Period-->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Switching Period:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="4" max="124" step="4" v-model="cm_switchperiod" /></span>
+                                    <span class="control"><span class="button is-static">&mu;s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_switchperiod }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current predict -->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label">&nbsp;</div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control">
+                                        <span class="button is-label">
+                                            <input class="is-checkradio is-white" id="cm_predict-enable" type="checkbox" v-model="cm_predict" />
+                                            <label class="is-checkradio-label" for="cm_predict-enable"><strong>Predictive Control</strong></label>
+                                        </span>
+                                    </span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_predict }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="subtitle is-5" style="padding-left: 1rem;">Charge Pump Timing:</div>
+                <div class="columns is-multiline">
+                    <!-- Control Times-->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Minimum On:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0.5" max="64" step="0.5" v-model="cm_minon" /></span>
+                                    <span class="control"><span class="button is-static">&mu;s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_minon }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Minimum Off:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0.5" max="64" step="0.5" v-model="cm_minoff" /></span>
+                                    <span class="control"><span class="button is-static">&mu;s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_minoff }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Fast Decay Off:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="2" max="2" step="32" v-model="cm_fastoff" /></span>
+                                    <span class="control"><span class="button is-static">&mu;s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_fastoff }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Fast Decay Step:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="2" max="2" step="32" v-model="cm_faststep" /></span>
+                                    <span class="control"><span class="button is-static">&mu;s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_faststep }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="title is-5" style="padding-left: 1rem;">Voltage Mode Settings:</div>
+                <div class="columns is-multiline">
+                    <!-- PWM Freqency-->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">PWM Frequency:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="5" max="70" step="1" v-model="vm_pwmfreq" /></span>
+                                    <span class="control"><span class="button is-static">kHz</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_pwmfreq }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stall Voltage -->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Stall Voltage:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="31.25" max="1000" step="31.25" v-model="vm_stall" /></span>
+                                    <span class="control"><span class="button is-static">mV</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_stall }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="subtitle is-5" style="padding-left: 1rem;">Back EMF Adjustment:</div>
+                <div class="columns is-multiline">
+                    <!-- Back EMF -->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Slow Slope:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0" max="0.4" step="0.0015" v-model="vm_bemf_slopel" /></span>
+                                    <span class="control"><span class="button is-static">% V / steps/s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_bemf_slopel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Slow/Fast Changeover:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0" max="1000" step="10" v-model="vm_bemf_speedco" /></span>
+                                    <span class="control"><span class="button is-static">steps/s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_bemf_speedco }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Fast Accel Slope:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0" max="0.4" step="0.0015" v-model="vm_bemf_slopehacc" /></span>
+                                    <span class="control"><span class="button is-static">% V / steps/s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_bemf_slopehacc }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Fast Decel Slope:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control"><input class="input" type="number" min="0" max="0.4" step="0.0015" v-model="vm_bemf_slopehdec" /></span>
+                                    <span class="control"><span class="button is-static">% V / steps/s</span></span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_bemf_slopehdec }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <hr />
-            <div class="subtitle is-5" style="padding-left: 1rem;">Voltage Mode Settings:</div>
-            <div class="columns is-multiline">
-                <!-- PWM Freqency-->
-                <div class="column is-half">
-                    <div class="field is-horizontal">
-                        <div class="field-label is-normal"><label class="label">PWM Frequency:</label></div>
-                        <div class="field-body">
-                            <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="5" max="70" step="1" v-model="vm_pwmfreq" /></span>
-                                <span class="control"><span class="button is-static">&mu;s</span></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_pwmfreq }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div v-else class="has-text-centered" style="cursor: pointer; font-weight: bold; padding: 10px; background-color: #444;" v-on:click="advancedconfig = true">
+                Show Advanced Settings
             </div>
             <hr />
             <div class="field is-grouped is-grouped-right">
@@ -667,7 +814,8 @@ layout: default
         </div>
         <div class="message-body" style="position: relative;">
 <pre style="display: none;" id="code-bash">{% raw %}
-# Using curl for network and jq for json parsing
+# ============= EXAMPLE CODE =============
+# Uses curl for network and jq for json parsing
 HOST="{{ browser.hostname }}.local"  # or "{{ wifi.ip }}"
 PROTOCOL="http"  # or https
 
@@ -692,24 +840,39 @@ KTACCEL="{{ ktaccel }}"
 KTDECEL="{{ ktdecel }}"
 FSSPEED="{{ fsspeed }}"
 FSBOOST="{{ fsboost }}"
-CM_SWITCHPERIOD="{{ cm_switchperiod }}"
-VM_PWMFREQ="{{ vm_pwmfreq }}"
 REVERSE="{{ reverse }}"
 SAVE_EEPROM="{{ save }}"
+
+# Advanced configuration settings
+CM_SWITCHPERIOD="{{ cm_switchperiod }}"
+CM_PREDICT="{{ cm_predict }}"
+CM_MINON="{{ cm_minon }}"
+CM_MINOFF="{{ cm_minoff }}"
+CM_FASTOFF="{{ cm_fastoff }}"
+CM_FASTSTEP="{{ cm_faststep }}"
+VM_PWMFREQ="{{ vm_pwmfreq }}"
+VM_STALL="{{ vm_stall }}"
+VM_BMEF_SLOPEL="{{ vm_bemf_slopel }}"
+VM_BMEF_SPEEDCO="{{ vm_bemf_speedco }}"
+VM_BMEF_SLOPEHACC="{{ vm_bemf_slopehacc }}"
+VM_BMEF_SLOPEHDEC="{{ vm_bemf_slopehdec }}"
+
 curl -sS "${PROTOCOL}://${HOST}/api/motor/set?\
 mode=${MODE}&stepsize=${STEPSIZE}&\
 ocd=${OCD}&ocdshutdown=${OCDSHUTDOWN}&\
 maxspeed=${MAXSPEED}&minspeed=${MINSPEED}&accel=${ACCEL}&decel=${DECEL}&\
 kthold=${KTHOLD}&ktrun=${KTRUN}&ktaccel=${KTACCEL}&ktdecel=${KTDECEL}&\
 fsspeed=${FSSPEED}&fsboost=${FSBOOST}&\
-cm_switchperiod=${CM_SWITCHPERIOD}&\
-vm_pwmfreq=${VM_PWMFREQ}&\
+cm_switchperiod=${CM_SWITCHPERIOD}&cm_predict=${CM_PREDICT}&\
+cm_minon=${CM_MINON}&cm_minoff=${CM_MINOFF}&cm_fastoff=${CM_FASTOFF}&cm_faststep=${CM_FASTSTEP}&\
+vm_pwmfreq=${VM_PWMFREQ}&vm_stall=${VM_STALL}&\
+vm_bmef_slopel=${VM_BMEF_SLOPEL}&vm_bmef_speedco=${VM_BMEF_SPEEDCO}&\
+vm_bmef_slopehacc=${VM_BMEF_SLOPEHACC}&vm_bmef_slopehdec=${VM_BMEF_SLOPEHDEC}&\
 reverse=${REVERSE}&save=${SAVE_EEPROM}" | jq
 
 # Read motor configuration
 curl -sS "${PROTOCOL}://${HOST}/api/motor/get" | jq
-# Returns object with keys: mode, stepsize, maxspeed, minspeed, accel, decel,
-#   kthold, ktrun, ktaccel, ktdecel, fsspeed, fsboost, reverse
+# Returns object with configuration map
 
 # Zero position
 curl -sS "${PROTOCOL}://${HOST}/api/motor/pos/reset" | jq
@@ -746,10 +909,15 @@ curl -sS "${PROTOCOL}://${HOST}/api/motor/state" | jq
 
 {% endraw %}</pre>
 <pre style="display: none;" id="code-python">{% raw %}
+#
+# This pre-release version DOES NOT have a working Python library
+# Code shown here is still under development and will be changed.
+#
+
 from goodrobotics import WSX100 as WifiStepper
 
 host = "{{ browser.hostname }}.local"  # or "{{ wifi.ip }}"
-protocol = WifiStepper.HTTP  # or HTTPS, CRYPTO
+protocol = WifiStepper.HTTP  # or HTTPS, CRYPTO, UDP
 username = None # Required when auth enabled
 password = None
 MOTOR = WifiStepper(host, protocol)
@@ -799,10 +967,16 @@ state = MOTOR.getState()
         </div>
     </div>
 </div>
-<script>
+<script minify>
     // Websocket
     var socket = (function() {
-        var sock = new WebSocket('{{ site.wsurl }}:81');
+        {% if jekyll.environment == 'production' or site.wsurl == '' %}
+            var wshref = 'ws://' + location.hostname + ':81';
+            if (location.protocol == 'https:') wshref = 'wss://' + location.hostname + ':444';
+            var sock = new WebSocket(wshref);
+        {% else %}
+            var sock = new WebSocket('{{ site.wsurl }}');
+        {% endif %}
         sock.binaryType = "arraybuffer";
         sock.onmessage = function(message) {
             var v = new DataView(message.data);
@@ -885,7 +1059,7 @@ state = MOTOR.getState()
                 size: 'nema-17',
                 voltage: 24
             },
-            mode: 'voltage',
+            mode: 'current',
             protocol: 'ws',
             flags: {
                 switch: false,
@@ -903,7 +1077,8 @@ state = MOTOR.getState()
                 stopswitch: false
             },
             extstepclock: {
-                stepreverse: false
+                stepreverse: false,
+                directionsw: false
             },
 
             setdirection: 'forward',
@@ -915,6 +1090,7 @@ state = MOTOR.getState()
             getangle: 0,
 
             initialload: false,
+            advancedconfig: false,
             stepsize: 1,
             ocd: 0,
             ocdshutdown: false,
@@ -929,7 +1105,17 @@ state = MOTOR.getState()
             fsspeed: 0,
             fsboost: false,
             cm_switchperiod: 0,
+            cm_predict: false,
+            cm_minon: 0,
+            cm_minoff: 0,
+            cm_fastoff: 0,
+            cm_faststep: 0,
             vm_pwmfreq: 0,
+            vm_stall: 0,
+            vm_bemf_slopel: 0,
+            vm_bemf_speedco: 0,
+            vm_bemf_slopehacc: 0,
+            vm_bemf_slopehdec: 0,
             save: true,
 
             reverse: false,
@@ -982,6 +1168,15 @@ state = MOTOR.getState()
             },
             reverse: function(newv) {
                 this.writemotor(['reverse'])
+            },
+            switch: function(newv) {
+                if (this.extstepclock.directionsw) {
+                    this.extstepclock.stepreverse = newv;
+
+                    if (this.profile == 'extstepclock' && !this.hiz) {
+                        this.writestepclock();
+                    }
+                }
             }
         },
         methods: {
@@ -1056,15 +1251,15 @@ state = MOTOR.getState()
                 axios.get("{{ site.apiurl }}/api/motor/get", {params: {cached: cached}}).then(function (r) {
                     if (r.data.status == 'ok') {
                         merge(r.data, app,
-                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'vm_pwmfreq', 'reverse'],
-                            [null, null, 20, null, 20, 20, 10, 10, 0.01, 0.01, 0.01, 0.01, 20, null, 4, 0.01, null]
+                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
+                            [null, null, 20, null, 20, 20, 10, 10, 0.01, 0.01, 0.01, 0.01, 20, null, 4, null, 0.5, 0.5, 2, 2, 0.15, 0.5, 0.0015, 0.05, 0.0015, 0.0015, null]
                         );
                         app.initialload = true;
                     }
                 });
             },
             writemotor: function(keys) {
-                keys = keys || ['maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'cm_switchperiod', 'vm_pwmfreq', 'fsboost'];
+                keys = keys || ['ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
                 var params = {};
                 merge(this, params, keys.concat(['save']));
                 axios.get("{{ site.apiurl }}/api/motor/set", {params: params});
