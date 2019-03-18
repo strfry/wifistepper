@@ -254,6 +254,7 @@ void ps_spiinit();
 
 typedef void (*ps_waitcb)(void);
 ps_status ps_getstatus(bool clear_errors =false);
+bool ps_isbusy();
 void ps_waitbusy(ps_waitcb waitf =NULL);
 
 void ps_reset();

@@ -226,6 +226,12 @@ ps_status ps_getstatus(bool clear_errors) {
   };
 }
 
+bool ps_isbusy() {
+  ps_status_reg reg = {};
+  ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+  return !reg.busy;
+}
+
 void ps_waitbusy(ps_waitcb waitf) {
   ps_status_reg reg = {};
   while (true) {
@@ -776,8 +782,8 @@ float ps_getspeed() {
   return (float)ps_get24(buf) * SPEED_COEFF;
 }
 
-void ps_run(ps_direction dir, float speed) {
-  uint32_t spd = (uint32_t)round(constrain(speed, 0.0, SPEED_MAX) / SPEED_COEFF);
+void ps_run(ps_direction dir, float stepss) {
+  uint32_t spd = (uint32_t)round(constrain(stepss, 0.0, SPEED_MAX) / SPEED_COEFF);
   uint8_t buf[3] = {};
   ps_set24(spd, buf);
   ps_xfer("run", CMD_RUN(dir), buf, 3);
