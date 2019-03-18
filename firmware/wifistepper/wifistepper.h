@@ -13,7 +13,7 @@
 #define MOTOR_CLOCK       (CLK_INT16)
 
 #define FNAME_WIFICFG     "/wificfg.json"
-#define FNAME_BROWSERCFG  "/browsercfg.json"
+#define FNAME_SERVICECFG  "/servicecfg.json"
 #define FNAME_MOTORCFG    "/motorcfg.json"
 
 #define PORT_HTTP     80
@@ -25,6 +25,7 @@
 #define LEN_SSID      32
 #define LEN_PASSWORD  64
 #define LEN_IP        16
+#define LEN_ID        2
 
 #define TIME_MQTT_RECONNECT   30000
 
@@ -48,20 +49,6 @@ typedef enum {
   WS_POS = 0x31,
 } ws_opcode;
 
-
-typedef struct {
-  bool enabled;
-  char server[LEN_URL];
-  int port;
-  char username[LEN_USERNAME];
-  char key[LEN_PASSWORD];
-  
-  char endpoint_state[LEN_URL];
-  char endpoint_command[LEN_URL];
-
-  unsigned long period_state;
-} mqtt_config;
-
 typedef struct {
   wifi_mode mode;
   char ap_ssid[LEN_SSID];
@@ -80,6 +67,28 @@ typedef struct {
 } wifi_config;
 
 typedef struct {
+  bool enabled;
+  bool master;
+  char id[LEN_ID];
+  unsigned int baudrate;
+} daisy_config;
+
+typedef struct {
+  bool enabled;
+  bool secure;    // Not supported yet.
+  char server[LEN_URL];
+  int port;
+  char username[LEN_USERNAME];
+  char key[LEN_PASSWORD];
+
+  char topic_status[LEN_URL];
+  char topic_state[LEN_URL];
+  char topic_command[LEN_URL];
+
+  unsigned long period_state;
+} mqtt_config;
+
+typedef struct {
   char hostname[LEN_HOSTNAME];
   bool http_enabled;
   bool https_enabled;
@@ -89,8 +98,9 @@ typedef struct {
   char auth_password[LEN_PASSWORD];
   bool ota_enabled;
   char ota_password[LEN_PASSWORD];
+  daisy_config daisycfg;
   mqtt_config mqttcfg;
-} browser_config;
+} service_config;
 
 typedef struct {
   ps_mode mode;
@@ -123,9 +133,26 @@ typedef struct {
   bool busy;
 } motor_state;
 
+typedef struct {
+  int mqtt_connected;
+  int mqtt_status;
+} service_state;
+
+void cmd_init();
+bool cmd_loop();
+void cmd_put(uint8_t * data, size_t len);
+void cmd_run(ps_direction dir, float stepss, bool stopswitch = false);
+void cmd_goto(int32_t pos);
+void cmd_goto(int32_t pos, ps_direction dir);
+void cmd_stepclock(ps_direction dir);
+void cmd_stop(bool soft);
+void cmd_hiz(bool soft);
+
+void daisy_init();
+void daisy_loop();
 
 void wificfg_save();
-void browsercfg_save();
+void servicecfg_save();
 
 void motorcfg_read();
 void motorcfg_update();
@@ -140,7 +167,7 @@ void mqtt_loop(unsigned long looptime);
 
 // Utility functions
 extern wifi_config wificfg;
-extern browser_config browsercfg;
+extern service_config servicecfg;
 extern motor_config motorcfg;
 
 static inline ps_direction motorcfg_dir(ps_direction d) {

@@ -4,7 +4,7 @@
 
 extern WebSocketsServer websocket;
 
-extern motor_state statecache;
+extern volatile motor_state motorst;
 
 
 typedef union {
@@ -85,10 +85,10 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
         case WS_READSTATE: {
           uint8_t buf[1+4+4+4+1] = {0};
           buf[0] = WS_READSTATE;
-          ws_packint(motorcfg_pos(statecache.pos), &buf[1]);
-          ws_packint(motorcfg_pos(statecache.mark), &buf[1+4]);
-          ws_packfloat(statecache.stepss, &buf[1+4+4]);
-          buf[1+4+4+4] = statecache.busy? 0x1 : 0x0;
+          ws_packint(motorcfg_pos(motorst.pos), &buf[1]);
+          ws_packint(motorcfg_pos(motorst.mark), &buf[1+4]);
+          ws_packfloat(motorst.stepss, &buf[1+4+4]);
+          buf[1+4+4+4] = motorst.busy? 0x1 : 0x0;
           websocket.sendBIN(num, buf, sizeof(buf));
           break;
         }
@@ -98,9 +98,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDSTOP length");
             return;
           }
-          
-          if (data[1])  ps_softstop();
-          else          ps_hardstop();
+          cmd_stop(data[1]);
           break;
         }
 
@@ -109,9 +107,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDHIZ length");
             return;
           }
-          
-          if (data[1])  ps_softhiz();
-          else          ps_hardhiz();
+          cmd_hiz(data[1]);
           break;
         }
 
@@ -120,9 +116,8 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDGOTO length");
             return;
           }
-
           int32_t pos = ws_buf2int(&data[1]);
-          ps_goto(motorcfg_pos(pos));
+          cmd_goto(pos);
           break;
         }
 
@@ -131,15 +126,15 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDRUN length");
             return;
           }
-          
           ps_direction dir = data[1] == 'r'? REV : FWD;
           float stepss = ws_buf2float(&data[2]);
           bool stopswitch = data[6] == 0x1;
-          if (stopswitch) {
+          cmd_run(dir, stepss, stopswitch);
+          /*if (stopswitch) {
             ps_gountil(POS_RESET, motorcfg_dir(dir), stepss);
           } else {
             ps_run(motorcfg_dir(dir), stepss);
-          }
+          }*/
           break;
         }
 
@@ -148,9 +143,8 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad STEPCLOCK length");
             return;
           }
-
           ps_direction dir = data[1] == 'r'? REV : FWD;
-          ps_stepclock(motorcfg_dir(dir));
+          cmd_stepclock(dir);
           break;
         }
 
@@ -159,7 +153,6 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad POS length");
             return;
           }
-
           int pos = ws_buf2int(&data[1]);
           if (pos == 0)   ps_resetpos();
           else            ps_setpos(pos);

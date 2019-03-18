@@ -9,7 +9,7 @@ extern StaticJsonBuffer<2048> jsonbuf;
 
 extern volatile bool flag_reboot;
 
-extern motor_state statecache;
+extern volatile motor_state motorst;
 
 
 #define json_ok()         "{\"status\":\"ok\"}"
@@ -107,15 +107,15 @@ void jsonbrowser_init() {
   server.on("/api/browser/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["hostname"] = browsercfg.hostname;
-    root["http_enabled"] = browsercfg.http_enabled;
-    root["https_enabled"] = browsercfg.https_enabled;
-    root["mdns_enabled"] = browsercfg.mdns_enabled;
-    root["auth_enabled"] = browsercfg.auth_enabled;
-    root["auth_username"] = browsercfg.auth_username;
-    root["auth_password"] = browsercfg.auth_password;
-    root["ota_enabled"] = browsercfg.ota_enabled;
-    root["ota_password"] = browsercfg.ota_password;
+    root["hostname"] = servicecfg.hostname;
+    root["http_enabled"] = servicecfg.http_enabled;
+    root["https_enabled"] = servicecfg.https_enabled;
+    root["mdns_enabled"] = servicecfg.mdns_enabled;
+    root["auth_enabled"] = servicecfg.auth_enabled;
+    root["auth_username"] = servicecfg.auth_username;
+    root["auth_password"] = servicecfg.auth_password;
+    root["ota_enabled"] = servicecfg.ota_enabled;
+    root["ota_password"] = servicecfg.ota_password;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -123,16 +123,16 @@ void jsonbrowser_init() {
   });
   server.on("/api/browser/set", [](){
     json_addheaders();
-    if (server.hasArg("hostname"))      strlcpy(browsercfg.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
-    if (server.hasArg("http_enabled"))  browsercfg.http_enabled = server.arg("http_enabled") == "true";
-    if (server.hasArg("https_enabled")) browsercfg.https_enabled = server.arg("https_enabled") == "true";
-    if (server.hasArg("mdns_enabled"))  browsercfg.mdns_enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("auth_enabled"))  browsercfg.auth_enabled = server.arg("auth_enabled") == "true";
-    if (server.hasArg("auth_username")) strlcpy(browsercfg.auth_username, server.arg("auth_username").c_str(), LEN_USERNAME);
-    if (server.hasArg("auth_password")) strlcpy(browsercfg.auth_password, server.arg("auth_password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ota_enabled"))   browsercfg.ota_enabled = server.arg("ota_enabled") == "true";
-    if (server.hasArg("ota_password"))  strlcpy(browsercfg.ota_password, server.arg("ota_password").c_str(), LEN_PASSWORD);
-    browsercfg_save();
+    if (server.hasArg("hostname"))      strlcpy(servicecfg.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
+    if (server.hasArg("http_enabled"))  servicecfg.http_enabled = server.arg("http_enabled") == "true";
+    if (server.hasArg("https_enabled")) servicecfg.https_enabled = server.arg("https_enabled") == "true";
+    if (server.hasArg("mdns_enabled"))  servicecfg.mdns_enabled = server.arg("mdns_enabled") == "true";
+    if (server.hasArg("auth_enabled"))  servicecfg.auth_enabled = server.arg("auth_enabled") == "true";
+    if (server.hasArg("auth_username")) strlcpy(servicecfg.auth_username, server.arg("auth_username").c_str(), LEN_USERNAME);
+    if (server.hasArg("auth_password")) strlcpy(servicecfg.auth_password, server.arg("auth_password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("ota_enabled"))   servicecfg.ota_enabled = server.arg("ota_enabled") == "true";
+    if (server.hasArg("ota_password"))  strlcpy(servicecfg.ota_password, server.arg("ota_password").c_str(), LEN_PASSWORD);
+    servicecfg_save();
     flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
     server.send(200, "application/json", json_ok());
   });
@@ -255,10 +255,10 @@ void jsonmotor_init() {
   server.on("/api/motor/state", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["position"] = motorcfg_pos(statecache.pos);
-    root["mark"] = motorcfg_pos(statecache.mark);
-    root["stepss"] = statecache.stepss;
-    root["busy"] = statecache.busy;
+    root["position"] = motorcfg_pos(motorst.pos);
+    root["mark"] = motorcfg_pos(motorst.mark);
+    root["stepss"] = motorst.stepss;
+    root["busy"] = motorst.busy;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -314,11 +314,7 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional stopswitch"));
       return;
     }
-    if (server.hasArg("stopswitch") && server.arg("stopswitch") == "true") {
-      ps_gountil(POS_RESET, motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
-    } else {
-      ps_run(motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
-    }
+    cmd_run(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat(), server.hasArg("stopswitch") && server.arg("stopswitch") == "true");
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/goto", [](){
@@ -327,11 +323,7 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    if (server.hasArg("direction")) {
-      ps_goto(motorcfg_pos(server.arg("position").toInt()), motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
-    } else {
-      ps_goto(motorcfg_pos(server.arg("position").toInt()));
-    }
+    cmd_goto(server.arg("position").toInt(), parse_direction(server.arg("direction"), FWD));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/stepclock", [](){
@@ -340,25 +332,17 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("direction arg must be specified"));
       return;
     }
-    ps_stepclock(motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
+    cmd_stepclock(parse_direction(server.arg("direction"), FWD));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/stop", [](){
     json_addheaders();
-    if (server.hasArg("soft") && server.arg("soft") == "true") {
-      ps_softstop();
-    } else {
-      ps_hardstop();
-    }
+    cmd_stop(server.hasArg("soft") && server.arg("soft") == "true");
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/hiz", [](){
     json_addheaders();
-    if (server.hasArg("soft") && server.arg("soft") == "true") {
-      ps_softhiz();
-    } else {
-      ps_hardhiz();
-    }
+    cmd_hiz(server.hasArg("soft") && server.arg("soft") == "true");
     server.send(200, "application/json", json_ok());
   });
 }
@@ -384,7 +368,7 @@ void json_init() {
   server.on("/api/factoryreset", [](){
     json_addheaders();
     SPIFFS.remove(FNAME_WIFICFG);
-    SPIFFS.remove(FNAME_BROWSERCFG);
+    SPIFFS.remove(FNAME_SERVICECFG);
     SPIFFS.remove(FNAME_MOTORCFG);
     flag_reboot = true;
     server.send(200, "application/json", json_ok());

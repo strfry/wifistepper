@@ -16,18 +16,22 @@
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
 
+#define HANDLE_CMDS() ({ while(cmd_loop()); })
+
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
-WiFiClient mqtt_conn;
-PubSubClient mqtt_client(mqtt_conn);
+WiFiClient * mqtt_conn = NULL;
+PubSubClient * mqtt_client = NULL;
 
 StaticJsonBuffer<2048> jsonbuf;
 StaticJsonBuffer<1024> configbuf;
 
 volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
+volatile bool flag_cmderror = false;
 
-motor_state statecache = { 0 };
+volatile motor_state motorst = { 0 };
+volatile service_state servicest = { 0 };
 
 wifi_config wificfg = {
   .mode = M_ACCESSPOINT,
@@ -46,7 +50,7 @@ wifi_config wificfg = {
   .ip = {0}
 };
 
-browser_config browsercfg = {
+service_config servicecfg = {
   .hostname = {'w','s','x','1','0','0',0},
   .http_enabled = true,
   .https_enabled = false,
@@ -56,14 +60,24 @@ browser_config browsercfg = {
   .auth_password = {0},
   .ota_enabled = true,
   .ota_password = {0},
-  .mqttcfg = {
+  .daisycfg = {
     .enabled = true,
+    .master = false,
+    .id = {0, 0},
+    .baudrate = 1000000
+  },
+  .mqttcfg = {
+    .enabled = false,
+    .secure = false,
+    //.secure = true,
     .server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
     .port = 1883,
+    //.port = 8883,
     .username = {'a','k','l','o','f','a','s',0},
     .key = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
-    .endpoint_state = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','t','e','s','t','1',0},
-    .endpoint_command = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','t','e','s','t','2',0},
+    .topic_status = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','u','s',0},
+    .topic_state = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
+    .topic_command = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0},
     .period_state = 2000
   }
 };
@@ -122,19 +136,19 @@ void wificfg_save() {
   jsonbuf.clear();
 }
 
-void browsercfg_save() {
+void servicecfg_save() {
   JsonObject& root = jsonbuf.createObject();
-  root["hostname"] = browsercfg.hostname;
-  root["http_enabled"] = browsercfg.http_enabled;
-  root["https_enabled"] = browsercfg.https_enabled;
-  root["mdns_enabled"] = browsercfg.mdns_enabled;
-  root["auth_enabled"] = browsercfg.auth_enabled;
-  root["auth_username"] = browsercfg.auth_username;
-  root["auth_password"] = browsercfg.auth_password;
-  root["ota_enabled"] = browsercfg.ota_enabled;
-  root["ota_password"] = browsercfg.ota_password;
+  root["hostname"] = servicecfg.hostname;
+  root["http_enabled"] = servicecfg.http_enabled;
+  root["https_enabled"] = servicecfg.https_enabled;
+  root["mdns_enabled"] = servicecfg.mdns_enabled;
+  root["auth_enabled"] = servicecfg.auth_enabled;
+  root["auth_username"] = servicecfg.auth_username;
+  root["auth_password"] = servicecfg.auth_password;
+  root["ota_enabled"] = servicecfg.ota_enabled;
+  root["ota_password"] = servicecfg.ota_password;
   JsonVariant v = root;
-  File cfg = SPIFFS.open(FNAME_BROWSERCFG, "w");
+  File cfg = SPIFFS.open(FNAME_SERVICECFG, "w");
   root.printTo(cfg);
   cfg.close();
   jsonbuf.clear();
@@ -288,7 +302,11 @@ void static_init() {
 
 
 void setup() {
-  Serial.begin(115200);
+  // Initialize early subsystems
+  {
+    cmd_init();
+    daisy_init();
+  }
 
   // Initialize FS
   {
@@ -303,7 +321,7 @@ void setup() {
       // Reset chosen
       Serial.println("Configuration Reset");
       SPIFFS.remove(FNAME_WIFICFG);
-      SPIFFS.remove(FNAME_BROWSERCFG);
+      SPIFFS.remove(FNAME_SERVICECFG);
       SPIFFS.remove(FNAME_MOTORCFG);
 
       // Wait for reset to depress
@@ -341,21 +359,21 @@ void setup() {
 
   // Read browser configuration
   {
-    File fp = SPIFFS.open(FNAME_BROWSERCFG, "r");
+    File fp = SPIFFS.open(FNAME_SERVICECFG, "r");
     if (fp) {
       size_t size = fp.size();
       std::unique_ptr<char[]> buf(new char[size]);
       fp.readBytes(buf.get(), size);
       JsonObject& root = jsonbuf.parseObject(buf.get());
-      if (root.containsKey("hostname"))       strlcpy(browsercfg.hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
-      if (root.containsKey("http_enabled"))   browsercfg.http_enabled = root["http_enabled"].as<bool>();
-      if (root.containsKey("https_enabled"))  browsercfg.https_enabled = root["https_enabled"].as<bool>();
-      if (root.containsKey("mdns_enabled"))   browsercfg.mdns_enabled = root["mdns_enabled"].as<bool>();
-      if (root.containsKey("auth_enabled"))   browsercfg.auth_enabled = root["auth_enabled"].as<bool>();
-      if (root.containsKey("auth_username"))  strlcpy(browsercfg.auth_username, root["auth_username"].as<char *>(), LEN_USERNAME);
-      if (root.containsKey("auth_password"))  strlcpy(browsercfg.auth_password, root["auth_password"].as<char *>(), LEN_PASSWORD);
-      if (root.containsKey("ota_enabled"))    browsercfg.ota_enabled = root["ota_enabled"].as<bool>();
-      if (root.containsKey("ota_password"))   strlcpy(browsercfg.ota_password, root["ota_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("hostname"))       strlcpy(servicecfg.hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
+      if (root.containsKey("http_enabled"))   servicecfg.http_enabled = root["http_enabled"].as<bool>();
+      if (root.containsKey("https_enabled"))  servicecfg.https_enabled = root["https_enabled"].as<bool>();
+      if (root.containsKey("mdns_enabled"))   servicecfg.mdns_enabled = root["mdns_enabled"].as<bool>();
+      if (root.containsKey("auth_enabled"))   servicecfg.auth_enabled = root["auth_enabled"].as<bool>();
+      if (root.containsKey("auth_username"))  strlcpy(servicecfg.auth_username, root["auth_username"].as<char *>(), LEN_USERNAME);
+      if (root.containsKey("auth_password"))  strlcpy(servicecfg.auth_password, root["auth_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("ota_enabled"))    servicecfg.ota_enabled = root["ota_enabled"].as<bool>();
+      if (root.containsKey("ota_password"))   strlcpy(servicecfg.ota_password, root["ota_password"].as<char *>(), LEN_PASSWORD);
       jsonbuf.clear();
       fp.close();
     }
@@ -366,8 +384,8 @@ void setup() {
     pinMode(WIFI_PIN, OUTPUT);
     digitalWrite(WIFI_PIN, HIGH);
     
-    if (browsercfg.mdns_enabled)
-      WiFi.hostname(browsercfg.hostname);
+    if (servicecfg.mdns_enabled)
+      WiFi.hostname(servicecfg.hostname);
     
     if (wificfg.mode == M_STATION) {
       Serial.println("Station Mode");
@@ -420,27 +438,27 @@ void setup() {
 
   // Initialize web services
   {
-    if (browsercfg.mdns_enabled) {
-      if (!MDNS.begin(browsercfg.hostname)) {
+    if (servicecfg.mdns_enabled) {
+      if (!MDNS.begin(servicecfg.hostname)) {
         Serial.println("Error: Could not start mDNS.");
       }
     }
 
-    if (browsercfg.ota_enabled) {
-      ArduinoOTA.setHostname(browsercfg.hostname);
-      if (browsercfg.ota_password[0] != 0)
-        ArduinoOTA.setPassword(browsercfg.ota_password);
+    if (servicecfg.ota_enabled) {
+      ArduinoOTA.setHostname(servicecfg.hostname);
+      if (servicecfg.ota_password[0] != 0)
+        ArduinoOTA.setPassword(servicecfg.ota_password);
       ArduinoOTA.begin();
     }
 
-    if (browsercfg.http_enabled) {
+    if (servicecfg.http_enabled) {
       json_init();
       static_init();
       server.begin();
       websocket_init();
     }
 
-    if (browsercfg.mqttcfg.enabled) {
+    if (servicecfg.mqttcfg.enabled) {
       mqtt_init();
     }
   }
@@ -499,36 +517,48 @@ void setup() {
 
 static volatile unsigned long last_statepoll = 0;
 void loop() {
+  HANDLE_CMDS();
+  
   unsigned long now = millis();
   if ((now - last_statepoll) > 10) {
     ps_status status = ps_getstatus();
-    statecache.pos = ps_getpos();
-    statecache.mark = ps_getmark();
-    statecache.stepss = ps_getspeed();
-    statecache.busy = status.busy;
+    motorst.pos = ps_getpos();
+    motorst.mark = ps_getmark();
+    motorst.stepss = ps_getspeed();
+    motorst.busy = status.busy;
     last_statepoll = now;
   }
 
-  if (wificfg.mode == M_ACCESSPOINT) {
-    bool isoff = ((now / 200) % 20) == 1;
-    digitalWrite(WIFI_PIN, isoff? HIGH : LOW);
+  if (servicecfg.daisycfg.enabled) {
+    daisy_loop();
   }
 
-  if (browsercfg.http_enabled) {
+  HANDLE_CMDS();
+
+  if (servicecfg.http_enabled) {
     websocket.loop();
     server.handleClient();
   }
 
-  if (browsercfg.mqttcfg.enabled) {
+  HANDLE_CMDS();
+
+  if (servicecfg.mqttcfg.enabled) {
     mqtt_loop(now);
   }
 
-  if (browsercfg.ota_enabled) {
+  HANDLE_CMDS();
+
+  if (servicecfg.ota_enabled) {
     ArduinoOTA.handle();
   }
 
   // Reboot if requested
   if (flag_reboot)
     ESP.restart();
+
+  if (wificfg.mode == M_ACCESSPOINT) {
+    bool isoff = ((now / 200) % 20) == 1;
+    digitalWrite(WIFI_PIN, isoff? HIGH : LOW);
+  }
 }
 
