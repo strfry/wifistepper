@@ -10,6 +10,19 @@
 #define CMD_PING        (0x0)
 #define CMD_SIZE        (1)
 
+
+typedef union {
+  uint8_t b[4];
+  float f32;
+  int32_t i32;
+} bc4_t;
+
+static inline float b_buf2float(uint8_t * b) {bbc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.f32; }
+static inline void b_packfloat(float f, uint8_t * b) { bc4_t c; c.f32 = f; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
+static inline int b_buf2int(uint8_t * b) { bc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.i32; }
+static inline void b_packint(int i, uint8_t * b) { bc4_t c; c.i32 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
+
+
 uint8_t B[B_SIZE] = {0};
 volatile size_t Blen = 0;
 
@@ -25,6 +38,8 @@ void daisy_init() {
   Serial.begin(servicecfg.daisycfg.baudrate);
   
 }
+
+#define parse_cont()
 
 void daisy_loop() {
   Blen += Serial.read((char *)&B[Blen], B_SIZE - Blen);
@@ -57,7 +72,7 @@ void daisy_loop() {
       memmove(B, &B[i], Blen - i);
       Blen -= i;
     }
-  
+
     // Ensure length of header
     if (Blen < B_HEADER) return;
 
@@ -88,7 +103,9 @@ void daisy_loop() {
     }
 
     // Consume packet
+    
 
+    // Clear packet from buffer
     memmove(B, &B[B_HEADER + len], Blen - (B_HEADER + len));
     Blen -= B_HEADER + len;
   }

@@ -128,6 +128,12 @@ typedef struct {
 } motor_config;
 
 typedef struct {
+  uint32_t this_command;
+  uint32_t last_command;
+  unsigned int last_completed;
+} command_state;
+
+typedef struct {
   int pos, mark;
   float stepss;
   bool busy;
@@ -140,10 +146,11 @@ typedef struct {
 
 void cmd_init();
 bool cmd_loop();
-void cmd_put(uint8_t * data, size_t len);
-void cmd_run(ps_direction dir, float stepss, bool stopswitch = false);
-void cmd_goto(int32_t pos);
-void cmd_goto(int32_t pos, ps_direction dir);
+//void cmd_put(uint8_t * data, size_t len);
+void cmd_run(ps_direction dir, float stepss);
+void cmd_limit(ps_direction dir, float stepss, bool savemark = false);
+void cmd_home(ps_direction dir, bool savemark = false);
+void cmd_goto(int32_t pos, ps_direction dir = 0xFF);
 void cmd_stepclock(ps_direction dir);
 void cmd_stop(bool soft);
 void cmd_hiz(bool soft);
@@ -178,7 +185,7 @@ static inline ps_direction motorcfg_dir(ps_direction d) {
   }
 }
 
-static inline int motorcfg_pos(int p) {
+static inline int motorcfg_pos(int32_t p) {
   return motorcfg.reverse? -p : p;
 }
 

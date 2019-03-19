@@ -16,7 +16,7 @@
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
 
-#define HANDLE_CMDS() ({ while(cmd_loop()); })
+#define HANDLE_CMDS() ({ cmd_loop(); })
 
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
@@ -30,6 +30,7 @@ volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
 volatile bool flag_cmderror = false;
 
+volatile command_state commandst = { 0 };
 volatile motor_state motorst = { 0 };
 volatile service_state servicest = { 0 };
 

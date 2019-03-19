@@ -257,6 +257,9 @@ ps_status ps_getstatus(bool clear_errors =false);
 bool ps_isbusy();
 void ps_waitbusy(ps_waitcb waitf =NULL);
 
+bool ps_isrunning();
+bool ps_ishiz();
+
 void ps_reset();
 void ps_nop();
 
