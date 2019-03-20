@@ -196,37 +196,38 @@ void jsonmotor_init() {
   });
   server.on("/api/motor/set", [](){
     json_addheaders();
-    if (server.hasArg("mode"))      motorcfg.mode = parse_motormode(server.arg("mode"), motorcfg.mode);
-    if (server.hasArg("stepsize"))  motorcfg.stepsize = parse_stepsize(server.arg("stepsize").toInt(), motorcfg.stepsize);
-    if (server.hasArg("ocd"))       motorcfg.ocd = server.arg("ocd").toFloat();
-    if (server.hasArg("ocdshutdown")) motorcfg.ocdshutdown = server.arg("ocdshutdown") == "true";
-    if (server.hasArg("maxspeed"))  motorcfg.maxspeed = server.arg("maxspeed").toFloat();
-    if (server.hasArg("minspeed"))  motorcfg.minspeed = server.arg("minspeed").toFloat();
-    if (server.hasArg("accel"))     motorcfg.accel = server.arg("accel").toFloat();
-    if (server.hasArg("decel"))     motorcfg.decel = server.arg("decel").toFloat();
-    if (server.hasArg("kthold"))    motorcfg.kthold = server.arg("kthold").toFloat();
-    if (server.hasArg("ktrun"))     motorcfg.ktrun = server.arg("ktrun").toFloat();
-    if (server.hasArg("ktaccel"))   motorcfg.ktaccel = server.arg("ktaccel").toFloat();
-    if (server.hasArg("ktdecel"))   motorcfg.ktdecel = server.arg("ktdecel").toFloat();
-    if (server.hasArg("fsspeed"))   motorcfg.fsspeed = server.arg("fsspeed").toFloat();
-    if (server.hasArg("fsboost"))   motorcfg.fsboost = server.arg("fsboost") == "true";
-    if (server.hasArg("cm_switchperiod")) motorcfg.cm_switchperiod = server.arg("cm_switchperiod").toFloat();
-    if (server.hasArg("cm_predict")) motorcfg.cm_predict = server.arg("cm_predict") == "true";
-    if (server.hasArg("cm_minon"))  motorcfg.cm_minon = server.arg("cm_minon").toFloat();
-    if (server.hasArg("cm_minoff")) motorcfg.cm_minoff = server.arg("cm_minoff").toFloat();
-    if (server.hasArg("cm_fastoff")) motorcfg.cm_fastoff = server.arg("cm_fastoff").toFloat();
-    if (server.hasArg("cm_faststep")) motorcfg.cm_faststep = server.arg("cm_faststep").toFloat();
-    if (server.hasArg("vm_pwmfreq")) motorcfg.vm_pwmfreq = server.arg("vm_pwmfreq").toFloat();
-    if (server.hasArg("vm_stall"))  motorcfg.vm_stall = server.arg("vm_stall").toFloat();
-    if (server.hasArg("vm_bemf_slopel")) motorcfg.vm_bemf_slopel = server.arg("vm_bemf_slopel").toFloat();
-    if (server.hasArg("vm_bemf_speedco")) motorcfg.vm_bemf_speedco = server.arg("vm_bemf_speedco").toFloat();
-    if (server.hasArg("vm_bemf_slopehacc")) motorcfg.vm_bemf_slopehacc = server.arg("vm_bemf_slopehacc").toFloat();
-    if (server.hasArg("vm_bemf_slopehdec")) motorcfg.vm_bemf_slopehdec = server.arg("vm_bemf_slopehdec").toFloat();
-    if (server.hasArg("reverse"))   motorcfg.reverse = server.arg("reverse") == "true";
-    motorcfg_update();
-    if (server.hasArg("save") && server.arg("save") == "true") {
-      motorcfg_save();
-    }
+    JsonObject& root = jsonbuf.createObject();
+    if (server.hasArg("mode"))      root["mode"] = server.arg("mode");
+    if (server.hasArg("stepsize"))  root["stepsize"] = server.arg("stepsize").toInt();
+    if (server.hasArg("ocd"))       root["ocd"] = server.arg("ocd").toFloat();
+    if (server.hasArg("ocdshutdown")) root["ocdshutdown"] = server.arg("ocdshutdown") == "true";
+    if (server.hasArg("maxspeed"))  root["maxspeed"] = server.arg("maxspeed").toFloat();
+    if (server.hasArg("minspeed"))  root["minspeed"] = server.arg("minspeed").toFloat();
+    if (server.hasArg("accel"))     root["accel"] = server.arg("accel").toFloat();
+    if (server.hasArg("decel"))     root["decel"] = server.arg("decel").toFloat();
+    if (server.hasArg("kthold"))    root["kthold"] = server.arg("kthold").toFloat();
+    if (server.hasArg("ktrun"))     root["ktrun"] = server.arg("ktrun").toFloat();
+    if (server.hasArg("ktaccel"))   root["ktaccel"] = server.arg("ktaccel").toFloat();
+    if (server.hasArg("ktdecel"))   root["ktdecel"] = server.arg("ktdecel").toFloat();
+    if (server.hasArg("fsspeed"))   root["fsspeed"] = server.arg("fsspeed").toFloat();
+    if (server.hasArg("fsboost"))   root["fsboost"] = server.arg("fsboost") == "true";
+    if (server.hasArg("cm_switchperiod")) root["cm_switchperiod"] = server.arg("cm_switchperiod").toFloat();
+    if (server.hasArg("cm_predict")) root["cm_predict"] = server.arg("cm_predict") == "true";
+    if (server.hasArg("cm_minon"))  root["cm_minon"] = server.arg("cm_minon").toFloat();
+    if (server.hasArg("cm_minoff")) root["cm_minoff"] = server.arg("cm_minoff").toFloat();
+    if (server.hasArg("cm_fastoff")) root["cm_fastoff"] = server.arg("cm_fastoff").toFloat();
+    if (server.hasArg("cm_faststep")) root["cm_faststep"] = server.arg("cm_faststep").toFloat();
+    if (server.hasArg("vm_pwmfreq")) root["vm_pwmfreq"] = server.arg("vm_pwmfreq").toFloat();
+    if (server.hasArg("vm_stall"))  root["vm_stall"] = server.arg("vm_stall").toFloat();
+    if (server.hasArg("vm_bemf_slopel")) root["vm_bemf_slopel"] = server.arg("vm_bemf_slopel").toFloat();
+    if (server.hasArg("vm_bemf_speedco")) root["vm_bemf_speedco"] = server.arg("vm_bemf_speedco").toFloat();
+    if (server.hasArg("vm_bemf_slopehacc")) root["vm_bemf_slopehacc"] = server.arg("vm_bemf_slopehacc").toFloat();
+    if (server.hasArg("vm_bemf_slopehdec")) root["vm_bemf_slopehdec"] = server.arg("vm_bemf_slopehdec").toFloat();
+    if (server.hasArg("reverse"))   root["reverse"] = server.arg("reverse") == "true";
+    if (server.hasArg("save"))      root["save"] = server.arg("save") == "true";
+    JsonVariant v = root;
+    cmd_setconfig(nextid(), v.as<String>().c_str());
+    jsonbuf.clear();
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/status", [](){
@@ -314,16 +315,7 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("stepss, direction args must be specified."));
       return;
     }
-    cmd_run(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat());
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/limit", [](){
-    json_addheaders();
-    if (!server.hasArg("stepss") || !server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional savemark"));
-      return;
-    }
-    cmd_limit(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat(), server.hasArg("savemark") && server.arg("savemark") == "true");
+    cmd_run(nextid(), parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat());
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/goto", [](){
@@ -332,7 +324,8 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    cmd_goto(server.arg("position").toInt(), parse_direction(server.arg("direction"), FWD));
+    if (!server.hasArg("direction")) cmd_goto(nextid(), server.arg("position").toInt());
+    else cmd_goto(nextid(), server.arg("position").toInt(), parse_direction(server.arg("direction"), FWD));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/stepclock", [](){
@@ -341,17 +334,17 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("direction arg must be specified"));
       return;
     }
-    cmd_stepclock(parse_direction(server.arg("direction"), FWD));
+    cmd_stepclock(nextid(), parse_direction(server.arg("direction"), FWD));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/stop", [](){
     json_addheaders();
-    cmd_stop(server.hasArg("soft") && server.arg("soft") == "true");
+    cmd_stop(nextid(), false, server.hasArg("soft") && server.arg("soft") == "true");
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/hiz", [](){
     json_addheaders();
-    cmd_hiz(server.hasArg("soft") && server.arg("soft") == "true");
+    cmd_stop(nextid(), true, server.hasArg("soft") && server.arg("soft") == "true");
     server.send(200, "application/json", json_ok());
   });
 }

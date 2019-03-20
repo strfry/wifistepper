@@ -29,6 +29,10 @@
 
 #define TIME_MQTT_RECONNECT   30000
 
+#define ID_START      (1)
+typedef uint32_t id_t;
+id_t nextid();
+
 
 typedef enum {
   M_OFF = 0x0,
@@ -128,8 +132,8 @@ typedef struct {
 } motor_config;
 
 typedef struct {
-  uint32_t this_command;
-  uint32_t last_command;
+  id_t this_command;
+  id_t last_command;
   unsigned int last_completed;
 } command_state;
 
@@ -142,21 +146,69 @@ typedef struct {
 typedef struct {
   int mqtt_connected;
   int mqtt_status;
+  
+  struct {
+    id_t lastack_id;
+    unsigned int lastack_stamp;
+    bool error_buf;
+    bool error_comm;
+  } daisy;
 } service_state;
 
 void cmd_init();
-bool cmd_loop();
+void cmd_loop();
 //void cmd_put(uint8_t * data, size_t len);
-void cmd_run(ps_direction dir, float stepss);
-void cmd_limit(ps_direction dir, float stepss, bool savemark = false);
-void cmd_home(ps_direction dir, bool savemark = false);
-void cmd_goto(int32_t pos, ps_direction dir = 0xFF);
-void cmd_stepclock(ps_direction dir);
-void cmd_stop(bool soft);
-void cmd_hiz(bool soft);
+
+// Commands for local Queue
+bool cmd_nop(id_t id);
+bool cmd_stop(id_t id, bool hiz, bool soft);
+bool cmd_run(id_t id, ps_direction dir, float stepss);
+bool cmd_stepclock(id_t id, ps_direction dir);
+bool cmd_move(id_t id, ps_direction dir, uint32_t microsteps);
+bool cmd_goto(id_t id, int32_t pos);
+bool cmd_goto(id_t id, int32_t pos, ps_direction dir);
+bool cmd_gountil(id_t id, ps_posact action, ps_direction dir, float stepss);
+bool cmd_releasesw(id_t id, ps_posact action, ps_direction dir);
+bool cmd_gohome(id_t id);
+bool cmd_gomark(id_t id);
+bool cmd_resetpos(id_t id);
+bool cmd_setpos(id_t id, int32_t pos);
+bool cmd_setmark(id_t id, int32_t mark);
+bool cmd_setconfig(id_t id, const char * data);
+bool cmd_waitbusy(id_t id);
+bool cmd_waitrunning(id_t id);
+bool cmd_waitms(id_t id, uint32_t millis);
+
+bool cmd_empty(id_t id);
+bool cmd_estop(id_t id, bool hiz, bool soft);
+
+
 
 void daisy_init();
 void daisy_loop();
+
+// Remote queue commands
+bool daisy_run(uint8_t address, id_t id, ps_direction dir, float stepss);
+bool daisy_stepclock(uint8_t address, id_t id, ps_direction dir);
+bool daisy_move(uint8_t address, id_t id, ps_direction dir, uint32_t microsteps);
+bool daisy_goto(uint8_t address, id_t id, int32_t pos);
+bool daisy_goto(uint8_t address, id_t id, int32_t pos, ps_direction dir);
+bool daisy_gountil(uint8_t address, id_t id, ps_posact action, ps_direction dir, float stepss);
+bool daisy_releasesw(uint8_t address, id_t id, ps_posact action, ps_direction dir);
+bool daisy_gohome(uint8_t address, id_t id);
+bool daisy_gomark(uint8_t address, id_t id);
+bool daisy_resetpos(uint8_t address, id_t id);
+bool daisy_setpos(uint8_t address, id_t id, int32_t pos);
+bool daisy_setmark(uint8_t address, id_t id, int32_t mark);
+bool daisy_setconfig(uint8_t address, id_t id, const char * data);
+bool daisy_waitbusy(uint8_t address, id_t id);
+bool daisy_waitrunning(uint8_t address, id_t id);
+bool daisy_waitms(uint8_t address, id_t id, uint32_t millis);
+
+bool daisy_empty(uint8_t address, id_t id);
+bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
+
+
 
 void wificfg_save();
 void servicecfg_save();

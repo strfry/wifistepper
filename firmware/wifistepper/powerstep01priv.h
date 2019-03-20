@@ -1,3 +1,5 @@
+#ifndef __POWERSTEP01PRIV_H
+#define __POWERSTEP01PRIV_H
 
 #define __MS(v, m, s)           (((v) & m) << s)
 
@@ -263,3 +265,4 @@ typedef struct __attribute__((packed)) {
 /* CMD MOVE */
 #define MOVE_MASK         (0x003FFFFF)
 
+#endif

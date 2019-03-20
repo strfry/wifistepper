@@ -16,7 +16,9 @@
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
 
-#define HANDLE_CMDS() ({ cmd_loop(); })
+#define HANDLE_CMDS() ({ if (servicecfg.daisycfg.enabled) daisy_loop(); cmd_loop(); })
+
+volatile id_t _id = ID_START;
 
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
@@ -92,10 +94,10 @@ motor_config motorcfg = {
   .minspeed = 0.0,
   .accel = 1000.0,
   .decel = 1000.0,
-  .kthold = 0.2,
-  .ktrun = 0.2,
-  .ktaccel = 0.2,
-  .ktdecel = 0.2,
+  .kthold = 0.15,
+  .ktrun = 0.15,
+  .ktaccel = 0.15,
+  .ktdecel = 0.15,
   .fsspeed = 2000.0,
   .fsboost = false,
   .cm_switchperiod = 44,
@@ -113,6 +115,10 @@ motor_config motorcfg = {
   .reverse = false
 };
 
+
+id_t nextid() {
+  return _id++;
+}
 
 
 void wificfg_save() {
@@ -471,35 +477,7 @@ void setup() {
       size_t size = fp.size();
       std::unique_ptr<char[]> buf(new char[size]);
       fp.readBytes(buf.get(), size);
-      JsonObject& root = jsonbuf.parseObject(buf.get());
-      if (root.containsKey("mode"))       motorcfg.mode = motorcfg.mode = parse_motormode(root["mode"], motorcfg.mode);
-      if (root.containsKey("stepsize"))   motorcfg.stepsize = parse_stepsize(root["stepsize"].as<int>(), motorcfg.stepsize);
-      if (root.containsKey("ocd"))        motorcfg.ocd = root["ocd"].as<float>();
-      if (root.containsKey("ocdshutdown")) motorcfg.ocdshutdown = root["ocdshutdown"].as<bool>();
-      if (root.containsKey("maxspeed"))   motorcfg.maxspeed = root["maxspeed"].as<float>();
-      if (root.containsKey("minspeed"))   motorcfg.minspeed = root["minspeed"].as<float>();
-      if (root.containsKey("accel"))      motorcfg.accel = root["accel"].as<float>();
-      if (root.containsKey("decel"))      motorcfg.decel = root["decel"].as<float>();
-      if (root.containsKey("kthold"))     motorcfg.kthold = root["kthold"].as<float>();
-      if (root.containsKey("ktrun"))      motorcfg.ktrun = root["ktrun"].as<float>();
-      if (root.containsKey("ktaccel"))    motorcfg.ktaccel = root["ktaccel"].as<float>();
-      if (root.containsKey("ktdecel"))    motorcfg.ktdecel = root["ktdecel"].as<float>();
-      if (root.containsKey("fsspeed"))    motorcfg.fsspeed = root["fsspeed"].as<float>();
-      if (root.containsKey("fsboost"))    motorcfg.fsboost = root["fsboost"].as<bool>();
-      if (root.containsKey("cm_switchperiod")) motorcfg.cm_switchperiod = root["cm_switchperiod"].as<float>();
-      if (root.containsKey("cm_predict")) motorcfg.cm_predict = root["cm_predict"].as<bool>();
-      if (root.containsKey("cm_minon"))   motorcfg.cm_minon = root["cm_minon"].as<float>();
-      if (root.containsKey("cm_minoff"))  motorcfg.cm_minoff = root["cm_minoff"].as<float>();
-      if (root.containsKey("cm_fastoff")) motorcfg.cm_fastoff = root["cm_fastoff"].as<float>();
-      if (root.containsKey("cm_faststep")) motorcfg.cm_faststep = root["cm_faststep"].as<float>();
-      if (root.containsKey("vm_pwmfreq")) motorcfg.vm_pwmfreq = root["vm_pwmfreq"].as<float>();
-      if (root.containsKey("vm_stall"))   motorcfg.vm_stall = root["vm_stall"].as<float>();
-      if (root.containsKey("vm_bemf_slopel")) motorcfg.vm_bemf_slopel = root["vm_bemf_slopel"].as<float>();
-      if (root.containsKey("vm_bemf_speedco")) motorcfg.vm_bemf_speedco = root["vm_bemf_speedco"].as<float>();
-      if (root.containsKey("vm_bemf_slopehacc")) motorcfg.vm_bemf_slopehacc = root["vm_bemf_slopehacc"].as<float>();
-      if (root.containsKey("vm_bemf_slopehdec")) motorcfg.vm_bemf_slopehdec = root["vm_bemf_slopehdec"].as<float>();
-      if (root.containsKey("reverse"))    motorcfg.reverse = root["reverse"].as<bool>();
-      jsonbuf.clear();
+      cmd_setconfig(nextid(), buf.get());
       fp.close();
     }
   }
@@ -528,10 +506,6 @@ void loop() {
     motorst.stepss = ps_getspeed();
     motorst.busy = status.busy;
     last_statepoll = now;
-  }
-
-  if (servicecfg.daisycfg.enabled) {
-    daisy_loop();
   }
 
   HANDLE_CMDS();

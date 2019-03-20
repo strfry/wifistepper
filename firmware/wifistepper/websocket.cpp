@@ -98,7 +98,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDSTOP length");
             return;
           }
-          cmd_stop(data[1]);
+          cmd_stop(nextid(), false, data[1]);
           break;
         }
 
@@ -107,7 +107,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             Serial.print("Bad CMDHIZ length");
             return;
           }
-          cmd_hiz(data[1]);
+          cmd_stop(nextid(), true, data[1]);
           break;
         }
 
@@ -117,7 +117,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             return;
           }
           int32_t pos = ws_buf2int(&data[1]);
-          cmd_goto(pos);
+          cmd_goto(nextid(), pos);
           break;
         }
 
@@ -128,8 +128,8 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
           }
           ps_direction dir = data[1] == 'r'? REV : FWD;
           float stepss = ws_buf2float(&data[2]);
-          bool stopswitch = data[6] == 0x1;
-          cmd_run(dir, stepss, stopswitch);
+          bool stopswitch = data[6] == 0x1;   // TODO - remove stopswitch param
+          cmd_run(nextid(), dir, stepss);
           /*if (stopswitch) {
             ps_gountil(POS_RESET, motorcfg_dir(dir), stepss);
           } else {
@@ -144,7 +144,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
             return;
           }
           ps_direction dir = data[1] == 'r'? REV : FWD;
-          cmd_stepclock(dir);
+          cmd_stepclock(nextid(), dir);
           break;
         }
 
