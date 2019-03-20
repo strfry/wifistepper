@@ -60,7 +60,6 @@ void mqtt_loop(unsigned long looptime) {
     root["mark"] = motorcfg_pos(motorst.mark);
     root["stepss"] = motorst.stepss;
     root["busy"] = motorst.busy;
-    root["status"] = "ok";
     JsonVariant v = root;
     mqtt_client->publish(servicecfg.mqttcfg.topic_state, v.as<String>().c_str());
     jsonbuf.clear();

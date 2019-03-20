@@ -242,6 +242,18 @@ void ps_waitbusy(ps_waitcb waitf) {
   }
 }
 
+bool ps_isrunning() {
+  ps_status_reg reg = {};
+  ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+  return reg.mot_status != M_STOPPED;
+}
+
+bool ps_ishiz() {
+  ps_status_reg reg = {};
+  ps_xferreg("getparam status", CMD_GETPARAM(PARAM_STATUS), reg);
+  return reg.hiz? true : false;
+}
+
 void ps_reset() {
   ps_xfer("resetdevice", CMD_RESETDEVICE(), NULL, 0);
 }

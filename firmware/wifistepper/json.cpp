@@ -311,10 +311,19 @@ void jsonmotor_init() {
   server.on("/api/motor/command/run", [](){
     json_addheaders();
     if (!server.hasArg("stepss") || !server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional stopswitch"));
+      server.send(200, "application/json", json_error("stepss, direction args must be specified."));
       return;
     }
-    cmd_run(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat(), server.hasArg("stopswitch") && server.arg("stopswitch") == "true");
+    cmd_run(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat());
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/motor/command/limit", [](){
+    json_addheaders();
+    if (!server.hasArg("stepss") || !server.hasArg("direction")) {
+      server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional savemark"));
+      return;
+    }
+    cmd_limit(parse_direction(server.arg("direction"), FWD), server.arg("stepss").toFloat(), server.hasArg("savemark") && server.arg("savemark") == "true");
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/goto", [](){
