@@ -4,8 +4,6 @@
 
 extern WebSocketsServer websocket;
 
-extern volatile motor_state motorst;
-
 
 typedef union {
   float f32;
@@ -85,10 +83,10 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
         case WS_READSTATE: {
           uint8_t buf[1+4+4+4+1] = {0};
           buf[0] = WS_READSTATE;
-          ws_packint(motorcfg_pos(motorst.pos), &buf[1]);
-          ws_packint(motorcfg_pos(motorst.mark), &buf[1+4]);
-          ws_packfloat(motorst.stepss, &buf[1+4+4]);
-          buf[1+4+4+4] = motorst.busy? 0x1 : 0x0;
+          ws_packint(motorcfg_pos(state.motor.pos), &buf[1]);
+          ws_packint(motorcfg_pos(state.motor.mark), &buf[1+4]);
+          ws_packfloat(state.motor.stepss, &buf[1+4+4]);
+          buf[1+4+4+4] = state.motor.busy? 0x1 : 0x0;
           websocket.sendBIN(num, buf, sizeof(buf));
           break;
         }

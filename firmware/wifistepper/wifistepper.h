@@ -8,7 +8,7 @@
 
 #define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
-#define WIFI_PIN          (16)
+#define WIFILED_PIN       (16)
 #define MOTOR_ADCCOEFF    (2.65625)
 #define MOTOR_CLOCK       (CLK_INT16)
 
@@ -32,6 +32,7 @@
 #define ID_START      (1)
 typedef uint32_t id_t;
 id_t nextid();
+id_t currentid();
 
 
 typedef enum {
@@ -55,81 +56,110 @@ typedef enum {
 
 typedef struct {
   wifi_mode mode;
-  char ap_ssid[LEN_SSID];
-  char ap_password[LEN_PASSWORD];
-  bool ap_encryption;
-  int ap_channel;
-  bool ap_hidden;
-  char stn_ssid[LEN_SSID];
-  char stn_password[LEN_PASSWORD];
-  bool stn_encryption;
-  char stn_forceip[LEN_IP];
-  char stn_forcesubnet[LEN_IP];
-  char stn_forcegateway[LEN_IP];
-  bool stn_revertap;
-  char ip[LEN_IP];
+  struct {
+    char ssid[LEN_SSID];
+    char password[LEN_PASSWORD];
+    bool encryption;
+    int channel;
+    bool hidden;
+  } accesspoint;
+  struct {
+    char ssid[LEN_SSID];
+    char password[LEN_PASSWORD];
+    bool encryption;
+    char forceip[LEN_IP];
+    char forcesubnet[LEN_IP];
+    char forcegateway[LEN_IP];
+    bool revertap;
+  } station;
 } wifi_config;
 
 typedef struct {
-  bool enabled;
-  bool master;
-  char id[LEN_ID];
-  unsigned int baudrate;
-} daisy_config;
-
-typedef struct {
-  bool enabled;
-  bool secure;    // Not supported yet.
-  char server[LEN_URL];
-  int port;
-  char username[LEN_USERNAME];
-  char key[LEN_PASSWORD];
-
-  char topic_status[LEN_URL];
-  char topic_state[LEN_URL];
-  char topic_command[LEN_URL];
-
-  unsigned long period_state;
-} mqtt_config;
-
-typedef struct {
-  char hostname[LEN_HOSTNAME];
-  bool http_enabled;
-  bool https_enabled;
-  bool mdns_enabled;
-  bool auth_enabled;
-  char auth_username[LEN_USERNAME];
-  char auth_password[LEN_PASSWORD];
-  bool ota_enabled;
-  char ota_password[LEN_PASSWORD];
-  daisy_config daisycfg;
-  mqtt_config mqttcfg;
+  struct {
+    bool enabled;
+  } http;
+  struct {
+    bool enabled;
+    char hostname[LEN_HOSTNAME];
+  } mdns;
+  struct {
+    bool enabled;
+    char username[LEN_USERNAME];
+    char password[LEN_PASSWORD];
+  } auth;
+  struct {
+    bool enabled;
+    char password[LEN_PASSWORD];
+  } ota;
+  struct {
+    bool enabled;
+    bool master;
+    int baudrate;
+  } daisy;
+  struct {
+    bool enabled;
+    char server[LEN_URL];
+    int port;
+    char username[LEN_USERNAME];
+    char key[LEN_PASSWORD];
+    char state_topic[LEN_URL];
+    float state_publish_period;
+    char command_topic[LEN_URL];
+  } mqtt;
 } service_config;
+
+typedef struct {
+  struct {
+    bool usercontrol;
+    bool is_output;
+  } wifiled;
+} io_config;
 
 typedef struct {
   ps_mode mode;
   ps_stepsize stepsize;
   float ocd;
   bool ocdshutdown;
-  float maxspeed, minspeed;
+  float maxspeed;
+  float minspeed;
   float accel, decel;
-  float kthold, ktrun, ktaccel, ktdecel;
+  float kthold;
+  float ktrun;
+  float ktaccel;
+  float ktdecel;
   float fsspeed;
   bool fsboost;
-  float cm_switchperiod;
-  bool cm_predict;
-  float cm_minon;
-  float cm_minoff;
-  float cm_fastoff;
-  float cm_faststep;
-  float vm_pwmfreq;
-  float vm_stall;
-  float vm_bemf_slopel;
-  float vm_bemf_speedco;
-  float vm_bemf_slopehacc;
-  float vm_bemf_slopehdec;
+  struct {
+    float switchperiod;
+    bool predict;
+    float minon;
+    float minoff;
+    float fastoff;
+    float faststep;
+  } cm;
+  struct {
+    float pwmfreq;
+    float stall;
+    float bemf_slopel;
+    float bemf_speedco;
+    float bemf_slopehacc;
+    float bemf_slopehdec;
+  } vm;
   bool reverse;
 } motor_config;
+
+typedef struct {
+  wifi_config wifi;
+  service_config service;
+  io_config io;
+  motor_config motor;
+} config_t;
+
+
+typedef struct {
+  bool is_error;
+  id_t on_id;
+} error_state;
 
 typedef struct {
   id_t this_command;
@@ -138,22 +168,40 @@ typedef struct {
 } command_state;
 
 typedef struct {
-  int pos, mark;
-  float stepss;
-  bool busy;
-} motor_state;
+  char ip[LEN_IP];
+} wifi_state;
 
 typedef struct {
-  int mqtt_connected;
-  int mqtt_status;
-  
   struct {
     id_t lastack_id;
     unsigned int lastack_stamp;
     bool error_buf;
     bool error_comm;
   } daisy;
+  struct {
+    int connected;
+    int status;
+  } mqtt;
 } service_state;
+
+typedef struct {
+  int pos, mark;
+  float stepss;
+  bool busy;
+} motor_state;
+
+typedef struct {
+  error_state error;
+  command_state command;
+  wifi_state wifi;
+  service_state service;
+  motor_state motor;
+} state_t;
+
+typedef struct {
+  command_state command;
+  motor_state motor;
+} daisy_slavestate;
 
 void cmd_init();
 void cmd_loop();
@@ -186,6 +234,7 @@ bool cmd_estop(id_t id, bool hiz, bool soft);
 
 void daisy_init();
 void daisy_loop();
+void daisy_mastercheck();
 
 // Remote queue commands
 bool daisy_run(uint8_t address, id_t id, ps_direction dir, float stepss);
@@ -209,13 +258,17 @@ bool daisy_empty(uint8_t address, id_t id);
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
 
 
+void wificfg_read(wifi_config * cfg);
+void wificfg_write(wifi_config * const cfg);
 
-void wificfg_save();
-void servicecfg_save();
+void servicecfg_read(service_config * cfg);
+void servicecfg_write(service_config * const cfg);
 
-void motorcfg_read();
-void motorcfg_update();
-void motorcfg_save();
+void motorcfg_read(motor_config * cfg);
+void motorcfg_write(motor_config * const cfg);
+void motorcfg_pull(motor_config * cfg);
+void motorcfg_push(motor_config * const cfg);
+
 
 void json_init();
 
@@ -225,12 +278,11 @@ void mqtt_init();
 void mqtt_loop(unsigned long looptime);
 
 // Utility functions
-extern wifi_config wificfg;
-extern service_config servicecfg;
-extern motor_config motorcfg;
+extern config_t config;
+extern state_t state;
 
 static inline ps_direction motorcfg_dir(ps_direction d) {
-  if (!motorcfg.reverse)  return d;
+  if (!config.motor.reverse)  return d;
   switch (d) {
     case FWD: return REV;
     case REV: return FWD;
@@ -238,7 +290,7 @@ static inline ps_direction motorcfg_dir(ps_direction d) {
 }
 
 static inline int motorcfg_pos(int32_t p) {
-  return motorcfg.reverse? -p : p;
+  return config.motor.reverse? -p : p;
 }
 
 static inline wifi_mode parse_wifimode(const char * m) {
@@ -327,6 +379,4 @@ static inline const char * json_serialize(ps_movement m) {
   }
 }
 
-
 #endif
-

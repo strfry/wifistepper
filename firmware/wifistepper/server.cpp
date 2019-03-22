@@ -9,8 +9,6 @@ extern StaticJsonBuffer<2048> jsonbuf;
 
 extern volatile bool flag_reboot;
 
-extern volatile motor_state motorst;
-
 
 #define json_ok()         "{\"status\":\"ok\"}"
 #define json_error(msg)   "{\"status\":\"error\",\"message\":\"" msg "\"}"
@@ -45,23 +43,23 @@ void jsonwifi_init() {
   server.on("/api/wifi/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["ip"] = wificfg.ip;
-    root["mode"] = json_serialize(wificfg.mode);
-    if (wificfg.mode == M_ACCESSPOINT) {
-      root["ssid"] = wificfg.ap_ssid;
-      root["password"] = wificfg.ap_encryption? wificfg.ap_password : "";
-      root["encryption"] = wificfg.ap_encryption;
-      root["channel"] = wificfg.ap_channel;
-      root["hidden"] = wificfg.ap_hidden;
+    root["ip"] = state.wifi.ip;
+    root["mode"] = json_serialize(config.wifi.mode);
+    if (config.wifi.mode == M_ACCESSPOINT) {
+      root["ssid"] = config.wifi.accesspoint.ssid;
+      root["password"] = config.wifi.accesspoint.encryption? config.wifi.accesspoint.password : "";
+      root["encryption"] = config.wifi.accesspoint.encryption;
+      root["channel"] = config.wifi.accesspoint.channel;
+      root["hidden"] = config.wifi.accesspoint.hidden;
       
-    } else if (wificfg.mode == M_STATION) {
-      root["ssid"] = wificfg.stn_ssid;
-      root["password"] = wificfg.stn_encryption? wificfg.stn_password : "";
-      root["encryption"] = wificfg.stn_encryption;
-      root["forceip"] = wificfg.stn_forceip;
-      root["forcesubnet"] = wificfg.stn_forcesubnet;
-      root["forcegateway"] = wificfg.stn_forcegateway;
-      root["revertap"] = wificfg.stn_revertap;
+    } else if (config.wifi.mode == M_STATION) {
+      root["ssid"] = config.wifi.station.ssid;
+      root["password"] = config.wifi.station.encryption? config.wifi.station.password : "";
+      root["encryption"] = config.wifi.station.encryption;
+      root["forceip"] = config.wifi.station.forceip;
+      root["forcesubnet"] = config.wifi.station.forcesubnet;
+      root["forcegateway"] = config.wifi.station.forcegateway;
+      root["revertap"] = config.wifi.station.revertap;
     }
     root["status"] = "ok";
     JsonVariant v = root;
@@ -70,70 +68,70 @@ void jsonwifi_init() {
   });
   server.on("/api/wifi/set/off", [](){
     json_addheaders();
-    wificfg.mode = M_OFF;
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
+    config.wifi.mode = M_OFF;
+    wificfg_write(&config.wifi);
+    flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/wifi/set/accesspoint", [](){
     json_addheaders();
-    wificfg.mode = M_ACCESSPOINT;
-    if (server.hasArg("ssid"))      strlcpy(wificfg.ap_ssid, server.arg("ssid").c_str(), LEN_SSID);
-    if (server.hasArg("password"))  strlcpy(wificfg.ap_password, server.arg("password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ssid"))      wificfg.ap_encryption = server.hasArg("password") && server.arg("password").length() > 0;
-    if (server.hasArg("channel"))   wificfg.ap_channel = parse_channel(server.arg("channel"), wificfg.ap_channel);
-    if (server.hasArg("hidden"))    wificfg.ap_hidden = server.arg("hidden") == "true";
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
+    config.wifi.mode = M_ACCESSPOINT;
+    if (server.hasArg("ssid"))      strlcpy(config.wifi.accesspoint.ssid, server.arg("ssid").c_str(), LEN_SSID);
+    if (server.hasArg("password"))  strlcpy(config.wifi.accesspoint.password, server.arg("password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("ssid"))      config.wifi.accesspoint.encryption = server.hasArg("password") && server.arg("password").length() > 0;
+    if (server.hasArg("channel"))   config.wifi.accesspoint.channel = parse_channel(server.arg("channel"), config.wifi.accesspoint.channel);
+    if (server.hasArg("hidden"))    config.wifi.accesspoint.hidden = server.arg("hidden") == "true";
+    wificfg_write(&config.wifi);
+    flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/wifi/set/station", [](){
     json_addheaders();
-    wificfg.mode = M_STATION;
-    if (server.hasArg("ssid"))      strlcpy(wificfg.stn_ssid, server.arg("ssid").c_str(), LEN_SSID);
-    if (server.hasArg("password"))  strlcpy(wificfg.stn_password, server.arg("password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ssid"))      wificfg.stn_encryption = server.hasArg("password") && server.arg("password").length() > 0;
-    if (server.hasArg("forceip"))   strlcpy(wificfg.stn_forceip, server.arg("forceip").c_str(), LEN_IP);
-    if (server.hasArg("forcesubnet")) strlcpy(wificfg.stn_forcesubnet, server.arg("forcesubnet").c_str(), LEN_IP);
-    if (server.hasArg("forcegateway")) strlcpy(wificfg.stn_forcegateway, server.arg("forcegateway").c_str(), LEN_IP);
-    if (server.hasArg("revertap"))  wificfg.stn_revertap = server.arg("revertap") == "true";
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
+    config.wifi.mode = M_STATION;
+    if (server.hasArg("ssid"))      strlcpy(config.wifi.station.ssid, server.arg("ssid").c_str(), LEN_SSID);
+    if (server.hasArg("password"))  strlcpy(config.wifi.station.password, server.arg("password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("ssid"))      config.wifi.station.encryption = server.hasArg("password") && server.arg("password").length() > 0;
+    if (server.hasArg("forceip"))   strlcpy(config.wifi.station.forceip, server.arg("forceip").c_str(), LEN_IP);
+    if (server.hasArg("forcesubnet")) strlcpy(config.wifi.station.forcesubnet, server.arg("forcesubnet").c_str(), LEN_IP);
+    if (server.hasArg("forcegateway")) strlcpy(config.wifi.station.forcegateway, server.arg("forcegateway").c_str(), LEN_IP);
+    if (server.hasArg("revertap"))  config.wifi.station.revertap = server.arg("revertap") == "true";
+    wificfg_write(&config.wifi);
+    flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
 }
 
 void jsonbrowser_init() {
-  server.on("/api/browser/get", [](){
+  server.on("/api/service/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["hostname"] = servicecfg.hostname;
-    root["http_enabled"] = servicecfg.http_enabled;
-    root["https_enabled"] = servicecfg.https_enabled;
-    root["mdns_enabled"] = servicecfg.mdns_enabled;
-    root["auth_enabled"] = servicecfg.auth_enabled;
-    root["auth_username"] = servicecfg.auth_username;
-    root["auth_password"] = servicecfg.auth_password;
-    root["ota_enabled"] = servicecfg.ota_enabled;
-    root["ota_password"] = servicecfg.ota_password;
+    root["http_enabled"] = config.service.http.enabled;
+    root["mdns_enabled"] = config.service.mdns.enabled;
+    root["mdns_hostname"] = config.service.mdns.hostname;
+    root["auth_enabled"] = config.service.auth.enabled;
+    root["auth_username"] = config.service.auth.username;
+    root["auth_password"] = config.service.auth.password;
+    root["ota_enabled"] = config.service.ota.enabled;
+    root["ota_password"] = config.service.ota.password;
+    // TODO add rest of config
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/browser/set", [](){
+  server.on("/api/service/set", [](){
     json_addheaders();
-    if (server.hasArg("hostname"))      strlcpy(servicecfg.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
-    if (server.hasArg("http_enabled"))  servicecfg.http_enabled = server.arg("http_enabled") == "true";
-    if (server.hasArg("https_enabled")) servicecfg.https_enabled = server.arg("https_enabled") == "true";
-    if (server.hasArg("mdns_enabled"))  servicecfg.mdns_enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("auth_enabled"))  servicecfg.auth_enabled = server.arg("auth_enabled") == "true";
-    if (server.hasArg("auth_username")) strlcpy(servicecfg.auth_username, server.arg("auth_username").c_str(), LEN_USERNAME);
-    if (server.hasArg("auth_password")) strlcpy(servicecfg.auth_password, server.arg("auth_password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ota_enabled"))   servicecfg.ota_enabled = server.arg("ota_enabled") == "true";
-    if (server.hasArg("ota_password"))  strlcpy(servicecfg.ota_password, server.arg("ota_password").c_str(), LEN_PASSWORD);
-    servicecfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
+    if (server.hasArg("http_enabled"))  config.service.http.enabled = server.arg("http_enabled") == "true";
+    if (server.hasArg("mdns_enabled"))  config.service.mdns.enabled = server.arg("mdns_enabled") == "true";
+    if (server.hasArg("mdns_hostname")) strlcpy(config.service.mdns.hostname, server.arg("mdns_hostname").c_str(), LEN_HOSTNAME);
+    if (server.hasArg("auth_enabled"))  config.service.auth.enabled = server.arg("auth_enabled") == "true";
+    if (server.hasArg("auth_username")) strlcpy(config.service.auth.username, server.arg("auth_username").c_str(), LEN_USERNAME);
+    if (server.hasArg("auth_password")) strlcpy(config.service.auth.password, server.arg("auth_password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("ota_enabled"))   config.service.ota.enabled = server.arg("ota_enabled") == "true";
+    if (server.hasArg("ota_password"))  strlcpy(config.service.ota.password, server.arg("ota_password").c_str(), LEN_PASSWORD);
+    // TODO - add rest of service config
+    servicecfg_write(&config.service);
+    flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
 }
@@ -159,36 +157,36 @@ void jsonmotor_init() {
   server.on("/api/motor/get", [](){
     json_addheaders();
     if (!server.hasArg("cached") || server.arg("cached") != "true") {
-      motorcfg_read();
+      motorcfg_pull(&config.motor);
     }
     JsonObject& root = jsonbuf.createObject();
-    root["mode"] = json_serialize(motorcfg.mode);
-    root["stepsize"] = json_serialize(motorcfg.stepsize);
-    root["ocd"] = motorcfg.ocd;
-    root["ocdshutdown"] = motorcfg.ocdshutdown;
-    root["maxspeed"] = motorcfg.maxspeed;
-    root["minspeed"] = motorcfg.minspeed;
-    root["accel"] = motorcfg.accel;
-    root["decel"] = motorcfg.decel;
-    root["kthold"] = motorcfg.kthold;
-    root["ktrun"] = motorcfg.ktrun;
-    root["ktaccel"] = motorcfg.ktaccel;
-    root["ktdecel"] = motorcfg.ktdecel;
-    root["fsspeed"] = motorcfg.fsspeed;
-    root["fsboost"] = motorcfg.fsboost;
-    root["cm_switchperiod"] = motorcfg.cm_switchperiod;
-    root["cm_predict"] = motorcfg.cm_predict;
-    root["cm_minon"] = motorcfg.cm_minon;
-    root["cm_minoff"] = motorcfg.cm_minoff;
-    root["cm_fastoff"] = motorcfg.cm_fastoff;
-    root["cm_faststep"] = motorcfg.cm_faststep;
-    root["vm_pwmfreq"] = motorcfg.vm_pwmfreq;
-    root["vm_stall"] = motorcfg.vm_stall;
-    root["vm_bemf_slopel"] = motorcfg.vm_bemf_slopel;
-    root["vm_bemf_speedco"] = motorcfg.vm_bemf_speedco;
-    root["vm_bemf_slopehacc"] = motorcfg.vm_bemf_slopehacc;
-    root["vm_bemf_slopehdec"] = motorcfg.vm_bemf_slopehdec;
-    root["reverse"] = motorcfg.reverse;
+    root["mode"] = json_serialize(config.motor.mode);
+    root["stepsize"] = json_serialize(config.motor.stepsize);
+    root["ocd"] = config.motor.ocd;
+    root["ocdshutdown"] = config.motor.ocdshutdown;
+    root["maxspeed"] = config.motor.maxspeed;
+    root["minspeed"] = config.motor.minspeed;
+    root["accel"] = config.motor.accel;
+    root["decel"] = config.motor.decel;
+    root["kthold"] = config.motor.kthold;
+    root["ktrun"] = config.motor.ktrun;
+    root["ktaccel"] = config.motor.ktaccel;
+    root["ktdecel"] = config.motor.ktdecel;
+    root["fsspeed"] = config.motor.fsspeed;
+    root["fsboost"] = config.motor.fsboost;
+    root["cm_switchperiod"] = config.motor.cm.switchperiod;
+    root["cm_predict"] = config.motor.cm.predict;
+    root["cm_minon"] = config.motor.cm.minon;
+    root["cm_minoff"] = config.motor.cm.minoff;
+    root["cm_fastoff"] = config.motor.cm.fastoff;
+    root["cm_faststep"] = config.motor.cm.faststep;
+    root["vm_pwmfreq"] = config.motor.vm.pwmfreq;
+    root["vm_stall"] = config.motor.vm.stall;
+    root["vm_bemf_slopel"] = config.motor.vm.bemf_slopel;
+    root["vm_bemf_speedco"] = config.motor.vm.bemf_speedco;
+    root["vm_bemf_slopehacc"] = config.motor.vm.bemf_slopehacc;
+    root["vm_bemf_slopehdec"] = config.motor.vm.bemf_slopehdec;
+    root["reverse"] = config.motor.reverse;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -256,10 +254,10 @@ void jsonmotor_init() {
   server.on("/api/motor/state", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["position"] = motorcfg_pos(motorst.pos);
-    root["mark"] = motorcfg_pos(motorst.mark);
-    root["stepss"] = motorst.stepss;
-    root["busy"] = motorst.busy;
+    root["position"] = motorcfg_pos(state.motor.pos);
+    root["mark"] = motorcfg_pos(state.motor.mark);
+    root["stepss"] = state.motor.stepss;
+    root["busy"] = state.motor.busy;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -279,16 +277,16 @@ void jsonmotor_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/motor/reset", [](){
+  /*server.on("/api/motor/reset", [](){
     json_addheaders();
     ps_reset();
     ps_getstatus(true);
     motorcfg_update();
     server.send(200, "application/json", json_ok());
-  });
+  });*/
   server.on("/api/motor/pos/reset", [](){
     json_addheaders();
-    ps_resetpos();
+    cmd_resetpos(nextid());
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/pos/set", [](){
@@ -297,7 +295,7 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    ps_setpos(motorcfg_pos(server.arg("position").toInt()));
+    cmd_setpos(nextid(), motorcfg_pos(server.arg("position").toInt()));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/mark/set", [](){
@@ -306,7 +304,7 @@ void jsonmotor_init() {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    ps_setmark(motorcfg_pos(server.arg("position").toInt()));
+    cmd_setmark(nextid(), motorcfg_pos(server.arg("position").toInt()));
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/motor/command/run", [](){

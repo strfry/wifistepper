@@ -7,7 +7,7 @@
 #define B_MAGIC1        (0xAB)
 #define B_MAGIC2        (0x75)
 
-#define B_HEADER          (11)
+#define B_HEADER          (12)
 #define BO_MAGIC1         (0)
 #define BO_MAGIC2         (1)
 #define BO_CHECKSUM_HEAD  (2)
@@ -17,36 +17,40 @@
 #define BO_OPCODE         (9)
 #define BO_LENGTH         (10)
 
+#define CP_DAISY        (0x00)
+#define CP_CONFIG       (0x20)
+#define CP_STATE        (0x40)
+#define CP_MOTOR        (0x80)
+
 
 #define SELF            (0x00)
 
 
-#define CMD_PING        (0x00)
-#define CMD_ACK         (0x01)
+#define CMD_PING        (CP_DAISY | 0x00)
+#define CMD_ACK         (CP_DAISY | 0x01)
+#define CMD_SYNC        (CP_DAISY | 0x02)
 
-#define CMD_STOP        (0x02)
-#define CMD_RUN         (0x03)
-#define CMD_STEPCLK     (0x04)
-#define CMD_MOVE        (0x05)
-#define CMD_GOTO        (0x06)
-#define CMD_GOUNTIL     (0x07)
-#define CMD_RELEASESW   (0x08)
-#define CMD_GOHOME      (0x09)
-#define CMD_GOMARK      (0x0A)
-#define CMD_RESETPOS    (0x0B)
-#define CMD_SETPOS      (0x0C)
-#define CMD_SETMARK     (0x0D)
-#define CMD_SETCONFIG   (0x0E)
-#define CMD_WAITBUSY    (0x0F)
-#define CMD_WAITRUNNING (0x10)
-#define CMD_WAITMS      (0x11)
-#define CMD_EMPTY       (0x12)
-#define CMD_ESTOP       (0x13)
-
-#define CMD_SIZE        (20)
+#define CMD_STOP        (CP_MOTOR | 0x01)
+#define CMD_RUN         (CP_MOTOR | 0x02)
+#define CMD_STEPCLK     (CP_MOTOR | 0x03)
+#define CMD_MOVE        (CP_MOTOR | 0x04)
+#define CMD_GOTO        (CP_MOTOR | 0x05)
+#define CMD_GOUNTIL     (CP_MOTOR | 0x06)
+#define CMD_RELEASESW   (CP_MOTOR | 0x07)
+#define CMD_GOHOME      (CP_MOTOR | 0x08)
+#define CMD_GOMARK      (CP_MOTOR | 0x09)
+#define CMD_RESETPOS    (CP_MOTOR | 0x0A)
+#define CMD_SETPOS      (CP_MOTOR | 0x0B)
+#define CMD_SETMARK     (CP_MOTOR | 0x0C)
+#define CMD_SETCONFIG   (CP_MOTOR | 0x0D)
+#define CMD_WAITBUSY    (CP_MOTOR | 0x0E)
+#define CMD_WAITRUNNING (CP_MOTOR | 0x0F)
+#define CMD_WAITMS      (CP_MOTOR | 0x10)
+#define CMD_EMPTY       (CP_MOTOR | 0x11)
+#define CMD_ESTOP       (CP_MOTOR | 0x12)
 
 
-typedef union {
+/*typedef union {
   uint8_t b[4];
   float f32;
   int32_t i32;
@@ -56,7 +60,7 @@ typedef union {
 static inline float b_buf2float(uint8_t * b) {bc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.f32; }
 static inline void b_packfloat(float f, uint8_t * b) { bc4_t c; c.f32 = f; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
 static inline int32_t b_buf2int32(uint8_t * b) { bc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.i32; }
-static inline void b_packint32(int32_t i, uint8_t * b) { bc4_t c; c.i32 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
+static inline void b_packint32(int32_t i, uint8_t * b) { bc4_t c; c.i32 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }*/
 
 // In Buffer
 uint8_t B[B_SIZE] = {0};
@@ -73,6 +77,9 @@ volatile size_t Olen = 0;
 id_t A[A_SIZE] = {0};
 volatile size_t Alen = 0;
 
+// Slave vars
+extern uint8_t daisy_numslaves;
+extern daisy_slavestate * daisy_slavestates;
 
 static uint8_t daisy_checksum8(uint8_t * data, size_t length) {
   unsigned int sum = 0;
@@ -83,13 +90,13 @@ static uint8_t daisy_checksum8(uint8_t * data, size_t length) {
 }
 
 void daisy_init() {
-  Serial.begin(servicecfg.daisycfg.baudrate);
+  Serial.begin(config.service.daisy.baudrate);
   
 }
 
 static void * daisy_Oalloc(uint8_t address, id_t id, uint8_t opcode, size_t len) {
   // Check if we have enough memory in buffers
-  if (len > 0xFF || (B_SIZE - Olen) < (B_HEADER + len) || Alen >= A_SIZE) return NULL;
+  if (len > 0xFFFF || (B_SIZE - Olen) < (B_HEADER + len) || Alen >= A_SIZE) return NULL;
   
   // Add id to ack list
   A[Alen++] = id;
@@ -101,7 +108,7 @@ static void * daisy_Oalloc(uint8_t address, id_t id, uint8_t opcode, size_t len)
   packet[BO_ADDRESS] = address;
   *(id_t *)(&packet[BO_PACKET_ID]) = id;
   packet[BO_OPCODE] = opcode;
-  packet[BO_LENGTH] = (uint8_t)len;
+  *(uint16_t *)(&packet[BO_LENGTH]) = (uint16_t)len;
 
   // Extend outbox buffer size
   Olen += B_HEADER + len;
@@ -117,20 +124,35 @@ static void daisy_Opack(void * data) {
   uint8_t * packet = ((uint8_t *)data) - B_HEADER;
 
   // Compute checksums
-  size_t len = packet[BO_LENGTH];
+  size_t len = *(uint16_t *)(&packet[BO_LENGTH]);
   packet[BO_CHECKSUM_BODY] = daisy_checksum8(&packet[B_HEADER], len);
   packet[BO_CHECKSUM_HEAD] = daisy_checksum8(&packet[BO_CHECKSUM_BODY], B_HEADER - BO_CHECKSUM_BODY);
 }
 
-static void daisy_master_consume(int8_t address, id_t id, uint8_t opcode, void * data, uint8_t len) {
+static void daisy_masterconsume(int8_t address, id_t id, uint8_t opcode, void * data, uint16_t len) {
+  if (id != 0) {
+    id_t expected = A[0];
+  }
   
+  switch (opcode) {
+    
+  }
+}
+
+void daisy_mastercheck() {
+  if (daisy_numslaves == 0 && state.service.daisy.lastack_id == 0 && millis() > 2000) {
+    // Start pinging slaves after a few seconds (give them time to startup)
+    daisy_Opack(daisy_Oalloc(SELF, currentid(), CMD_PING, 0));
+  }
+
+  //
 }
 
 static void daisy_ack(id_t id) {
   daisy_Opack(daisy_Oalloc(SELF, id, CMD_ACK, 0));
 }
 
-static void daisy_slave_consume(id_t id, uint8_t opcode, void * data, uint8_t len) {
+static void daisy_slaveconsume(id_t id, uint8_t opcode, void * data, uint16_t len) {
   
 }
 
@@ -155,10 +177,10 @@ void daisy_loop() {
     }
     
     // Packets are formatted (in bytes bytes)
-    // | MAGIC_1 | MAGIC_2 | CHECKSUM_HEAD | CHECKSUM_BODY | ADDRESS | PACKET_ID[0] | PACKET_ID[1] | PACKET_ID[2] | PACKET_ID[3] | OPCODE | LEN | ... DATA (size = LEN) ... |
-    // Header is first 11 bytes, payload is the following LEN bytes
+    // | MAGIC_1 | MAGIC_2 | CHECKSUM_HEAD | CHECKSUM_BODY | ADDRESS | PACKET_ID[0] | PACKET_ID[1] | PACKET_ID[2] | PACKET_ID[3] | OPCODE | LEN[0] | LEN[1] | ... DATA (size = LEN) ... |
+    // Header is first 12 bytes, payload is the following LEN bytes
     // CHECKSUM_BODY is calculated first using daisy_checksum8() on all DATA (size = LEN)
-    // CHECKSUM_HEAD is calculated second using daisy_checksum8() on all bytes starting from CHECKSUM_BODY and ending with LEN (8 bytes total)
+    // CHECKSUM_HEAD is calculated second using daisy_checksum8() on all bytes starting from CHECKSUM_BODY and ending with LEN (9 bytes total)
     
     // Sync to start of packet (SOP)
     size_t i = 0;
@@ -167,7 +189,7 @@ void daisy_loop() {
     }
 
     // Forward all unparsed data if not master
-    if (i > 0 && !servicecfg.daisycfg.master) Serial.write(B, i);
+    if (i > 0 && !config.service.daisy.master) Serial.write(B, i);
   
     // Either at end or SOP
     if (i == Blen) {
@@ -186,28 +208,28 @@ void daisy_loop() {
     if (Blen < B_HEADER) return;
 
     // Check rest of header
-    bool isvalid = B[BO_MAGIC2] == B_MAGIC2 && B[BO_OPCODE] < CMD_SIZE && daisy_checksum8(&B[BO_CHECKSUM_BODY], B_HEADER - BO_CHECKSUM_BODY) == B[BO_CHECKSUM_HEAD];
-    if (isvalid && !servicecfg.daisycfg.master && B[BO_ADDRESS] != 0x01) {
+    bool isvalid = B[BO_MAGIC2] == B_MAGIC2 && daisy_checksum8(&B[BO_CHECKSUM_BODY], B_HEADER - BO_CHECKSUM_BODY) == B[BO_CHECKSUM_HEAD];
+    if (isvalid && !config.service.daisy.master && B[BO_ADDRESS] != 0x01) {
       // We're not master and the packet is not for us, skip it
       B[BO_ADDRESS] -= 1;
-      Bskip = B_HEADER + B[BO_LENGTH];
+      Bskip = B_HEADER + *(uint16_t *)(&B[BO_LENGTH]);
       continue;
     }
     if (!isvalid) {
       // Not a valid header, shift out one byte and continue
-      if (!servicecfg.daisycfg.master) Serial.write(B, 1);
+      if (!config.service.daisy.master) Serial.write(B, 1);
       memmove(B, &B[1], Blen - 1);
       continue;
     }
 
     // Make sure we have whole packet
-    uint8_t len = B[BO_LENGTH];
+    uint16_t len = *(uint16_t *)(&B[BO_LENGTH]);
     if (Blen < (B_HEADER + len)) return;
 
     // Validate checksum
     if (daisy_checksum8(&B[B_HEADER], len) != B[BO_CHECKSUM_BODY]) {
       // Bad checksum, shift out one byte and continue
-      if (!servicecfg.daisycfg.master) Serial.write(B, 1);
+      if (!config.service.daisy.master) Serial.write(B, 1);
       memmove(B, &B[1], Blen - 1);
       continue;
     }
@@ -221,9 +243,8 @@ void daisy_loop() {
       id_t id = *(id_t *)(&B[BO_PACKET_ID]);
       uint8_t opcode = B[BO_OPCODE];
       void * data = &B[B_HEADER];
-      uint8_t len = B[BO_LENGTH];
-      if (servicecfg.daisycfg.master)   daisy_master_consume(addr, id, opcode, data, len);
-      else                              daisy_slave_consume(id, opcode, data, len);
+      if (config.service.daisy.master)  daisy_masterconsume(addr, id, opcode, data, len);
+      else                              daisy_slaveconsume(id, opcode, data, len);
     }
 
     // Opportunistically dump outbox here
