@@ -16,9 +16,6 @@
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
 
-#define HANDLE_CMDS()     ({ if (config.service.daisy.enabled) daisy_loop(); cmd_loop(); })
-#define HANDLE_CHECKS()   ({ if (config.service.daisy.enabled && config.service.daisy.master) daisy_mastercheck(); })
-
 volatile id_t _id = ID_START;
 
 ESP8266WebServer server(PORT_HTTP);
@@ -129,13 +126,24 @@ config_t config = {
 };
 
 state_t state = { 0 };
-
-uint8_t daisy_numslaves = 0;
 daisy_slavestate * daisy_slavestates = NULL;
 
 
 id_t nextid() { return _id++; }
 id_t currentid() { return _id; }
+
+unsigned long timesince(unsigned long t1, unsigned long t2) {
+  return (t1 <= t2)? (t2 - t1) : (ULONG_MAX - t1 + t2);
+}
+
+void seterror(uint8_t subsystem, id_t onid, int type) {
+  if (!state.error.errored) {
+    state.error.when = millis();
+    state.error.subsystem = subsystem;
+    state.error.id = onid;
+    state.error.type = type;
+  }
+}
 
 void wificfg_read(wifi_config * cfg) {
   File fp = SPIFFS.open(FNAME_WIFICFG, "r");
@@ -533,23 +541,29 @@ void setup() {
   // Initialize SPI and Stepper Motor and clear any faults
   {
     ps_spiinit();
+    delay(10);
+    motorcfg_push(&config.motor);
     ps_getstatus(true);
   }
 }
 
-static volatile unsigned long last_statepoll = 0;
+#define HANDLE_CMDS()     ({ if (config.service.daisy.enabled) daisy_loop(now); cmd_loop(); })
+#define HANDLE_CHECKS()   ({ if (config.service.daisy.enabled) daisy_check(now); })
+
+//static volatile unsigned long last_statepoll = 0;
 void loop() {
-  HANDLE_CMDS();
-  
   unsigned long now = millis();
-  if ((now - last_statepoll) > 10) {
+  
+  //HANDLE_CMDS();
+  
+  /*if ((now - last_statepoll) > 10) {
     ps_status status = ps_getstatus();
     state.motor.pos = ps_getpos();
     state.motor.mark = ps_getmark();
     state.motor.stepss = ps_getspeed();
     state.motor.busy = status.busy;
     last_statepoll = now;
-  }
+  }*/
 
   HANDLE_CMDS();
 

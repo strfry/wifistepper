@@ -214,14 +214,17 @@ void cmd_loop() {
   }
 }
 
-/*void cmd_put(uint8_t * data, size_t len) {
-  check_Q(len)
-  memcpy(&Q[Qlen], data, len);
-  Qlen += len;
+/*void cmd_put(id_t id, uint8_t opcode, uint8_t * data, size_t len) {
+  void * buf = cmd_alloc(id, opcode, len);
+  if (buf != NULL) memcpy(buf, data, data);
+  return buf != NULL;
 }*/
 
 static void * cmd_alloc(id_t id, uint8_t opcode, size_t len) {
-  if ((Q_SIZE - Qlen) < (sizeof(cmd_head_t) + len)) return NULL;
+  if ((Q_SIZE - Qlen) < (sizeof(cmd_head_t) + len)) {
+    seterror(ESUB_CMD, id);
+    return NULL;
+  }
   *(cmd_head_t *)(&Q[Qlen]) = { .id = id, .opcode = opcode };
   void * p = &Q[Qlen + sizeof(cmd_head_t)];
   Qlen += sizeof(cmd_head_t) + len;

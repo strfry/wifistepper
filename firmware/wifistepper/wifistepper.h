@@ -34,6 +34,8 @@ typedef uint32_t id_t;
 id_t nextid();
 id_t currentid();
 
+unsigned long timesince(unsigned long t1, unsigned long t2);
+
 
 typedef enum {
   M_OFF = 0x0,
@@ -156,9 +158,20 @@ typedef struct {
 } config_t;
 
 
+#define ESUB_UNK      (0x00)
+#define ESUB_WIFI     (0x01)
+#define ESUB_CMD      (0x02)
+#define ESUB_MOTOR    (0x03)
+#define ESUB_DAISY    (0x04)
+
+void seterror(uint8_t subsystem, id_t onid = 0, int type = 0);
+
 typedef struct {
-  bool is_error;
-  id_t on_id;
+  bool errored;
+  unsigned long when;
+  uint8_t subsystem;
+  id_t id;
+  int type;
 } error_state;
 
 typedef struct {
@@ -173,10 +186,13 @@ typedef struct {
 
 typedef struct {
   struct {
-    id_t lastack_id;
-    unsigned int lastack_stamp;
-    bool error_buf;
-    bool error_comm;
+    uint8_t numslaves;
+    bool active;
+    struct {
+      unsigned long ping;
+      unsigned long config;
+      unsigned long state;
+    } last;
   } daisy;
   struct {
     int connected;
@@ -199,15 +215,21 @@ typedef struct {
 } state_t;
 
 typedef struct {
+  io_config io;
+  motor_config motor;
+} daisy_slaveconfig;
+
+typedef struct {
+  error_state error;
   command_state command;
   motor_state motor;
 } daisy_slavestate;
 
 void cmd_init();
 void cmd_loop();
-//void cmd_put(uint8_t * data, size_t len);
 
 // Commands for local Queue
+//void cmd_put(id_t id, uint8_t opcode, uint8_t * data, size_t len);
 bool cmd_nop(id_t id);
 bool cmd_stop(id_t id, bool hiz, bool soft);
 bool cmd_run(id_t id, ps_direction dir, float stepss);
@@ -233,8 +255,8 @@ bool cmd_estop(id_t id, bool hiz, bool soft);
 
 
 void daisy_init();
-void daisy_loop();
-void daisy_mastercheck();
+void daisy_loop(unsigned long now);
+void daisy_check(unsigned long now);
 
 // Remote queue commands
 bool daisy_run(uint8_t address, id_t id, ps_direction dir, float stepss);
