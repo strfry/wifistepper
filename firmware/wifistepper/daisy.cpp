@@ -62,6 +62,8 @@ typedef struct __attribute__((packed)) {
   uint16_t length;
 } daisy_head_t;
 
+#define daisy_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_DAISY, id); return; } })
+
 /*typedef union {
   uint8_t b[4];
   float f32;
@@ -83,7 +85,7 @@ volatile size_t Bskip = 0;
 // Outbox
 uint8_t O[B_SIZE] = {0};
 volatile size_t Olen = 0;
-#define daisy_dumpoutbox()  ({ if (Olen > 0) { Serial.print("Write outbox: "); Serial.println(Olen); Serial.write(O, Olen); Olen = 0; } })
+#define daisy_dumpoutbox()  ({ if (Olen > 0) { Serial.write(O, Olen); Olen = 0; } })
 
 // Ack list
 #define A_SIZE        (64)
@@ -91,7 +93,7 @@ id_t * A = {0};
 volatile size_t Alen = 0;
 
 // Slave vars
-extern daisy_slavestate * daisy_slavestates;
+extern daisy_slave_t * daisy_slave;
 
 static uint8_t daisy_checksum8(uint8_t * data, size_t length) {
   unsigned int sum = 0;
@@ -110,6 +112,19 @@ void daisy_init() {
   Serial.begin(config.service.daisy.baudrate);
   if (config.service.daisy.master) {
     A = new id_t[A_SIZE];
+  }
+}
+
+static void daisy_writeoutbox() {
+  if (Olen == 0) return;
+
+  size_t wrote = Serial.write(O, Olen);
+  if (wrote != Olen) {
+    memmove(O, &O[wrote], Olen - wrote);
+    Olen -= wrote;
+    
+  } else {
+    Olen = 0;
   }
 }
 
@@ -175,58 +190,97 @@ static void daisy_masterconsume(int8_t address, id_t id, uint8_t opcode, void * 
       Alen -= 1;
     }
   }
+
+  // Check for bad address;
+  if (address > 0) {
+    seterror(ESUB_DAISY, id);
+    return;
+  }
+
+  // Handle pings
+  if (opcode == CMD_PING) {
+    if (address == 0) {
+      // Master shorted with itself
+      return;
+    }
+    
+    uint8_t numslaves = abs(address);
+    if (state.service.daisy.numslaves != numslaves) {
+      // New number of slaves present, reallocate states and sync
+      daisy_slave = (daisy_slave == NULL)? (daisy_slave_t *)malloc(sizeof(daisy_slave_t) * numslaves) : (daisy_slave_t *)realloc(daisy_slave, sizeof(daisy_slave_t) * numslaves);
+      memset(daisy_slave, 0, sizeof(daisy_slave_t) * numslaves);
+      for (uint8_t i = 0; i < numslaves; i++) {
+        // Send sync to all slaves
+        daisy_Opack(daisy_Oalloc(i, nextid(), CMD_SYNC, 0));
+      }
+
+      // update number of slaves
+      state.service.daisy.numslaves = numslaves;
+    }
+    
+    return;
+  }
+
+  // Get slave array index
+  int i = state.service.daisy.numslaves + address - 1;
+  if (i < 0 || i >= state.service.daisy.numslaves) {
+    // Bad slave index
+    seterror(ESUB_DAISY, id);
+    return;
+  }
   
   switch (opcode) {
-    case CMD_PING: {
-      if (address >= 0) {
-        // Bad address value, should be negative
-        return;
-      }
-      uint8_t numslaves = abs(address);
-      if (state.service.daisy.numslaves != numslaves) {
-        // New number of slaves present, reallocate states and sync
-        daisy_slavestates = (daisy_slavestates == NULL)? (daisy_slavestate *)malloc(sizeof(daisy_slavestate) * numslaves) : (daisy_slavestate *)realloc(daisy_slavestates, sizeof(daisy_slavestate) * numslaves);
-        memset(daisy_slavestates, 0, sizeof(daisy_slavestate) * numslaves);
-        for (uint8_t i = 0; i < numslaves; i++) {
-          // Send sync to slave
-          daisy_Opack(daisy_Oalloc(i, nextid(), CMD_SYNC, 0));
-        }
-
-        // update number of slaves
-        state.service.daisy.numslaves = numslaves;
-      }
-      break;
+    case CMD_SYNC: {
+      daisy_expectlen(sizeof(daisy_slave_t));
+      memcpy(&daisy_slave[i], data, sizeof(daisy_slave_t));
+      return;
+    }
+    case CMD_CONFIG: {
+      daisy_expectlen(sizeof(daisy_slaveconfig));
+      memcpy(&daisy_slave[i].config, data, sizeof(daisy_slaveconfig));
+      return;
+    }
+    case CMD_STATE: {
+      daisy_expectlen(sizeof(daisy_slavestate));
+      memcpy(&daisy_slave[i].state, data, sizeof(daisy_slavestate));
+      return;
     }
   }
 }
 
-void daisy_check(unsigned long now) {
-  unsigned long ping_delta = timesince(state.service.daisy.last.ping, now);
+void daisy_update(unsigned long now) {
+  if (!config.service.daisy.enabled) return;
+  unsigned long ping_delta = timesince(sketch.service.daisy.last.ping, now);
 
   if (ping_delta > CTO_PING) {
     state.service.daisy.active = false;
   }
   
   if (config.service.daisy.master && ping_delta > (CTO_PING / 4)) {
-    daisy_Opack(daisy_Oalloc(SELF, currentid(), CMD_PING, 0));
+    sketch.service.daisy.last.ping = now;
+    daisy_Opack(daisy_Oalloc(SELF, 0, CMD_PING, 0));
+    daisy_writeoutbox();
   }
 
-  if (/*state.service.daisy.active && */!config.service.daisy.master && timesince(state.service.daisy.last.config, now) > CTO_CONFIG) {
-    state.service.daisy.last.config = now;
+  // TODO - remove comment
+  if (/*state.service.daisy.active && */!config.service.daisy.master && timesince(sketch.service.daisy.last.config, now) > CTO_CONFIG) {
+    sketch.service.daisy.last.config = now;
     daisy_slaveconfig * slaveconfig = (daisy_slaveconfig *)daisy_Oalloc(SELF, 0, CMD_CONFIG, sizeof(daisy_slaveconfig));
     if (slaveconfig != NULL) {
       memcpy(&slaveconfig->io, &config.io, sizeof(io_config));
-      memcpy(&slaveconfig->motor, &state.motor, sizeof(motor_config));
+      memcpy(&slaveconfig->motor, &config.motor, sizeof(motor_config));
     }
     daisy_Opack(slaveconfig);
   }
 
-  if (/*state.service.daisy.active && */!config.service.daisy.master && timesince(state.service.daisy.last.state, now) > CTO_STATE) {
-    state.service.daisy.last.state = now;
+  // TODO - remove comment
+  if (/*state.service.daisy.active && */!config.service.daisy.master && timesince(sketch.service.daisy.last.state, now) > CTO_STATE) {
+    sketch.service.daisy.last.state = now;
     daisy_slavestate * slavestate = (daisy_slavestate *)daisy_Oalloc(SELF, 0, CMD_STATE, sizeof(daisy_slavestate));
     if (slavestate != NULL) {
       memcpy(&slavestate->error, &state.error, sizeof(error_state));
       memcpy(&slavestate->command, &state.command, sizeof(command_state));
+      memcpy(&slavestate->wifi, &state.wifi, sizeof(wifi_state));
       memcpy(&slavestate->motor, &state.motor, sizeof(motor_state));
     }
     daisy_Opack(slavestate);
@@ -236,8 +290,6 @@ void daisy_check(unsigned long now) {
 static void daisy_ack(id_t id) {
   daisy_Opack(daisy_Oalloc(SELF, id, CMD_ACK, 0));
 }
-
-#define daisy_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_DAISY, id); return; } })
 
 static void daisy_slaveconsume(id_t id, uint8_t opcode, void * data, uint16_t len) {
   switch (opcode) {
@@ -368,11 +420,12 @@ static void daisy_slaveconsume(id_t id, uint8_t opcode, void * data, uint16_t le
 }
 
 void daisy_loop(unsigned long now) {
+  if (!config.service.daisy.enabled) return;
   Blen += Serial.read((char *)&B[Blen], B_SIZE - Blen);
 
   // If no packets to parse, dump outbox
   if (Blen == 0) {
-    daisy_dumpoutbox();
+    daisy_writeoutbox();
   }
 
   // Parse packets
@@ -420,7 +473,7 @@ void daisy_loop(unsigned long now) {
     // If this is a ping, set active flag
     if (isvalid && head->opcode == CMD_PING) {
       state.service.daisy.active = true;
-      state.service.daisy.last.ping = now;
+      sketch.service.daisy.last.ping = now;
     }
 
     // Check if it's for us
@@ -450,8 +503,7 @@ void daisy_loop(unsigned long now) {
       continue;
     }
 
-    // Opportunistically dump outbox here
-    daisy_dumpoutbox();
+    daisy_writeoutbox();
 
     // Consume packet
     {
@@ -459,8 +511,7 @@ void daisy_loop(unsigned long now) {
       else                              daisy_slaveconsume(head->id, head->opcode, &head[1], head->length);
     }
 
-    // Opportunistically dump outbox here
-    daisy_dumpoutbox();
+    daisy_writeoutbox();
 
     // Clear packet from buffer
     size_t fullsize = sizeof(daisy_head_t) + head->length;

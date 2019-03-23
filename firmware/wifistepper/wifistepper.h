@@ -56,6 +56,8 @@ typedef enum {
   WS_POS = 0x31,
 } ws_opcode;
 
+#define ispacked __attribute__((packed))
+
 typedef struct {
   wifi_mode mode;
   struct {
@@ -110,14 +112,14 @@ typedef struct {
   } mqtt;
 } service_config;
 
-typedef struct {
+typedef struct ispacked {
   struct {
     bool usercontrol;
     bool is_output;
   } wifiled;
 } io_config;
 
-typedef struct {
+typedef struct ispacked {
   ps_mode mode;
   ps_stepsize stepsize;
   float ocd;
@@ -166,7 +168,7 @@ typedef struct {
 
 void seterror(uint8_t subsystem, id_t onid = 0, int type = 0);
 
-typedef struct {
+typedef struct ispacked {
   bool errored;
   unsigned long when;
   uint8_t subsystem;
@@ -174,13 +176,14 @@ typedef struct {
   int type;
 } error_state;
 
-typedef struct {
+typedef struct ispacked {
   id_t this_command;
   id_t last_command;
   unsigned int last_completed;
 } command_state;
 
-typedef struct {
+typedef struct ispacked {
+  wifi_mode mode;
   char ip[LEN_IP];
 } wifi_state;
 
@@ -188,11 +191,6 @@ typedef struct {
   struct {
     uint8_t numslaves;
     bool active;
-    struct {
-      unsigned long ping;
-      unsigned long config;
-      unsigned long state;
-    } last;
   } daisy;
   struct {
     int connected;
@@ -200,10 +198,12 @@ typedef struct {
   } mqtt;
 } service_state;
 
-typedef struct {
-  int pos, mark;
+typedef struct ispacked {
+  ps_status status;
   float stepss;
-  bool busy;
+  int pos;
+  int mark;
+  float adc;
 } motor_state;
 
 typedef struct {
@@ -214,19 +214,49 @@ typedef struct {
   motor_state motor;
 } state_t;
 
+
 typedef struct {
+  struct {
+    struct {
+      unsigned long ping;
+      unsigned long config;
+      unsigned long state;
+    } last;
+  } daisy;
+} service_sketch;
+
+typedef struct {
+  struct {
+    unsigned int status;
+    unsigned int state;
+  } last;
+} motor_sketch;
+
+typedef struct {
+  service_sketch service;
+  motor_sketch motor;
+} sketch_t;
+
+typedef struct ispacked {
   io_config io;
   motor_config motor;
 } daisy_slaveconfig;
 
-typedef struct {
+typedef struct ispacked {
   error_state error;
   command_state command;
+  wifi_state wifi;
   motor_state motor;
 } daisy_slavestate;
 
+typedef struct {
+  daisy_slaveconfig config;
+  daisy_slavestate state;
+} daisy_slave_t;
+
 void cmd_init();
-void cmd_loop();
+void cmd_loop(unsigned long now);
+void cmd_update(unsigned long now);
 
 // Commands for local Queue
 //void cmd_put(id_t id, uint8_t opcode, uint8_t * data, size_t len);
@@ -256,9 +286,10 @@ bool cmd_estop(id_t id, bool hiz, bool soft);
 
 void daisy_init();
 void daisy_loop(unsigned long now);
-void daisy_check(unsigned long now);
+void daisy_update(unsigned long now);
 
 // Remote queue commands
+bool daisy_stop(uint8_t address, id_t id, bool hiz, bool soft);
 bool daisy_run(uint8_t address, id_t id, ps_direction dir, float stepss);
 bool daisy_stepclock(uint8_t address, id_t id, ps_direction dir);
 bool daisy_move(uint8_t address, id_t id, ps_direction dir, uint32_t microsteps);
@@ -302,6 +333,7 @@ void mqtt_loop(unsigned long looptime);
 // Utility functions
 extern config_t config;
 extern state_t state;
+extern sketch_t sketch;
 
 static inline ps_direction motorcfg_dir(ps_direction d) {
   if (!config.motor.reverse)  return d;

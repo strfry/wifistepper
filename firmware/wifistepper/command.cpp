@@ -5,7 +5,7 @@
 #include "wifistepper.h"
 #include "cmdpriv.h"
 
-#define CMD_DEBUG
+//#define CMD_DEBUG
 
 #define Q_SIZE          (2048)
 
@@ -30,6 +30,9 @@
 #define CMD_WAITBUSY    (Q_PRE_BUSY | 0x0E)
 #define CMD_WAITRUNNING (Q_PRE_STOP | 0x0F)
 #define CMD_WAITMS      (Q_PRE_NONE | 0x10)
+
+
+#define CTO_UPDATE      (10)
 
 
 extern StaticJsonBuffer<2048> jsonbuf;
@@ -62,7 +65,7 @@ void cmd_init() {
   
 }
 
-void cmd_loop() {
+void cmd_loop(unsigned long now) {
   state.command.this_command = 0;
   ESP.wdtFeed();
 
@@ -76,6 +79,10 @@ void cmd_loop() {
     cmd_debug(head->id, head->opcode, "Try exec");
 
     // Check pre-conditions
+    if (head->opcode & (Q_PRE_BUSY | Q_PRE_STOP)) {
+      state.motor.status = ps_getstatus();
+      sketch.motor.last.status = now;
+    }
     if ((head->opcode & Q_PRE_BUSY) && ps_isbusy()) return;
     if ((head->opcode & Q_PRE_STOP) && ps_isrunning()) return;
       
@@ -162,40 +169,43 @@ void cmd_loop() {
       }
       case CMD_SETCONFIG: {
         const char * data = (const char *)Qcmd;
-        JsonObject& root = jsonbuf.parseObject(data);
-        if (root.containsKey("mode"))       config.motor.mode = parse_motormode(root["mode"], config.motor.mode);
-        if (root.containsKey("stepsize"))   config.motor.stepsize = parse_stepsize(root["stepsize"].as<int>(), config.motor.stepsize);
-        if (root.containsKey("ocd"))        config.motor.ocd = root["ocd"].as<float>();
-        if (root.containsKey("ocdshutdown")) config.motor.ocdshutdown = root["ocdshutdown"].as<bool>();
-        if (root.containsKey("maxspeed"))   config.motor.maxspeed = root["maxspeed"].as<float>();
-        if (root.containsKey("minspeed"))   config.motor.minspeed = root["minspeed"].as<float>();
-        if (root.containsKey("accel"))      config.motor.accel = root["accel"].as<float>();
-        if (root.containsKey("decel"))      config.motor.decel = root["decel"].as<float>();
-        if (root.containsKey("kthold"))     config.motor.kthold = root["kthold"].as<float>();
-        if (root.containsKey("ktrun"))      config.motor.ktrun = root["ktrun"].as<float>();
-        if (root.containsKey("ktaccel"))    config.motor.ktaccel = root["ktaccel"].as<float>();
-        if (root.containsKey("ktdecel"))    config.motor.ktdecel = root["ktdecel"].as<float>();
-        if (root.containsKey("fsspeed"))    config.motor.fsspeed = root["fsspeed"].as<float>();
-        if (root.containsKey("fsboost"))    config.motor.fsboost = root["fsboost"].as<bool>();
-        if (root.containsKey("cm_switchperiod")) config.motor.cm.switchperiod = root["cm_switchperiod"].as<float>();
-        if (root.containsKey("cm_predict")) config.motor.cm.predict = root["cm_predict"].as<bool>();
-        if (root.containsKey("cm_minon"))   config.motor.cm.minon = root["cm_minon"].as<float>();
-        if (root.containsKey("cm_minoff"))  config.motor.cm.minoff = root["cm_minoff"].as<float>();
-        if (root.containsKey("cm_fastoff")) config.motor.cm.fastoff = root["cm_fastoff"].as<float>();
-        if (root.containsKey("cm_faststep")) config.motor.cm.faststep = root["cm_faststep"].as<float>();
-        if (root.containsKey("vm_pwmfreq")) config.motor.vm.pwmfreq = root["vm_pwmfreq"].as<float>();
-        if (root.containsKey("vm_stall"))   config.motor.vm.stall = root["vm_stall"].as<float>();
-        if (root.containsKey("vm_bemf_slopel")) config.motor.vm.bemf_slopel = root["vm_bemf_slopel"].as<float>();
-        if (root.containsKey("vm_bemf_speedco")) config.motor.vm.bemf_speedco = root["vm_bemf_speedco"].as<float>();
-        if (root.containsKey("vm_bemf_slopehacc")) config.motor.vm.bemf_slopehacc = root["vm_bemf_slopehacc"].as<float>();
-        if (root.containsKey("vm_bemf_slopehdec")) config.motor.vm.bemf_slopehdec = root["vm_bemf_slopehdec"].as<float>();
-        if (root.containsKey("reverse"))    config.motor.reverse = root["reverse"].as<bool>();
-        motorcfg_push(&config.motor);
-        if (root.containsKey("save") && root["save"].as<bool>()) {
-          motorcfg_write(&config.motor);
+        size_t ldata = strlen(data);
+        bool save = false;
+        if (ldata > 0) {
+          JsonObject& root = jsonbuf.parseObject(data);
+          if (root.containsKey("mode"))       config.motor.mode = parse_motormode(root["mode"], config.motor.mode);
+          if (root.containsKey("stepsize"))   config.motor.stepsize = parse_stepsize(root["stepsize"].as<int>(), config.motor.stepsize);
+          if (root.containsKey("ocd"))        config.motor.ocd = root["ocd"].as<float>();
+          if (root.containsKey("ocdshutdown")) config.motor.ocdshutdown = root["ocdshutdown"].as<bool>();
+          if (root.containsKey("maxspeed"))   config.motor.maxspeed = root["maxspeed"].as<float>();
+          if (root.containsKey("minspeed"))   config.motor.minspeed = root["minspeed"].as<float>();
+          if (root.containsKey("accel"))      config.motor.accel = root["accel"].as<float>();
+          if (root.containsKey("decel"))      config.motor.decel = root["decel"].as<float>();
+          if (root.containsKey("kthold"))     config.motor.kthold = root["kthold"].as<float>();
+          if (root.containsKey("ktrun"))      config.motor.ktrun = root["ktrun"].as<float>();
+          if (root.containsKey("ktaccel"))    config.motor.ktaccel = root["ktaccel"].as<float>();
+          if (root.containsKey("ktdecel"))    config.motor.ktdecel = root["ktdecel"].as<float>();
+          if (root.containsKey("fsspeed"))    config.motor.fsspeed = root["fsspeed"].as<float>();
+          if (root.containsKey("fsboost"))    config.motor.fsboost = root["fsboost"].as<bool>();
+          if (root.containsKey("cm_switchperiod")) config.motor.cm.switchperiod = root["cm_switchperiod"].as<float>();
+          if (root.containsKey("cm_predict")) config.motor.cm.predict = root["cm_predict"].as<bool>();
+          if (root.containsKey("cm_minon"))   config.motor.cm.minon = root["cm_minon"].as<float>();
+          if (root.containsKey("cm_minoff"))  config.motor.cm.minoff = root["cm_minoff"].as<float>();
+          if (root.containsKey("cm_fastoff")) config.motor.cm.fastoff = root["cm_fastoff"].as<float>();
+          if (root.containsKey("cm_faststep")) config.motor.cm.faststep = root["cm_faststep"].as<float>();
+          if (root.containsKey("vm_pwmfreq")) config.motor.vm.pwmfreq = root["vm_pwmfreq"].as<float>();
+          if (root.containsKey("vm_stall"))   config.motor.vm.stall = root["vm_stall"].as<float>();
+          if (root.containsKey("vm_bemf_slopel")) config.motor.vm.bemf_slopel = root["vm_bemf_slopel"].as<float>();
+          if (root.containsKey("vm_bemf_speedco")) config.motor.vm.bemf_speedco = root["vm_bemf_speedco"].as<float>();
+          if (root.containsKey("vm_bemf_slopehacc")) config.motor.vm.bemf_slopehacc = root["vm_bemf_slopehacc"].as<float>();
+          if (root.containsKey("vm_bemf_slopehdec")) config.motor.vm.bemf_slopehdec = root["vm_bemf_slopehdec"].as<float>();
+          if (root.containsKey("reverse"))    config.motor.reverse = root["reverse"].as<bool>();
+          save = root.containsKey("save") && root["save"].as<bool>();
+          jsonbuf.clear();
         }
-        jsonbuf.clear();
-        consume += strlen(data) + 1;
+        motorcfg_push(&config.motor);
+        if (save) motorcfg_write(&config.motor);
+        consume += ldata + 1;
         break;
       }
       case CMD_WAITMS: {
@@ -211,6 +221,22 @@ void cmd_loop() {
 
     cmd_debug(head->id, head->opcode, "Exec complete");
     ESP.wdtFeed();
+  }
+}
+
+void cmd_update(unsigned long now) {
+  if (timesince(sketch.motor.last.status, now) > CTO_UPDATE) {
+    sketch.motor.last.status = now;
+    state.motor.status = ps_getstatus();
+    state.motor.status.direction = motorcfg_dir(state.motor.status.direction);
+  }
+  
+  if (timesince(sketch.motor.last.state, now) > CTO_UPDATE) {
+    sketch.motor.last.state = now;
+    state.motor.stepss = ps_getspeed();
+    state.motor.pos = motorcfg_pos(ps_getpos());
+    state.motor.mark = motorcfg_pos(ps_getmark());
+    state.motor.adc = (float)ps_readadc() * MOTOR_ADCCOEFF;
   }
 }
 

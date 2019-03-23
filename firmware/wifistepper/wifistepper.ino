@@ -9,7 +9,7 @@
 #include "powerstep01.h"
 #include "wifistepper.h"
 
-#define DEFAULT_APSSID  {'w','s','x','1','0','0','-','a','p',0}
+#define DEFAULT_APSSID  {'w','s','x','1','0','0','-','a','q',0}
 
 #define TYPE_HTML     "text/html"
 #define TYPE_CSS      "text/css"
@@ -70,7 +70,7 @@ config_t config = {
     },
     .daisy = {
       .enabled = true,
-      .master = false,
+      .master = true,
       .baudrate = 1000000
     },
     .mqtt = {
@@ -126,8 +126,9 @@ config_t config = {
 };
 
 state_t state = { 0 };
-daisy_slavestate * daisy_slavestates = NULL;
+sketch_t sketch = { 0 };
 
+daisy_slave_t * daisy_slave = NULL;
 
 id_t nextid() { return _id++; }
 id_t currentid() { return _id; }
@@ -320,6 +321,9 @@ void motorcfg_push(motor_config * cfg) {
 
   ps_setktvals(cfg->kthold, cfg->ktrun, cfg->ktaccel, cfg->ktdecel);
   ps_setalarmconfig(true, true, true, true);
+
+  // Clear errors at end of push
+  ps_getstatus(true);
 }
 
 void motorcfg_write(motor_config * cfg) {
@@ -449,9 +453,10 @@ void setup() {
     if (config.service.mdns.enabled) {
       WiFi.hostname(config.service.mdns.hostname);
     }
-    
+
+    bool revertap = false;
+    bool wifioff = false;
     if (config.wifi.mode == M_STATION) {
-      Serial.println("Station Mode");
       Serial.println(config.wifi.station.ssid);
       Serial.println(config.wifi.station.password);
       WiFi.mode(WIFI_STA);
@@ -467,44 +472,35 @@ void setup() {
       }
 
       if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Could not connect");
-        if (config.wifi.station.revertap) {
-          Serial.println("Reverting to AP mode");
-          config.wifi.mode = M_ACCESSPOINT;
-          
-        } else {
-          // Shut down wifi
-          config.wifi.mode = M_OFF;
-        }
+        if (config.wifi.station.revertap) revertap = true;
+        else wifioff = true;
       } else {
-         strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
-         digitalWrite(WIFILED_PIN, LOW);
+        state.wifi.mode = M_STATION;
+        strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
+        digitalWrite(WIFILED_PIN, LOW);
       }
     }
 
-    if (config.wifi.mode == M_ACCESSPOINT) {
-      Serial.println("AP Mode");
+    if (config.wifi.mode == M_ACCESSPOINT || revertap) {
       Serial.println(config.wifi.accesspoint.ssid);
       Serial.println(config.wifi.accesspoint.password);
       WiFi.mode(WIFI_AP);
       WiFi.softAP(config.wifi.accesspoint.ssid, config.wifi.accesspoint.password, config.wifi.accesspoint.channel, config.wifi.accesspoint.hidden);
+      state.wifi.mode = M_ACCESSPOINT;
       strlcpy(state.wifi.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
     }
 
-    if (config.wifi.mode == M_OFF) {
+    if (config.wifi.mode == M_OFF || wifioff) {
       WiFi.mode(WIFI_OFF);
+      state.wifi.mode = M_OFF;
+      state.wifi.ip[0] = 0;
     }
-    
-    Serial.println("Wifi connected");
-    Serial.println(state.wifi.ip);
   }
 
   // Initialize web services
   {
     if (config.service.mdns.enabled) {
-      if (!MDNS.begin(config.service.mdns.hostname)) {
-        Serial.println("Error: Could not start mDNS.");
-      }
+      MDNS.begin(config.service.mdns.hostname);
     }
 
     if (config.service.ota.enabled) {
@@ -526,8 +522,11 @@ void setup() {
     }
   }
 
-  // Read motor configuration
+  // Initialize SPI and Stepper Motor config
   {
+    ps_spiinit();
+
+    // Read motor config
     File fp = SPIFFS.open(FNAME_MOTORCFG, "r");
     if (fp) {
       size_t size = fp.size();
@@ -535,35 +534,19 @@ void setup() {
       fp.readBytes(buf.get(), size);
       cmd_setconfig(nextid(), buf.get());
       fp.close();
+      
+    } else {
+      // No motor config, send default
+      cmd_setconfig(nextid(), "");
     }
-  }
-
-  // Initialize SPI and Stepper Motor and clear any faults
-  {
-    ps_spiinit();
-    delay(10);
-    motorcfg_push(&config.motor);
-    ps_getstatus(true);
   }
 }
 
-#define HANDLE_CMDS()     ({ if (config.service.daisy.enabled) daisy_loop(now); cmd_loop(); })
-#define HANDLE_CHECKS()   ({ if (config.service.daisy.enabled) daisy_check(now); })
+#define HANDLE_CMDS()     ({ daisy_loop(now); cmd_loop(now); })
 
 //static volatile unsigned long last_statepoll = 0;
 void loop() {
   unsigned long now = millis();
-  
-  //HANDLE_CMDS();
-  
-  /*if ((now - last_statepoll) > 10) {
-    ps_status status = ps_getstatus();
-    state.motor.pos = ps_getpos();
-    state.motor.mark = ps_getmark();
-    state.motor.stepss = ps_getspeed();
-    state.motor.busy = status.busy;
-    last_statepoll = now;
-  }*/
 
   HANDLE_CMDS();
 
@@ -597,6 +580,7 @@ void loop() {
     }
   }
 
-  HANDLE_CHECKS();
+  cmd_update(now);
+  daisy_update(now);
 }
 

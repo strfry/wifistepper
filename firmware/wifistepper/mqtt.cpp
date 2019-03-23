@@ -50,7 +50,7 @@ void mqtt_loop(unsigned long looptime) {
 
   mqtt_client->loop();
 
-  if (connected && (looptime - last_publish) > config.service.mqtt.state_publish_period) {
+  /*if (connected && (looptime - last_publish) > config.service.mqtt.state_publish_period) {
     JsonObject& root = jsonbuf.createObject();
     root["position"] = motorcfg_pos(state.motor.pos);
     root["mark"] = motorcfg_pos(state.motor.mark);
@@ -60,6 +60,6 @@ void mqtt_loop(unsigned long looptime) {
     mqtt_client->publish(config.service.mqtt.state_topic, v.as<String>().c_str());
     jsonbuf.clear();
     last_publish = looptime;
-  }
+  }*/
 }
 

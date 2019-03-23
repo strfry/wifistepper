@@ -86,7 +86,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
           ws_packint(motorcfg_pos(state.motor.pos), &buf[1]);
           ws_packint(motorcfg_pos(state.motor.mark), &buf[1+4]);
           ws_packfloat(state.motor.stepss, &buf[1+4+4]);
-          buf[1+4+4+4] = state.motor.busy? 0x1 : 0x0;
+          buf[1+4+4+4] = state.motor.status.busy? 0x1 : 0x0;
           websocket.sendBIN(num, buf, sizeof(buf));
           break;
         }
