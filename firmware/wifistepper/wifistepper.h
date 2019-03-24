@@ -14,6 +14,7 @@
 
 #define FNAME_WIFICFG     "/wificfg.json"
 #define FNAME_SERVICECFG  "/servicecfg.json"
+#define FNAME_DAISYCFG    "/daisycfg.json"
 #define FNAME_MOTORCFG    "/motorcfg.json"
 
 #define PORT_HTTP     80
@@ -97,11 +98,6 @@ typedef struct {
   } ota;
   struct {
     bool enabled;
-    bool master;
-    int baudrate;
-  } daisy;
-  struct {
-    bool enabled;
     char server[LEN_URL];
     int port;
     char username[LEN_USERNAME];
@@ -118,6 +114,12 @@ typedef struct ispacked {
     bool is_output;
   } wifiled;
 } io_config;
+
+typedef struct {
+  bool enabled;
+  bool master;
+  bool slavewifioff;
+} daisy_config;
 
 typedef struct ispacked {
   ps_mode mode;
@@ -155,6 +157,7 @@ typedef struct ispacked {
 typedef struct {
   wifi_config wifi;
   service_config service;
+  daisy_config daisy;
   io_config io;
   motor_config motor;
 } config_t;
@@ -167,6 +170,7 @@ typedef struct {
 #define ESUB_DAISY    (0x04)
 
 void seterror(uint8_t subsystem, id_t onid = 0, int type = 0);
+void clearerror();
 
 typedef struct ispacked {
   bool errored;
@@ -189,14 +193,15 @@ typedef struct ispacked {
 
 typedef struct {
   struct {
-    uint8_t numslaves;
-    bool active;
-  } daisy;
-  struct {
     int connected;
     int status;
   } mqtt;
 } service_state;
+
+typedef struct {
+  bool active;
+  uint8_t slaves;
+} daisy_state;
 
 typedef struct ispacked {
   ps_status status;
@@ -211,31 +216,20 @@ typedef struct {
   command_state command;
   wifi_state wifi;
   service_state service;
+  daisy_state daisy;
   motor_state motor;
 } state_t;
 
-
 typedef struct {
   struct {
-    struct {
-      unsigned long ping;
-      unsigned long config;
-      unsigned long state;
-    } last;
-  } daisy;
-} service_sketch;
-
-typedef struct {
-  struct {
-    unsigned int status;
-    unsigned int state;
+    unsigned long connection_check;
+    unsigned long revertap;
   } last;
-} motor_sketch;
+} wifi_sketch;
 
-typedef struct {
-  service_sketch service;
-  motor_sketch motor;
-} sketch_t;
+/*typedef struct {
+  
+} service_sketch;*/
 
 typedef struct ispacked {
   io_config io;
@@ -254,12 +248,35 @@ typedef struct {
   daisy_slavestate state;
 } daisy_slave_t;
 
+typedef struct {
+  daisy_slave_t * slave;
+  struct {
+    unsigned long ping_rx;
+    unsigned long ping_tx;
+    unsigned long config;
+    unsigned long state;
+  } last;
+} daisy_sketch;
+
+typedef struct {
+  struct {
+    unsigned int status;
+    unsigned int state;
+  } last;
+} motor_sketch;
+
+typedef struct {
+  wifi_sketch wifi;
+  //service_sketch service;
+  daisy_sketch daisy;
+  motor_sketch motor;
+} sketch_t;
+
 void cmd_init();
 void cmd_loop(unsigned long now);
 void cmd_update(unsigned long now);
 
 // Commands for local Queue
-//void cmd_put(id_t id, uint8_t opcode, uint8_t * data, size_t len);
 bool cmd_nop(id_t id);
 bool cmd_stop(id_t id, bool hiz, bool soft);
 bool cmd_run(id_t id, ps_direction dir, float stepss);
@@ -281,12 +298,16 @@ bool cmd_waitms(id_t id, uint32_t millis);
 
 bool cmd_empty(id_t id);
 bool cmd_estop(id_t id, bool hiz, bool soft);
-
+void cmd_clearerror();
 
 
 void daisy_init();
 void daisy_loop(unsigned long now);
 void daisy_update(unsigned long now);
+
+// Remote management commands
+bool daisy_clearerror(uint8_t address, id_t id);
+bool daisy_wificontrol(uint8_t address, id_t id, bool enabled);
 
 // Remote queue commands
 bool daisy_stop(uint8_t address, id_t id, bool hiz, bool soft);
@@ -313,9 +334,14 @@ bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
 
 void wificfg_read(wifi_config * cfg);
 void wificfg_write(wifi_config * const cfg);
+bool wificfg_connect(wifi_mode mode, wifi_config * const cfg);
+void wificfg_update(unsigned long now);
 
 void servicecfg_read(service_config * cfg);
 void servicecfg_write(service_config * const cfg);
+
+void daisycfg_read(daisy_config * cfg);
+void daisycfg_write(daisy_config * const cfg);
 
 void motorcfg_read(motor_config * cfg);
 void motorcfg_write(motor_config * const cfg);

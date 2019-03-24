@@ -240,12 +240,6 @@ void cmd_update(unsigned long now) {
   }
 }
 
-/*void cmd_put(id_t id, uint8_t opcode, uint8_t * data, size_t len) {
-  void * buf = cmd_alloc(id, opcode, len);
-  if (buf != NULL) memcpy(buf, data, data);
-  return buf != NULL;
-}*/
-
 static void * cmd_alloc(id_t id, uint8_t opcode, size_t len) {
   if ((Q_SIZE - Qlen) < (sizeof(cmd_head_t) + len)) {
     seterror(ESUB_CMD, id);
@@ -372,5 +366,9 @@ bool cmd_estop(id_t id, bool hiz, bool soft) {
     else        ps_hardstop();
   }
   return cmd_empty(id);
+}
+
+void cmd_clearerror() {
+  state.motor.status = ps_getstatus(true);
 }
 

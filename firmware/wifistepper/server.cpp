@@ -7,8 +7,6 @@
 extern ESP8266WebServer server;
 extern StaticJsonBuffer<2048> jsonbuf;
 
-extern daisy_slave_t * daisy_slave;
-
 extern volatile bool flag_reboot;
 
 #define json_ok()         "{\"status\":\"ok\"}"
@@ -48,22 +46,18 @@ void jsonwifi_init() {
     JsonObject& root = jsonbuf.createObject();
     root["ip"] = state.wifi.ip;
     root["mode"] = json_serialize(config.wifi.mode);
-    if (config.wifi.mode == M_ACCESSPOINT) {
-      root["ssid"] = config.wifi.accesspoint.ssid;
-      root["password"] = config.wifi.accesspoint.encryption? config.wifi.accesspoint.password : "";
-      root["encryption"] = config.wifi.accesspoint.encryption;
-      root["channel"] = config.wifi.accesspoint.channel;
-      root["hidden"] = config.wifi.accesspoint.hidden;
-      
-    } else if (config.wifi.mode == M_STATION) {
-      root["ssid"] = config.wifi.station.ssid;
-      root["password"] = config.wifi.station.encryption? config.wifi.station.password : "";
-      root["encryption"] = config.wifi.station.encryption;
-      root["forceip"] = config.wifi.station.forceip;
-      root["forcesubnet"] = config.wifi.station.forcesubnet;
-      root["forcegateway"] = config.wifi.station.forcegateway;
-      root["revertap"] = config.wifi.station.revertap;
-    }
+    root["accesspoint_ssid"] = config.wifi.accesspoint.ssid;
+    root["accesspoint_password"] = config.wifi.accesspoint.encryption? config.wifi.accesspoint.password : "";
+    root["accesspoint_encryption"] = config.wifi.accesspoint.encryption;
+    root["accesspoint_channel"] = config.wifi.accesspoint.channel;
+    root["accesspoint_hidden"] = config.wifi.accesspoint.hidden;
+    root["station_ssid"] = config.wifi.station.ssid;
+    root["station_password"] = config.wifi.station.encryption? config.wifi.station.password : "";
+    root["station_encryption"] = config.wifi.station.encryption;
+    root["station_forceip"] = config.wifi.station.forceip;
+    root["station_forcesubnet"] = config.wifi.station.forcesubnet;
+    root["station_forcegateway"] = config.wifi.station.forcegateway;
+    root["station_revertap"] = config.wifi.station.revertap;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -104,7 +98,7 @@ void jsonwifi_init() {
   });
 }
 
-void jsonbrowser_init() {
+void jsonservice_init() {
   server.on("/api/service/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
@@ -139,6 +133,45 @@ void jsonbrowser_init() {
   });
 }
 
+void jsondaisy_init() {
+  server.on("/api/daisy/get", [](){
+    json_addheaders();
+    JsonObject& root = jsonbuf.createObject();
+    root["enabled"] = config.daisy.enabled;
+    root["master"] = config.daisy.master;
+    root["slavewifioff"] = config.daisy.slavewifioff;
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/daisy/set", [](){
+    json_addheaders();
+    if (server.hasArg("enabled"))       config.daisy.enabled = server.arg("enabled") == "true";
+    if (server.hasArg("master"))        config.daisy.master = server.arg("master") == "true";
+    if (server.hasArg("slavewifioff"))  config.daisy.slavewifioff = server.arg("slavewifioff") == "true";
+    daisycfg_write(&config.daisy);
+    flag_reboot = true;
+    server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/daisy/wificontrol", [](){
+    json_addheaders();
+    if (!config.daisy.enabled || !config.daisy.master || !state.daisy.active) {
+      server.send(200, "application/json", json_error("daisy not active"));
+      return;
+    }
+    if (!server.hasArg("enabled")) {
+      server.send(200, "application/json", json_error("enabled arg must be specified"));
+      return;
+    }
+    bool enabled = server.arg("enabled") == "true";
+    for (uint8_t i = 1; i < state.daisy.slaves; i++) {
+      daisy_wificontrol(i, nextid(), enabled);
+    }
+    server.send(200, "application/json", json_ok());
+  });
+}
+
 void jsoncpu_init() {
   server.on("/api/cpu/adc", [](){
     json_addheaders();
@@ -163,15 +196,15 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to get target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
-      if (target > 0) cfg = &daisy_slave[target - 1].config.motor;
+      if (target > 0) cfg = &sketch.daisy.slave[target - 1].config.motor;
     }
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("target")) root["target"] = target;
@@ -213,11 +246,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -258,24 +291,21 @@ void jsonmotor_init() {
     jsonbuf.clear();
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/clearerror", [](){
-    // TODO finish me
-  });
   server.on("/api/motor/state", [](){
     json_addheaders();
     motor_state * st = &state.motor;
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to get target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
-      if (target > 0) st = &daisy_slave[target - 1].state.motor;
+      if (target > 0) st = &sketch.daisy.slave[target - 1].state.motor;
     }
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("target")) root["target"] = target;
@@ -314,11 +344,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -333,11 +363,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -357,11 +387,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -381,11 +411,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -406,11 +436,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -436,11 +466,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -460,11 +490,11 @@ void jsonmotor_init() {
     int target = 0;
     if (server.hasArg("target")) {
       target = server.arg("target").toInt();
-      if (target != 0 && (!config.service.daisy.enabled || !config.service.daisy.master || !state.service.daisy.active)) {
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
         server.send(200, "application/json", json_error("failed to set target"));
         return;
       }
-      if (target < 0 || target > state.service.daisy.numslaves) {
+      if (target < 0 || target > state.daisy.slaves) {
         server.send(200, "application/json", json_error("invalid target"));
         return;
       }
@@ -480,26 +510,55 @@ void jsonmotor_init() {
 
 void json_init() {
   jsonwifi_init();
-  jsonbrowser_init();
+  jsonservice_init();
+  jsondaisy_init();
   jsoncpu_init();
   jsonmotor_init();
   
   server.on("/api/ping", [](){
     json_addheaders();
-    
     JsonObject& obj = jsonbuf.createObject();
     obj["status"] = "ok";
     obj["data"] = "pong";
-
     JsonVariant v = obj;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
+  server.on("/api/error/get", [](){
+    json_addheaders();
+    JsonObject& obj = jsonbuf.createObject();
+    obj["errored"] = state.error.errored;
+    obj["now"] = millis();
+    if (state.error.errored) {
+      obj["when"] = state.error.when;
+      obj["subsystem"] = state.error.subsystem;
+      obj["id"] = state.error.id;
+      obj["type"] = state.error.type;
+    }
+    obj["status"] = "ok";
+    JsonVariant v = obj;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/error/clear", [](){
+    json_addheaders();
+    // Clear local errors
+    cmd_clearerror();
+    clearerror();
 
+    // Clear daisy errors
+    if (config.daisy.enabled && config.daisy.master && state.daisy.active) {
+      for (uint8_t i = 1; i <= state.daisy.slaves; i++) {
+        daisy_clearerror(i, nextid());
+      }
+    }
+    server.send(200, "application/json", json_okid(id));
+  });
   server.on("/api/factoryreset", [](){
     json_addheaders();
     SPIFFS.remove(FNAME_WIFICFG);
     SPIFFS.remove(FNAME_SERVICECFG);
+    SPIFFS.remove(FNAME_DAISYCFG);
     SPIFFS.remove(FNAME_MOTORCFG);
     flag_reboot = true;
     server.send(200, "application/json", json_ok());

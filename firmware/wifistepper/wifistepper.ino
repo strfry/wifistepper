@@ -9,12 +9,13 @@
 #include "powerstep01.h"
 #include "wifistepper.h"
 
-#define DEFAULT_APSSID  {'w','s','x','1','0','0','-','a','q',0}
-
 #define TYPE_HTML     "text/html"
 #define TYPE_CSS      "text/css"
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
+
+#define WTO_REVERTAP  (5 * 60 * 1000)
+#define WTO_CONNECT   (1000)
 
 volatile id_t _id = ID_START;
 
@@ -29,13 +30,12 @@ StaticJsonBuffer<1024> configbuf;
 
 volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
-volatile bool flag_cmderror = false;
 
 config_t config = {
   .wifi = {
     .mode = M_ACCESSPOINT,
     .accesspoint = {
-      .ssid = DEFAULT_APSSID,
+      .ssid = {0},
       .password = {0},
       .encryption = false,
       .channel = 1,
@@ -68,11 +68,6 @@ config_t config = {
       .enabled = true,
       .password = {0}
     },
-    .daisy = {
-      .enabled = true,
-      .master = true,
-      .baudrate = 1000000
-    },
     .mqtt = {
       .enabled = false,
       .server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
@@ -83,6 +78,11 @@ config_t config = {
       .state_publish_period = 5.0,
       .command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
     }
+  },
+  .daisy = {
+    .enabled = true,
+    .master = false,
+    .slavewifioff = true
   },
   .io = {
     .wifiled = {
@@ -128,8 +128,6 @@ config_t config = {
 state_t state = { 0 };
 sketch_t sketch = { 0 };
 
-daisy_slave_t * daisy_slave = NULL;
-
 id_t nextid() { return _id++; }
 id_t currentid() { return _id; }
 
@@ -144,6 +142,10 @@ void seterror(uint8_t subsystem, id_t onid, int type) {
     state.error.id = onid;
     state.error.type = type;
   }
+}
+
+void clearerror() {
+  memset(&state.error, 0, sizeof(error_state));
 }
 
 void wificfg_read(wifi_config * cfg) {
@@ -193,6 +195,66 @@ void wificfg_write(wifi_config * const cfg) {
   jsonbuf.clear();
 }
 
+bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
+  switch (mode) {
+    case M_ACCESSPOINT: {
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
+      strlcpy(state.wifi.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
+      state.wifi.mode = M_ACCESSPOINT;
+      return true;
+    }
+    case M_STATION: {
+      WiFi.mode(WIFI_STA);
+      if (cfg->station.forceip[0] != 0 && cfg->station.forcesubnet[0] != 0 && cfg->station.forcegateway[0] != 0) {
+        IPAddress addr, subnet, gateway;
+        if (addr.fromString(cfg->station.forceip) && subnet.fromString(cfg->station.forcesubnet) && gateway.fromString(cfg->station.forcegateway)) {
+          WiFi.config(addr, subnet, gateway);
+        }
+      }
+      WiFi.begin(cfg->station.ssid, cfg->station.password);
+      for (int i=0; i < 200 && WiFi.status() != WL_CONNECTED; i++) {
+        ESP.wdtFeed();
+        delay(50);
+      }
+
+      if (WiFi.status() == WL_CONNECTED) {
+        strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
+        state.wifi.mode = M_STATION;
+        return true;
+      } else {
+        return false;
+      }
+    }
+    case M_OFF: {
+      WiFi.mode(WIFI_OFF);
+      state.wifi.mode = M_OFF;
+      state.wifi.ip[0] = 0;
+      return true;
+    }
+  }
+}
+
+void wificfg_update(unsigned long now) {
+  if (state.wifi.mode == M_ACCESSPOINT && config.wifi.mode == M_STATION && config.wifi.station.revertap && timesince(sketch.wifi.last.revertap, now) > WTO_REVERTAP) {
+    // We've reverted to AP some time ago, try to reconnect in station mode now
+    sketch.wifi.last.revertap = now;
+    if (!wificfg_connect(M_STATION, &config.wifi)) {
+      // Could not connect to station, revert back to AP mode
+      wificfg_connect(M_ACCESSPOINT, &config.wifi);
+    }
+  }
+  
+  if (state.wifi.mode == M_STATION && timesince(sketch.wifi.last.connection_check, now) > WTO_CONNECT) {
+    // Lost connection, try to reconnect
+    sketch.wifi.last.connection_check = now;
+    if (WiFi.status() != WL_CONNECTED && !wificfg_connect(M_STATION, &config.wifi)) {
+      // Station connection failed, revert to AP if configured
+      if (config.wifi.station.revertap) wificfg_connect(M_ACCESSPOINT, &config.wifi);
+    }
+  }
+}
+
 void servicecfg_read(service_config * cfg) {
   File fp = SPIFFS.open(FNAME_SERVICECFG, "r");
   if (fp) {
@@ -208,9 +270,6 @@ void servicecfg_read(service_config * cfg) {
     if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
     if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
     if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("daisy_enabled"))  cfg->daisy.enabled = root["daisy_enabled"].as<bool>();
-    if (root.containsKey("daisy_master"))   cfg->daisy.master = root["daisy_master"].as<bool>();
-    if (root.containsKey("daisy_baudrate")) cfg->daisy.baudrate = root["daisy_baudrate"].as<int>();
     if (root.containsKey("mqtt_enabled"))   cfg->mqtt.enabled = root["mqtt_enabled"].as<bool>();
     if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
     if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
@@ -234,9 +293,6 @@ void servicecfg_write(service_config * const cfg) {
   root["auth_password"] = cfg->auth.password;
   root["ota_enabled"] = cfg->ota.enabled;
   root["ota_password"] = cfg->ota.password;
-  root["daisy_enabled"] = cfg->daisy.enabled;
-  root["daisy_master"] = cfg->daisy.master;
-  root["daisy_baudrate"] = cfg->daisy.baudrate;
   root["mqtt_enabled"] = cfg->mqtt.enabled;
   root["mqtt_server"] = cfg->mqtt.server;
   root["mqtt_port"] = cfg->mqtt.port;
@@ -247,6 +303,31 @@ void servicecfg_write(service_config * const cfg) {
   root["mqtt_command_topic"] = cfg->mqtt.command_topic;
   JsonVariant v = root;
   File fp = SPIFFS.open(FNAME_SERVICECFG, "w");
+  root.printTo(fp);
+  fp.close();
+  jsonbuf.clear();
+}
+
+void daisycfg_read(daisy_config * cfg) {
+  File fp = SPIFFS.open(FNAME_DAISYCFG, "r");
+  if (fp) {
+    size_t size = fp.size();
+    std::unique_ptr<char[]> buf(new char[size]);
+    fp.readBytes(buf.get(), size);
+    JsonObject& root = jsonbuf.parseObject(buf.get());
+    if (root.containsKey("enabled"))  cfg->enabled = root["enabled"].as<bool>();
+    if (root.containsKey("master"))   cfg->master = root["master"].as<bool>();
+    jsonbuf.clear();
+    fp.close();
+  }
+}
+
+void daisycfg_write(daisy_config * const cfg) {
+  JsonObject& root = jsonbuf.createObject();
+  root["enabled"] = cfg->enabled;
+  root["master"] = cfg->master;
+  JsonVariant v = root;
+  File fp = SPIFFS.open(FNAME_DAISYCFG, "w");
   root.printTo(fp);
   fp.close();
   jsonbuf.clear();
@@ -377,8 +458,7 @@ void static_serve(String contenttype, String path) {
 void static_init() {
   server.on("/", [](){
     String path;
-    char def_apssid[] = DEFAULT_APSSID;
-    if (config.wifi.mode == M_ACCESSPOINT && strcmp(config.wifi.accesspoint.ssid, def_apssid) == 0) {
+    if (config.wifi.mode == M_ACCESSPOINT && memcmp(config.wifi.accesspoint.ssid, "wsx100-", 7) == 0) {
       path = "/settings";
     } else {
       path = "/quickstart";
@@ -408,6 +488,11 @@ void setup() {
   {
     cmd_init();
     daisy_init();
+
+    // Set default ap name
+    byte mac[6];
+    WiFi.macAddress(mac);
+    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x", mac[4], mac[5]);
   }
 
   // Initialize FS
@@ -424,6 +509,7 @@ void setup() {
       Serial.println("Configuration Reset");
       SPIFFS.remove(FNAME_WIFICFG);
       SPIFFS.remove(FNAME_SERVICECFG);
+      SPIFFS.remove(FNAME_DAISYCFG);
       SPIFFS.remove(FNAME_MOTORCFG);
 
       // Wait for reset to depress
@@ -433,67 +519,33 @@ void setup() {
     }
   }
 
-  // Read wifi configuration
+  // Read configuration
   {
     wificfg_read(&config.wifi);
-  }
-
-  // Read browser configuration
-  {
     servicecfg_read(&config.service);
+    daisycfg_read(&config.daisy);
   }
 
   // Wifi connection
   {
-
-    // TODO - handle IO config
-    pinMode(WIFILED_PIN, OUTPUT);
-    digitalWrite(WIFILED_PIN, HIGH);
+    if (!config.io.wifiled.usercontrol) {
+      pinMode(WIFILED_PIN, OUTPUT);
+      digitalWrite(WIFILED_PIN, HIGH);
+    }
     
     if (config.service.mdns.enabled) {
       WiFi.hostname(config.service.mdns.hostname);
     }
 
-    bool revertap = false;
-    bool wifioff = false;
-    if (config.wifi.mode == M_STATION) {
-      Serial.println(config.wifi.station.ssid);
-      Serial.println(config.wifi.station.password);
-      WiFi.mode(WIFI_STA);
-      if (config.wifi.station.forceip[0] != 0 && config.wifi.station.forcesubnet[0] != 0 && config.wifi.station.forcegateway[0] != 0) {
-        IPAddress addr, subnet, gateway;
-        if (addr.fromString(config.wifi.station.forceip) && subnet.fromString(config.wifi.station.forcesubnet) && gateway.fromString(config.wifi.station.forcegateway)) {
-          WiFi.config(addr, subnet, gateway);
+    if (!wificfg_connect(config.wifi.mode, &config.wifi)) {
+      switch (config.wifi.mode) {
+        case M_STATION: {
+          // Station could not connect, revert to AP or off
+          if (config.wifi.station.revertap)   wificfg_connect(M_ACCESSPOINT, &config.wifi);
+          else                                wificfg_connect(M_OFF, &config.wifi);
+          break;
         }
       }
-      WiFi.begin(config.wifi.station.ssid, config.wifi.station.password);
-      for (int i=0; i < 20 && WiFi.status() != WL_CONNECTED; i++) {
-        delay(500);
-      }
-
-      if (WiFi.status() != WL_CONNECTED) {
-        if (config.wifi.station.revertap) revertap = true;
-        else wifioff = true;
-      } else {
-        state.wifi.mode = M_STATION;
-        strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
-        digitalWrite(WIFILED_PIN, LOW);
-      }
-    }
-
-    if (config.wifi.mode == M_ACCESSPOINT || revertap) {
-      Serial.println(config.wifi.accesspoint.ssid);
-      Serial.println(config.wifi.accesspoint.password);
-      WiFi.mode(WIFI_AP);
-      WiFi.softAP(config.wifi.accesspoint.ssid, config.wifi.accesspoint.password, config.wifi.accesspoint.channel, config.wifi.accesspoint.hidden);
-      state.wifi.mode = M_ACCESSPOINT;
-      strlcpy(state.wifi.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
-    }
-
-    if (config.wifi.mode == M_OFF || wifioff) {
-      WiFi.mode(WIFI_OFF);
-      state.wifi.mode = M_OFF;
-      state.wifi.ip[0] = 0;
     }
   }
 
@@ -582,5 +634,6 @@ void loop() {
 
   cmd_update(now);
   daisy_update(now);
+  wificfg_update(now);
 }
 
