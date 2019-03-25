@@ -1,1 +1,4 @@
+*.pyc
+
 /webpage/build
+/firmware/wifistepper/data

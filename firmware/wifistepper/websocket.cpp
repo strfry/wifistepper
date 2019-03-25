@@ -4,6 +4,16 @@
 
 extern WebSocketsServer websocket;
 
+typedef enum {
+  WS_READSTATE  = 0x11,
+  WS_ESTOP      = 0x12,
+  WS_STOP       = 0x21,
+  WS_GOTO       = 0x22,
+  WS_RUN        = 0x23,
+  WS_STEPCLOCK  = 0x24,
+  WS_POS        = 0x31
+} ws_opcode;
+
 
 typedef union {
   float f32;
@@ -11,22 +21,22 @@ typedef union {
   uint8_t b[4];
 } wsc4_t;
 
-float ws_buf2float(uint8_t * b) {
+static inline float ws_buf2float(uint8_t * b) {
   wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
   return c.f32;
 }
 
-void ws_packfloat(float f, uint8_t * b) {
+static inline void ws_packfloat(float f, uint8_t * b) {
   wsc4_t c; c.f32 = f;
   b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
 }
 
-int ws_buf2int(uint8_t * b) {
+static inline int ws_buf2int(uint8_t * b) {
   wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
   return c.i32;
 }
 
-void ws_packint(int i, uint8_t * b) {
+static inline void ws_packint(int i, uint8_t * b) {
   wsc4_t c; c.i32 = i;
   b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
 }
@@ -51,67 +61,61 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
 
     case WStype_BIN: {
       switch (data[0]) {
-        case WS_READSTATUS: {
-          ps_status status = ps_getstatus(data[1]);
+        case WS_READSTATE: {
+          motor_state * st = &state.motor;
+          
           uint8_t movement = '?';
-          switch (status.movement) {
+          switch (st->status.movement) {
             case M_STOPPED:     movement = 'x';   break;
             case M_ACCEL:       movement = 'a';   break;
             case M_DECEL:       movement = 'd';   break;
             case M_CONSTSPEED:  movement = 's';   break;
           }
           
-          uint8_t buf[14] = {0};
-          buf[0] = WS_READSTATUS;
-          buf[1] = motorcfg_dir(status.direction) == FWD? 'f' : 'r';
-          buf[2] = movement;
-          buf[3] = status.hiz? 0x1 : 0x0;
-          buf[4] = status.busy? 0x1 : 0x0;
-          buf[5] = status.user_switch? 0x1 : 0x0;
-          buf[6] = status.step_clock? 0x1 : 0x0;
-          buf[7] = status.alarms.command_error? 0x1 : 0x0;
-          buf[8] = status.alarms.overcurrent? 0x1 : 0x0;
-          buf[9] = status.alarms.undervoltage? 0x1 : 0x0;
-          buf[10] = status.alarms.thermal_shutdown? 0x1 : 0x0;
-          buf[11] = status.alarms.thermal_warning? 0x1 : 0x0;
-          buf[12] = status.alarms.stall_detect? 0x1 : 0x0;
-          buf[13] = status.alarms.user_switch? 0x1 : 0x0;
-          websocket.sendBIN(num, buf, sizeof(buf));
-          break;
-        }
-
-        case WS_READSTATE: {
-          uint8_t buf[1+4+4+4+1] = {0};
+          uint8_t buf[27] = {0};
           buf[0] = WS_READSTATE;
-          ws_packint(motorcfg_pos(state.motor.pos), &buf[1]);
-          ws_packint(motorcfg_pos(state.motor.mark), &buf[1+4]);
-          ws_packfloat(state.motor.stepss, &buf[1+4+4]);
-          buf[1+4+4+4] = state.motor.status.busy? 0x1 : 0x0;
+          ws_packfloat(st->stepss, &buf[1]);
+          ws_packint(st->pos, &buf[5]);
+          ws_packint(st->mark, &buf[9]);
+          ws_packfloat(st->adc, &buf[13]);
+          buf[14] = st->status.direction == FWD? 'f' : 'r';
+          buf[15] = movement;
+          buf[16] = st->status.hiz? 0x1 : 0x0;
+          buf[17] = st->status.busy? 0x1 : 0x0;
+          buf[18] = st->status.user_switch? 0x1 : 0x0;
+          buf[19] = st->status.step_clock? 0x1 : 0x0;
+          buf[20] = st->status.alarms.command_error? 0x1 : 0x0;
+          buf[21] = st->status.alarms.overcurrent? 0x1 : 0x0;
+          buf[22] = st->status.alarms.undervoltage? 0x1 : 0x0;
+          buf[23] = st->status.alarms.thermal_shutdown? 0x1 : 0x0;
+          buf[24] = st->status.alarms.thermal_warning? 0x1 : 0x0;
+          buf[25] = st->status.alarms.stall_detect? 0x1 : 0x0;
+          buf[26] = st->status.alarms.user_switch? 0x1 : 0x0;
           websocket.sendBIN(num, buf, sizeof(buf));
           break;
         }
 
-        case WS_CMDSTOP: {
-          if (len != 2) {
-            Serial.print("Bad CMDSTOP length");
+        case WS_ESTOP: {
+          if (len != 3) {
+            seterror(ESUB_HTTP);
             return;
           }
-          cmd_stop(nextid(), false, data[1]);
+          cmd_estop(nextid(), data[1], data[2]);
           break;
         }
 
-        case WS_CMDHIZ: {
-          if (len != 2) {
-            Serial.print("Bad CMDHIZ length");
+        case WS_STOP: {
+          if (len != 3) {
+            seterror(ESUB_HTTP);
             return;
           }
-          cmd_stop(nextid(), true, data[1]);
+          cmd_stop(nextid(), data[1], data[2]);
           break;
         }
 
-        case WS_CMDGOTO: {
+        case WS_GOTO: {
           if (len != 5) {
-            Serial.print("Bad CMDGOTO length");
+            seterror(ESUB_HTTP);
             return;
           }
           int32_t pos = ws_buf2int(&data[1]);
@@ -119,26 +123,20 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
           break;
         }
 
-        case WS_CMDRUN: {
-          if (len != 7) {
-            Serial.print("Bad CMDRUN length");
+        case WS_RUN: {
+          if (len != 6) {
+            seterror(ESUB_HTTP);
             return;
           }
           ps_direction dir = data[1] == 'r'? REV : FWD;
           float stepss = ws_buf2float(&data[2]);
-          bool stopswitch = data[6] == 0x1;   // TODO - remove stopswitch param
           cmd_run(nextid(), dir, stepss);
-          /*if (stopswitch) {
-            ps_gountil(POS_RESET, motorcfg_dir(dir), stepss);
-          } else {
-            ps_run(motorcfg_dir(dir), stepss);
-          }*/
           break;
         }
 
         case WS_STEPCLOCK: {
           if (len != 2) {
-            Serial.print("Bad STEPCLOCK length");
+            seterror(ESUB_HTTP);
             return;
           }
           ps_direction dir = data[1] == 'r'? REV : FWD;
@@ -148,12 +146,12 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
 
         case WS_POS: {
           if (len != 5) {
-            Serial.print("Bad POS length");
+            seterror(ESUB_HTTP);
             return;
           }
           int pos = ws_buf2int(&data[1]);
-          if (pos == 0)   ps_resetpos();
-          else            ps_setpos(pos);
+          if (pos == 0)   cmd_resetpos(nextid());
+          else            cmd_setpos(nextid(), pos);
           break;
         }
       }

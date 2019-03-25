@@ -16,6 +16,7 @@
 
 #define WTO_REVERTAP  (5 * 60 * 1000)
 #define WTO_CONNECT   (1000)
+#define WTO_RSSI      (1000)
 
 volatile id_t _id = ID_START;
 
@@ -33,7 +34,7 @@ volatile bool flag_wifiled = false;
 
 config_t config = {
   .wifi = {
-    .mode = M_ACCESSPOINT,
+    .mode = M_STATION,
     .accesspoint = {
       .ssid = {0},
       .password = {0},
@@ -42,9 +43,9 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      .ssid = {0},
-      .password = {0},
-      .encryption = false,
+      .ssid = {'B','D','F','i','r','e',0},
+      .password = {'m','c','d','e','r','m','o','t','t',0},
+      .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
       .forcegateway = {0},
@@ -52,21 +53,20 @@ config_t config = {
     }
   },
   .service = {
+    .hostname = {'w','s','x','1','0','0',0},
     .http = {
       .enabled = true,
     },
     .mdns = {
-      .enabled = true,
-      .hostname = {'w','s','x','1','0','0',0}
+      .enabled = true
     },
     .auth = {
       .enabled = false,
       .username = {0},
       .password = {0}
     },
-    .ota = {
-      .enabled = true,
-      .password = {0}
+    .lowtcp = {
+      .enabled = true
     },
     .mqtt = {
       .enabled = false,
@@ -77,6 +77,10 @@ config_t config = {
       .state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
       .state_publish_period = 5.0,
       .command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
+    },
+    .ota = {
+      .enabled = true,
+      .password = {0}
     }
   },
   .daisy = {
@@ -155,19 +159,19 @@ void wificfg_read(wifi_config * cfg) {
     std::unique_ptr<char[]> buf(new char[size]);
     fp.readBytes(buf.get(), size);
     JsonObject& root = jsonbuf.parseObject(buf.get());
-    if (root.containsKey("mode"))           cfg->mode = parse_wifimode(root["mode"].as<char *>());
-    if (root.containsKey("accesspoint_ssid")) strlcpy(cfg->accesspoint.ssid, root["ap_ssid"].as<char *>(), LEN_SSID);
-    if (root.containsKey("accesspoint_password")) strlcpy(cfg->accesspoint.password, root["accesspoint_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("mode"))                   cfg->mode = parse_wifimode(root["mode"].as<char *>());
+    if (root.containsKey("accesspoint_ssid"))       strlcpy(cfg->accesspoint.ssid, root["accesspoint_ssid"].as<char *>(), LEN_SSID);
+    if (root.containsKey("accesspoint_password"))   strlcpy(cfg->accesspoint.password, root["accesspoint_password"].as<char *>(), LEN_PASSWORD);
     if (root.containsKey("accesspoint_encryption")) cfg->accesspoint.encryption = root["accesspoint_encryption"].as<bool>();
-    if (root.containsKey("accesspoint_channel")) cfg->accesspoint.channel = root["accesspoint_channel"].as<int>();
-    if (root.containsKey("accesspoint_hidden")) cfg->accesspoint.hidden = root["accesspoint_hidden"].as<bool>();
-    if (root.containsKey("station_ssid"))   strlcpy(cfg->station.ssid, root["station_ssid"].as<char *>(), LEN_SSID);
-    if (root.containsKey("station_password")) strlcpy(cfg->station.password, root["station_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("station_encryption")) cfg->station.encryption = root["station_encryption"].as<bool>();
-    if (root.containsKey("station_forceip")) strlcpy(cfg->station.forceip, root["station_forceip"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_forcesubnet")) strlcpy(cfg->station.forcesubnet, root["station_forcesubnet"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_forcegateway")) strlcpy(cfg->station.forcegateway, root["station_forcegateway"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_revertap")) cfg->station.revertap = root["station_revertap"].as<bool>();
+    if (root.containsKey("accesspoint_channel"))    cfg->accesspoint.channel = root["accesspoint_channel"].as<int>();
+    if (root.containsKey("accesspoint_hidden"))     cfg->accesspoint.hidden = root["accesspoint_hidden"].as<bool>();
+    if (root.containsKey("station_ssid"))           strlcpy(cfg->station.ssid, root["station_ssid"].as<char *>(), LEN_SSID);
+    if (root.containsKey("station_password"))       strlcpy(cfg->station.password, root["station_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("station_encryption"))     cfg->station.encryption = root["station_encryption"].as<bool>();
+    if (root.containsKey("station_forceip"))        strlcpy(cfg->station.forceip, root["station_forceip"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_forcesubnet"))    strlcpy(cfg->station.forcesubnet, root["station_forcesubnet"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_forcegateway"))   strlcpy(cfg->station.forcegateway, root["station_forcegateway"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_revertap"))       cfg->station.revertap = root["station_revertap"].as<bool>();
     jsonbuf.clear();
     fp.close();
   }
@@ -196,13 +200,15 @@ void wificfg_write(wifi_config * const cfg) {
 }
 
 bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
+  bool success = false;
   switch (mode) {
     case M_ACCESSPOINT: {
       WiFi.mode(WIFI_AP);
       WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
       strlcpy(state.wifi.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
       state.wifi.mode = M_ACCESSPOINT;
-      return true;
+      success = true;
+      break;
     }
     case M_STATION: {
       WiFi.mode(WIFI_STA);
@@ -221,21 +227,37 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
       if (WiFi.status() == WL_CONNECTED) {
         strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
         state.wifi.mode = M_STATION;
-        return true;
-      } else {
-        return false;
+        success = true;
       }
+      break;
     }
     case M_OFF: {
       WiFi.mode(WIFI_OFF);
       state.wifi.mode = M_OFF;
       state.wifi.ip[0] = 0;
-      return true;
+      success = true;
+      break;
     }
   }
+
+  Serial.println();
+  Serial.print("Wifi Config: ");
+  Serial.print(mode);
+  Serial.print(" success=");
+  Serial.print(success);
+  Serial.print(", ip=");
+  Serial.print(state.wifi.ip);
+  Serial.println();
+  
+  return success;
 }
 
 void wificfg_update(unsigned long now) {
+  if (timesince(sketch.wifi.last.rssi, now) > WTO_RSSI) {
+    sketch.wifi.last.rssi = now;
+    state.wifi.rssi = WiFi.RSSI();
+  }
+  
   if (state.wifi.mode == M_ACCESSPOINT && config.wifi.mode == M_STATION && config.wifi.station.revertap && timesince(sketch.wifi.last.revertap, now) > WTO_REVERTAP) {
     // We've reverted to AP some time ago, try to reconnect in station mode now
     sketch.wifi.last.revertap = now;
@@ -262,9 +284,9 @@ void servicecfg_read(service_config * cfg) {
     std::unique_ptr<char[]> buf(new char[size]);
     fp.readBytes(buf.get(), size);
     JsonObject& root = jsonbuf.parseObject(buf.get());
+    if (root.containsKey("hostname"))  strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
     if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
     if (root.containsKey("mdns_enabled"))   cfg->mdns.enabled = root["mdns_enabled"].as<bool>();
-    if (root.containsKey("mdns_hostname"))  strlcpy(cfg->mdns.hostname, root["mdns_hostname"].as<char *>(), LEN_HOSTNAME);
     if (root.containsKey("auth_enabled"))   cfg->auth.enabled = root["auth_enabled"].as<bool>();
     if (root.containsKey("auth_username"))  strlcpy(cfg->auth.username, root["auth_username"].as<char *>(), LEN_USERNAME);
     if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
@@ -285,9 +307,9 @@ void servicecfg_read(service_config * cfg) {
 
 void servicecfg_write(service_config * const cfg) {
   JsonObject& root = jsonbuf.createObject();
+  root["hostname"] = cfg->hostname;
   root["http_enabled"] = cfg->http.enabled;
   root["mdns_enabled"] = cfg->mdns.enabled;
-  root["mdns_hostname"] = cfg->mdns.hostname;
   root["auth_enabled"] = cfg->auth.enabled;
   root["auth_username"] = cfg->auth.username;
   root["auth_password"] = cfg->auth.password;
@@ -528,15 +550,14 @@ void setup() {
 
   // Wifi connection
   {
+    WiFi.persistent(false);
+    WiFi.hostname(config.service.hostname);
+    
     if (!config.io.wifiled.usercontrol) {
       pinMode(WIFILED_PIN, OUTPUT);
       digitalWrite(WIFILED_PIN, HIGH);
     }
     
-    if (config.service.mdns.enabled) {
-      WiFi.hostname(config.service.mdns.hostname);
-    }
-
     if (!wificfg_connect(config.wifi.mode, &config.wifi)) {
       switch (config.wifi.mode) {
         case M_STATION: {
@@ -551,12 +572,15 @@ void setup() {
 
   // Initialize web services
   {
+    lowtcp_init();
+    
     if (config.service.mdns.enabled) {
-      MDNS.begin(config.service.mdns.hostname);
+      MDNS.begin(config.service.hostname);
+      // TODO - add services eg: MDNS.addService("https", "tcp", 443);
     }
 
     if (config.service.ota.enabled) {
-      ArduinoOTA.setHostname(config.service.mdns.hostname);
+      ArduinoOTA.setHostname(config.service.hostname);
       if (config.service.ota.password[0] != 0)
         ArduinoOTA.setPassword(config.service.ota.password);
       ArduinoOTA.begin();
@@ -594,35 +618,45 @@ void setup() {
   }
 }
 
-#define HANDLE_CMDS()     ({ daisy_loop(now); cmd_loop(now); })
+#define HANDLE_LOOPS()     ({ lowtcp_loop(now); daisy_loop(now); cmd_loop(now); })
 
 //static volatile unsigned long last_statepoll = 0;
 void loop() {
   unsigned long now = millis();
 
-  HANDLE_CMDS();
+  HANDLE_LOOPS();
 
   if (config.service.http.enabled) {
     websocket.loop();
     server.handleClient();
   }
 
-  HANDLE_CMDS();
+  HANDLE_LOOPS();
 
   if (config.service.mqtt.enabled) {
     mqtt_loop(now);
   }
 
-  HANDLE_CMDS();
+  HANDLE_LOOPS();
+
+  if (config.service.mdns.enabled) {
+    MDNS.update();
+  }
 
   if (config.service.ota.enabled) {
     ArduinoOTA.handle();
   }
 
+
   // Reboot if requested
   if (flag_reboot) {
     ESP.restart();
   }
+
+  cmd_update(now);
+  daisy_update(now);
+  lowtcp_update(now);
+  wificfg_update(now);
 
   // Handle wifi LED blinks
   if (!config.io.wifiled.usercontrol) {
@@ -630,10 +664,6 @@ void loop() {
       bool isoff = ((now / 200) % 20) == 1;
       digitalWrite(WIFILED_PIN, isoff? HIGH : LOW);
     }
-  }
-
-  cmd_update(now);
-  daisy_update(now);
-  wificfg_update(now);
+  }  
 }
 

@@ -3,33 +3,34 @@
 
 #include "powerstep01.h"
 #include "wifistepper.h"
-#include "cmdpriv.h"
 
 //#define CMD_DEBUG
 
 #define Q_SIZE          (2048)
 
-#define Q_PRE_NONE      (0x00)
-#define Q_PRE_BUSY      (0x20)
-#define Q_PRE_STOP      (0x40)
+#define QPRE_NONE       (0x00)
+#define QPRE_STATUS     (0x20)
+#define QPRE_NOTBUSY    (0x40)
+#define QPRE_STOPPED    (0x80)
 
-#define CMD_NOP         (Q_PRE_NONE | 0x00)
-#define CMD_STOP        (Q_PRE_NONE | 0x01)
-#define CMD_RUN         (Q_PRE_NONE | 0x02)
-#define CMD_STEPCLK     (Q_PRE_STOP | 0x03)
-#define CMD_MOVE        (Q_PRE_STOP | 0x04)
-#define CMD_GOTO        (Q_PRE_BUSY | 0x05)
-#define CMD_GOUNTIL     (Q_PRE_NONE | 0x06)
-#define CMD_RELEASESW   (Q_PRE_BUSY | 0x07)
-#define CMD_GOHOME      (Q_PRE_BUSY | 0x08)
-#define CMD_GOMARK      (Q_PRE_BUSY | 0x09)
-#define CMD_RESETPOS    (Q_PRE_STOP | 0x0A)
-#define CMD_SETPOS      (Q_PRE_NONE | 0x0B)
-#define CMD_SETMARK     (Q_PRE_NONE | 0x0C)
-#define CMD_SETCONFIG   (Q_PRE_STOP | 0x0D)
-#define CMD_WAITBUSY    (Q_PRE_BUSY | 0x0E)
-#define CMD_WAITRUNNING (Q_PRE_STOP | 0x0F)
-#define CMD_WAITMS      (Q_PRE_NONE | 0x10)
+#define CMD_NOP         (QPRE_NONE | 0x00)
+#define CMD_STOP        (QPRE_NONE | 0x01)
+#define CMD_RUN         (QPRE_NONE | 0x02)
+#define CMD_STEPCLK     (QPRE_STOPPED | 0x03)
+#define CMD_MOVE        (QPRE_STOPPED | 0x04)
+#define CMD_GOTO        (QPRE_NOTBUSY | 0x05)
+#define CMD_GOUNTIL     (QPRE_NONE | 0x06)
+#define CMD_RELEASESW   (QPRE_NOTBUSY | 0x07)
+#define CMD_GOHOME      (QPRE_NOTBUSY | 0x08)
+#define CMD_GOMARK      (QPRE_NOTBUSY | 0x09)
+#define CMD_RESETPOS    (QPRE_STOPPED | 0x0A)
+#define CMD_SETPOS      (QPRE_NONE | 0x0B)
+#define CMD_SETMARK     (QPRE_NONE | 0x0C)
+#define CMD_SETCONFIG   (QPRE_STOPPED | 0x0D)
+#define CMD_WAITBUSY    (QPRE_NOTBUSY | 0x0E)
+#define CMD_WAITRUNNING (QPRE_STOPPED | 0x0F)
+#define CMD_WAITMS      (QPRE_NONE | 0x10)
+#define CMD_WAITSWITCH  (QPRE_STATUS | 0x11)
 
 
 #define CTO_UPDATE      (10)
@@ -43,7 +44,7 @@ volatile size_t Qlen = 0;
 
 typedef struct {
   cmd_waitms_t cmd;
-  unsigned int timeout;
+  unsigned int started;
 } sketch_waitms_t;
 
 #ifdef CMD_DEBUG
@@ -79,12 +80,13 @@ void cmd_loop(unsigned long now) {
     cmd_debug(head->id, head->opcode, "Try exec");
 
     // Check pre-conditions
-    if (head->opcode & (Q_PRE_BUSY | Q_PRE_STOP)) {
-      state.motor.status = ps_getstatus();
+    if (head->opcode & (QPRE_STATUS | QPRE_NOTBUSY | QPRE_STOPPED)) {
       sketch.motor.last.status = now;
+      state.motor.status = ps_getstatus();
+
+      if ((head->opcode & QPRE_NOTBUSY) && state.motor.status.busy) return;
+      if ((head->opcode & QPRE_STOPPED) && state.motor.status.movement != M_STOPPED) return;
     }
-    if ((head->opcode & Q_PRE_BUSY) && ps_isbusy()) return;
-    if ((head->opcode & Q_PRE_STOP) && ps_isrunning()) return;
       
     switch (head->opcode) {
       case CMD_NOP:
@@ -209,7 +211,16 @@ void cmd_loop(unsigned long now) {
         break;
       }
       case CMD_WAITMS: {
+        sketch_waitms_t * sketch = (sketch_waitms_t *)Qcmd;
+        if (sketch->started == 0) sketch->started = millis();
+        if (timesince(sketch->started, millis()) < sketch->cmd.millis) return;
         consume += sizeof(sketch_waitms_t);
+        break;
+      }
+      case CMD_WAITSWITCH: {
+        cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)Qcmd;
+        if (cmd->state != state.motor.status.user_switch) return;
+        consume += sizeof(cmd_waitswitch_t);
         break;
       }
     }
@@ -229,6 +240,11 @@ void cmd_update(unsigned long now) {
     sketch.motor.last.status = now;
     state.motor.status = ps_getstatus();
     state.motor.status.direction = motorcfg_dir(state.motor.status.direction);
+    
+    bool iserror = state.motor.status.alarms.command_error || state.motor.status.alarms.overcurrent || state.motor.status.alarms.undervoltage || state.motor.status.alarms.thermal_shutdown;
+    if (iserror) {
+      seterror(ESUB_MOTOR);
+    }
   }
   
   if (timesince(sketch.motor.last.state, now) > CTO_UPDATE) {
@@ -242,7 +258,7 @@ void cmd_update(unsigned long now) {
 
 static void * cmd_alloc(id_t id, uint8_t opcode, size_t len) {
   if ((Q_SIZE - Qlen) < (sizeof(cmd_head_t) + len)) {
-    seterror(ESUB_CMD, id);
+    seterror(ESUB_CMD, id, ETYPE_MEM);
     return NULL;
   }
   *(cmd_head_t *)(&Q[Qlen]) = { .id = id, .opcode = opcode };
@@ -344,7 +360,13 @@ bool cmd_waitrunning(id_t id) {
 
 bool cmd_waitms(id_t id, uint32_t millis) {
   sketch_waitms_t * cmd = (sketch_waitms_t *)cmd_alloc(id, CMD_WAITMS, sizeof(sketch_waitms_t));
-  if (cmd != NULL) *cmd = { .cmd = { .millis = millis }, .timeout = 0 };
+  if (cmd != NULL) *cmd = { .cmd = { .millis = millis }, .started = 0 };
+  return cmd != NULL;
+}
+
+bool cmd_waitswitch(id_t id, bool state) {
+  cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)cmd_alloc(id, CMD_WAITSWITCH, sizeof(cmd_waitswitch_t));
+  if (cmd != NULL) *cmd = { .state = state };
   return cmd != NULL;
 }
 

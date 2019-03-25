@@ -44,19 +44,6 @@ typedef enum {
   M_STATION = 0x2
 } wifi_mode;
 
-typedef enum {
-  WS_READSTATUS = 0x11,
-  WS_READSTATE = 0x12,
-  
-  WS_CMDSTOP = 0x21,
-  WS_CMDHIZ = 0x22,
-  WS_CMDGOTO = 0x23,
-  WS_CMDRUN = 0x24,
-  WS_STEPCLOCK = 0x25,
-
-  WS_POS = 0x31,
-} ws_opcode;
-
 #define ispacked __attribute__((packed))
 
 typedef struct {
@@ -80,12 +67,12 @@ typedef struct {
 } wifi_config;
 
 typedef struct {
+  char hostname[LEN_HOSTNAME];
   struct {
     bool enabled;
   } http;
   struct {
     bool enabled;
-    char hostname[LEN_HOSTNAME];
   } mdns;
   struct {
     bool enabled;
@@ -94,8 +81,7 @@ typedef struct {
   } auth;
   struct {
     bool enabled;
-    char password[LEN_PASSWORD];
-  } ota;
+  } lowtcp;
   struct {
     bool enabled;
     char server[LEN_URL];
@@ -106,6 +92,10 @@ typedef struct {
     float state_publish_period;
     char command_topic[LEN_URL];
   } mqtt;
+  struct {
+    bool enabled;
+    char password[LEN_PASSWORD];
+  } ota;
 } service_config;
 
 typedef struct ispacked {
@@ -168,8 +158,12 @@ typedef struct {
 #define ESUB_CMD      (0x02)
 #define ESUB_MOTOR    (0x03)
 #define ESUB_DAISY    (0x04)
+#define ESUB_HTTP     (0x05)
 
-void seterror(uint8_t subsystem, id_t onid = 0, int type = 0);
+#define ETYPE_UNK     (0x00)
+#define ETYPE_MEM     (0x01)
+
+void seterror(uint8_t subsystem = ESUB_UNK, id_t onid = 0, int type = ETYPE_UNK);
 void clearerror();
 
 typedef struct ispacked {
@@ -189,9 +183,13 @@ typedef struct ispacked {
 typedef struct ispacked {
   wifi_mode mode;
   char ip[LEN_IP];
+  long rssi;
 } wifi_state;
 
 typedef struct {
+  struct {
+    int clients;
+  } lowtcp;
   struct {
     int connected;
     int status;
@@ -224,12 +222,17 @@ typedef struct {
   struct {
     unsigned long connection_check;
     unsigned long revertap;
+    unsigned long rssi;
   } last;
 } wifi_sketch;
 
-/*typedef struct {
-  
-} service_sketch;*/
+typedef struct {
+  struct {
+    struct {
+      unsigned long ping;
+    } last;
+  } lowtcp;
+} service_sketch;
 
 typedef struct ispacked {
   io_config io;
@@ -267,10 +270,66 @@ typedef struct {
 
 typedef struct {
   wifi_sketch wifi;
-  //service_sketch service;
+  service_sketch service;
   daisy_sketch daisy;
   motor_sketch motor;
 } sketch_t;
+
+
+// Command structs
+typedef struct ispacked {
+  id_t id;
+  uint8_t opcode;
+} cmd_head_t;
+
+typedef struct ispacked {
+  bool hiz;
+  bool soft;
+} cmd_stop_t;
+
+typedef struct ispacked {
+  ps_direction dir;
+  float stepss;
+} cmd_run_t;
+
+typedef struct ispacked {
+  ps_direction dir;
+} cmd_stepclk_t;
+
+typedef struct ispacked {
+  ps_direction dir;
+  uint32_t microsteps;
+} cmd_move_t;
+
+typedef struct ispacked {
+  bool hasdir;
+  ps_direction dir;
+  int32_t pos;
+} cmd_goto_t;
+
+typedef struct ispacked {
+  ps_posact action;
+  ps_direction dir;
+  float stepss;
+} cmd_gountil_t;
+
+typedef struct ispacked {
+  ps_posact action;
+  ps_direction dir;
+} cmd_releasesw_t;
+
+typedef struct ispacked {
+  int32_t pos;
+} cmd_setpos_t;
+
+typedef struct ispacked {
+  uint32_t millis;
+} cmd_waitms_t;
+
+typedef struct ispacked {
+  bool state;
+} cmd_waitswitch_t;
+
 
 void cmd_init();
 void cmd_loop(unsigned long now);
@@ -295,6 +354,7 @@ bool cmd_setconfig(id_t id, const char * data);
 bool cmd_waitbusy(id_t id);
 bool cmd_waitrunning(id_t id);
 bool cmd_waitms(id_t id, uint32_t millis);
+bool cmd_waitswitch(id_t id, bool state);
 
 bool cmd_empty(id_t id);
 bool cmd_estop(id_t id, bool hiz, bool soft);
@@ -327,9 +387,14 @@ bool daisy_setconfig(uint8_t address, id_t id, const char * data);
 bool daisy_waitbusy(uint8_t address, id_t id);
 bool daisy_waitrunning(uint8_t address, id_t id);
 bool daisy_waitms(uint8_t address, id_t id, uint32_t millis);
+bool daisy_waitswitch(uint8_t address, id_t id, bool state);
 
 bool daisy_empty(uint8_t address, id_t id);
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
+
+void lowtcp_init();
+void lowtcp_loop(unsigned long now);
+void lowtcp_update(unsigned long now);
 
 
 void wificfg_read(wifi_config * cfg);
@@ -350,7 +415,6 @@ void motorcfg_push(motor_config * const cfg);
 
 
 void json_init();
-
 void websocket_init();
 
 void mqtt_init();

@@ -14,7 +14,7 @@ layout: default
         {% raw %}
         <div class="level">
             <div class="level-item">
-                <span><span class="entry">Hostname:</span> <span class="value">{{ browser.hostname }}</span></span>
+                <span><span class="entry">Hostname:</span> <span class="value">{{ service.hostname }}</span></span>
             </div>
             <div class="level-item">
                 <span><span class="entry">IP:</span> <span class="value">{{ wifi.ip }}</span></span>
@@ -41,7 +41,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">SSID</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control is-expanded"><input class="input" type="text" placeholder="Network Name" maxlength="31" v-model="wifi.accesspoint.ssid" /></span>
+                                <span class="control is-expanded"><input class="input" type="text" placeholder="Network Name" maxlength="31" v-model="wifi.accesspoint_ssid" /></span>
                             </div>
                         </div>
                     </div>
@@ -50,12 +50,12 @@ layout: default
                         <div class="field-body">
                             <div class="field">
                                 <span class="control is-expanded">
-                                    <input class="input" type="text" placeholder="WPA2-PSK Password" maxlength="63" v-model="wifi.accesspoint.password" v-bind:disabled="!wifi.accesspoint.encryption" />
+                                    <input class="input" type="text" placeholder="WPA2-PSK Password" maxlength="63" v-model="wifi.accesspoint_password" v-bind:disabled="!wifi.accesspoint_encryption" />
                                 </span>
                             </div>
                             <div class="field">
                                 <span class="control">
-                                    <input class="is-checkradio has-background-color is-white" id="wifi-password-enable" type="checkbox" v-model="wifi.accesspoint.encryption" />
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-password-enable" type="checkbox" v-model="wifi.accesspoint_encryption" />
                                     <label class="is-checkradio-enable" for="wifi-password-enable"><strong>Enabled</strong></label>
                                 </span>
                             </div>
@@ -67,7 +67,7 @@ layout: default
                         <div class="field-body">
                             <div class="field">
                                 <span class="control">
-                                    <input class="is-checkradio has-background-color is-white" id="wifi-hidden-enable" type="checkbox" v-model="wifi.accesspoint.hidden" />
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-hidden-enable" type="checkbox" v-model="wifi.accesspoint_hidden" />
                                     <label class="is-checkradio-enable" for="wifi-hidden-enable"><strong>Hidden SSID</strong></label>
                                 </span>
                             </div>
@@ -78,7 +78,7 @@ layout: default
                         <div class="field-body">
                             <div class="field">
                                 <span class="control">
-                                    <input class="input" style="width: 75px;" type="number" min="1" max="13" step="1" v-model="wifi.accesspoint.channel" />
+                                    <input class="input" style="width: 75px;" type="number" min="1" max="13" step="1" v-model="wifi.accesspoint_channel" />
                                 </span>
                             </div>
                         </div>
@@ -91,7 +91,7 @@ layout: default
                             <div class="field has-addons">
                                 <span class="control" style="width: 100%;">
                                     <div class="select is-fullwidth">
-                                        <select v-model="wifi.station.ssid">
+                                        <select v-model="wifi.station_ssid">
                                             {% raw %}<option v-for="network in wifi.detected" v-bind:value="network.ssid">{{ network.ssid }}</option>{% endraw %}
                                         </select>
                                     </div>
@@ -100,13 +100,13 @@ layout: default
                             </div>
                         </div>
                     </div>
-                    <div v-if="wifi.station.encryption" class="field is-horizontal is-spaced-mobile">
+                    <div v-if="wifi.station_encryption" class="field is-horizontal is-spaced-mobile">
                         <div class="field-label is-normal">
                             <label class="label">Password</label>
                         </div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" placeholder="Empty" maxlength="63" v-model="wifi.station.password" /></span>
+                                <span class="control"><input class="input" type="text" placeholder="Empty" maxlength="63" v-model="wifi.station_password" /></span>
                             </div>
                         </div>
                     </div>
@@ -115,7 +115,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">IP Address</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forceip" /></span>
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station_forceip == '' && wifi.station_forcesubnet == '' && wifi.station_forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station_forceip" /></span>
                             </div>
                         </div>
                     </div>
@@ -123,7 +123,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">Subnet</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forcesubnet" /></span>
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station_forceip == '' && wifi.station_forcesubnet == '' && wifi.station_forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station_forcesubnet" /></span>
                             </div>
                         </div>
                     </div>
@@ -131,7 +131,7 @@ layout: default
                         <div class="field-label is-normal"><label class="label">Gateway</label></div>
                         <div class="field-body">
                             <div class="field">
-                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station.forceip == '' && wifi.station.forcesubnet == '' && wifi.station.forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station.forcegateway" /></span>
+                                <span class="control"><input class="input" type="text" v-bind:placeholder="wifi.station_forceip == '' && wifi.station_forcesubnet == '' && wifi.station_forcegateway == ''? 'Auto' : 'Required'" maxlength="15" v-model="wifi.station_forcegateway" /></span>
                             </div>
                         </div>
                     </div>
@@ -140,7 +140,7 @@ layout: default
                         <div class="field-body">
                             <div class="field">
                                 <span class="control">
-                                    <input class="is-checkradio has-background-color is-white" id="wifi-revertap-enable" type="checkbox" v-model="wifi.station.revertap" />
+                                    <input class="is-checkradio has-background-color is-white" id="wifi-revertap-enable" type="checkbox" v-model="wifi.station_revertap" />
                                     <label class="is-checkradio-enable" for="wifi-revertap-enable"><strong>Enabled</strong></label>
                                 </span>
                                 <span class="control"><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_revertap }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
@@ -173,7 +173,7 @@ layout: default
                     <div class="field-label is-normal"><label class="label">Hostname</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control"><input class="input" type="text" placeholder="Unknown" maxlength="23" v-model="browser.hostname" /></span>
+                            <span class="control"><input class="input" type="text" placeholder="Unknown" maxlength="23" v-model="service.hostname" /></span>
                         </div>
                     </div>
                 </div>
@@ -182,31 +182,31 @@ layout: default
                     <div class="field-body">
                         <div class="field">
                             <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="browser-http-enable" type="checkbox" v-model="browser.http.enabled" />
-                                <label class="is-checkradio-enable" for="browser-http-enable"><strong>Enabled</strong></label>
+                                <input class="is-checkradio has-background-color is-white" id="service-http-enable" type="checkbox" v-model="service.http_enabled" />
+                                <label class="is-checkradio-enable" for="service-http-enable"><strong>Enabled</strong></label>
                             </span>
-                            <span v-if="!browser.http.enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable access through the http interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
+                            <span v-if="!service.http_enabled" class="help is-danger"><strong>Warning:</strong> You will not be able to re-enable access through the http interface. To reset your board (and revert to factory default settings), see <a class="link" href="/documentation#hardware-reset"><strong>Hardware Reset</strong></a>.</span>
                         </div>
                     </div>
                 </div>
-                <div class="field is-horizontal is-spaced-mobile">
+                <!--<div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"><label class="label">HTTPS</label></div>
                     <div class="field-body">
                         <div class="field">
                             <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="browser-https-enable" type="checkbox" v-model="browser.https.enabled" />
-                                <label class="is-checkradio-enable" for="browser-https-enable"><strong>Enabled</strong></label>
+                                <input class="is-checkradio has-background-color is-white" id="service-https-enable" type="checkbox" v-model="service.https_enabled" />
+                                <label class="is-checkradio-enable" for="service-https-enable"><strong>Enabled</strong></label>
                             </span>
                         </div>
                     </div>
-                </div>
+                </div>-->
                 <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"><label class="label">mDNS</label></div>
                     <div class="field-body">
                         <div class="field">
                             <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="browser-mdns-enable" type="checkbox" v-model="browser.mdns.enabled" />
-                                <label class="is-checkradio-enable" for="browser-mdns-enable"><strong>Enabled</strong></label>
+                                <input class="is-checkradio has-background-color is-white" id="service-mdns-enable" type="checkbox" v-model="service.mdns_enabled" />
+                                <label class="is-checkradio-enable" for="service-mdns-enable"><strong>Enabled</strong></label>
                             </span>
                         </div>
                     </div>
@@ -215,15 +215,15 @@ layout: default
                     <div class="field-label is-normal"><label class="label">Authentication</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="browser.auth.username" v-bind:disabled="!browser.auth.enabled" /></span>
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.auth_username" v-bind:disabled="!service.auth_enabled" /></span>
                         </div>
                         <div class="field">
-                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="browser.auth.password" v-bind:disabled="!browser.auth.enabled" /></span>
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="service.auth_password" v-bind:disabled="!service.auth_enabled" /></span>
                         </div>
                         <div class="field">
                             <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="browser-auth-enable" type="checkbox" v-model="browser.auth.enabled" />
-                                <label class="is-checkradio-enable" for="browser-auth-enable"><strong>Enabled</strong></label>
+                                <input class="is-checkradio has-background-color is-white" id="service-auth-enable" type="checkbox" v-model="service.auth_enabled" />
+                                <label class="is-checkradio-enable" for="service-auth-enable"><strong>Enabled</strong></label>
                             </span>
                         </div>
                     </div>
@@ -232,29 +232,29 @@ layout: default
                     <div class="field-label is-normal"><label class="label">Arduino OTA</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control is-expanded"><input class="input" type="text" placeholder="No Password" maxlength="63" v-model="browser.ota.password" v-bind:disabled="!browser.ota.enabled" /></span>
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="No Password" maxlength="63" v-model="service.ota_password" v-bind:disabled="!service.ota_enabled" /></span>
                         </div>
                         <div class="field">
                             <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="browser-ota-enable" type="checkbox" v-model="browser.ota.enabled" />
-                                <label class="is-checkradio-enable" for="browser-ota-enable"><strong>Enabled</strong></label>
+                                <input class="is-checkradio has-background-color is-white" id="service-ota-enable" type="checkbox" v-model="service.ota_enabled" />
+                                <label class="is-checkradio-enable" for="service-ota-enable"><strong>Enabled</strong></label>
                             </span>
                         </div>
                     </div>
                 </div>
                 <hr />
                 <div class="field has-text-centered">
-                    <span class="control"><button class="button is-primary is-medium" v-on:click="writebrowser">Apply</button></span>
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="writeservice">Apply</button></span>
                 </div>
-                <div class="modal" v-bind:class="{'is-active': browser.changemodal}">
-                    <div class="modal-background" v-on:click="browser.changemodal = false"></div>
+                <div class="modal" v-bind:class="{'is-active': service.changemodal}">
+                    <div class="modal-background" v-on:click="service.changemodal = false"></div>
                         <div class="modal-content">
                             <div class="box has-text-centered">
                                 <div class="title is-4">{% mdicon sync-alert %}Browser Settings Changed</div>
                                 <div>You may need to refresh the page to see changes.</div>
                             </div>
                         </div>
-                    <button class="modal-close is-large" v-on:click="browser.changemodal = false"></button>
+                    <button class="modal-close is-large" v-on:click="service.changemodal = false"></button>
                 </div>
             </div>
         </div>
@@ -292,7 +292,7 @@ layout: default
     </div>
 </div>
 <script minify>
-    function merge(src, dest, keys) {
+    function merge(dest, src, keys) {
         for (i in keys) {
             dest[keys[i]] = src[keys[i]];
         }
@@ -301,50 +301,35 @@ layout: default
         el: '#settings',
         data: {
             wifi: {
-                ip: '',
-                mode: null,
                 detected: [],
                 changemodal: false,
-                accesspoint: {
-                    ssid: '',
-                    password: '',
-                    encryption: false,
-                    channel: 1,
-                    hidden: false
-                },
-                station: {
-                    ssid: '',
-                    password: '',
-                    encryption: false,
-                    forceip: '',
-                    forcesubnet: '',
-                    forcegateway: '',
-                    revertap: true
-                }
+                ip: '',
+                rssi: 0,
+                mode: null,
+                accesspoint_ssid: '',
+                accesspoint_password: '',
+                accesspoint_encryption: false,
+                accesspoint_channel: 1,
+                accesspoint_hidden: false,
+                station_ssid: '',
+                station_password: '',
+                station_encryption: false,
+                station_forceip: '',
+                station_forcesubnet: '',
+                station_forcegateway: '',
+                station_revertap: true
             },
 
-            browser: {
-                hostname: '',
+            service: {
                 changemodal: false,
-                http: {
-                    enabled: true,
-                },
-                https: {
-                    enabled: false,
-                },
-                mdns: {
-                    enabled: true,
-                },
-                auth: {
-                    enabled: false,
-                    username: '',
-                    password: ''
-                },
-                ota: {
-                    enabled: true,
-                    password: ''
-                },
-
+                hostname: '',
+                http_enabled: true,
+                mdns_enabled: true,
+                auth_enabled: false,
+                auth_username: '',
+                auth_password: '',
+                ota_enabled: true,
+                ota_password: ''
             }
         },
         watch: {
@@ -353,10 +338,10 @@ layout: default
                     this.scanwifi();
                 }
             },
-            'wifi.station.ssid': function(newv) {
+            'wifi.station_ssid': function(newv) {
                 for (var i = 0; i < this.wifi.detected.length; i++) {
-                    if (this.wifi.station.ssid == this.wifi.detected[i]['ssid']) {
-                        this.wifi.station.encryption = this.wifi.detected[i]['encryption'];
+                    if (this.wifi.station_ssid == this.wifi.detected[i]['ssid']) {
+                        this.wifi.station_encryption = this.wifi.detected[i]['encryption'];
                     }
                 }
             }
@@ -378,53 +363,48 @@ layout: default
                 console.log("Writing wifi settings");
                 if (this.wifi.mode == 'off') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/off", {
-                        params: {
-                            restart: true
-                        }
+                        params: {}
                     });
 
                 } else if (this.wifi.mode == 'accesspoint') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/accesspoint", {
                         params: {
-                            ssid: this.wifi.accesspoint.ssid,
-                            password: this.wifi.accesspoint.encryption? this.wifi.accesspoint.password : '',
-                            channel: this.wifi.accesspoint.channel,
-                            hidden: this.wifi.accesspoint.hidden,
-                            restart: true
+                            ssid: app.wifi.accesspoint_ssid,
+                            password: app.wifi.accesspoint_encryption? app.wifi.accesspoint_password : '',
+                            channel: app.wifi.accesspoint_channel,
+                            hidden: app.wifi.accesspoint_hidden
                         }
                     });
 
                 } else if (this.wifi.mode == 'station') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/station", {
                         params: {
-                            ssid: this.wifi.station.ssid,
-                            password: this.wifi.station.encryption? this.wifi.station.password : '',
-                            forceip: this.wifi.station.forceip,
-                            forcesubnet: this.wifi.station.forcesubnet,
-                            forcegateway: this.wifi.station.forcegateway,
-                            revertap: this.wifi.station.revertap,
-                            restart: true
+                            ssid: app.wifi.station_ssid,
+                            password: app.wifi.station_encryption? app.wifi.station_password : '',
+                            forceip: app.wifi.station_forceip,
+                            forcesubnet: app.wifi.station_forcesubnet,
+                            forcegateway: app.wifi.station_forcegateway,
+                            revertap: app.wifi.station_revertap
                         }
                     });
                 }
                 this.wifi.changemodal = true;
             },
-            writebrowser: function() {
-                console.log("Writing browser settings");
-                axios.get("{{ site.apiurl }}/api/browser/set", {
+            writeservice: function() {
+                console.log("Writing service settings");
+                axios.get("{{ site.apiurl }}/api/service/set", {
                     params: {
-                        hostname: this.browser.hostname,
-                        http_enabled: this.browser.http.enabled,
-                        https_enabled: this.browser.https.enabled,
-                        mdns_enabled: this.browser.mdns.enabled,
-                        auth_enabled: this.browser.auth.enabled,
-                        auth_username: this.browser.auth.username,
-                        auth_password: this.browser.auth.password,
-                        ota_enabled: this.browser.ota.enabled,
-                        ota_password: this.browser.ota.password
+                        hostname: app.service.hostname,
+                        http_enabled: app.service.http_enabled,
+                        mdns_enabled: app.service.mdns_enabled,
+                        auth_enabled: app.service.auth_enabled,
+                        auth_username: app.service.auth_username,
+                        auth_password: app.service.auth_password,
+                        ota_enabled: app.service.ota_enabled,
+                        ota_password: app.service.ota_password
                     }
                 });
-                this.browser.changemodal = true;
+                this.service.changemodal = true;
             },
             resetmotor: function() {
                 console.log("Reset motor");
@@ -438,25 +418,14 @@ layout: default
         mounted: function () {
             axios.get("{{ site.apiurl }}/api/wifi/get").then(function (r) {
                 if (r.data.status == 'ok') {
-                    var d = r.data;
-                    app.wifi.ip = d['ip'];
-                    app.wifi.mode = d['mode'];
-                    if (d['mode'] == 'accesspoint')     merge(d, app.wifi.accesspoint, ['ssid', 'password', 'encryption', 'channel', 'hidden']);
-                    else if (d['mode'] == 'station')    merge(d, app.wifi.station, ['ssid', 'password', 'encryption', 'forceip', 'forcesubnet', 'forcegateway', 'revertap']);
+                    merge(app.wifi, r.data, ['ip', 'rssi', 'mode']);
+                    merge(app.wifi, r.data, ['accesspoint_ssid', 'accesspoint_password', 'accesspoint_encryption', 'accesspoint_channel', 'accesspoint_hidden']);
+                    merge(app.wifi, r.data, ['station_ssid', 'station_password', 'station_encryption', 'station_forceip', 'station_forcesubnet', 'station_forcegateway', 'station_revertap']);
                 }
             });
-            axios.get("{{ site.apiurl }}/api/browser/get").then(function (r) {
+            axios.get("{{ site.apiurl }}/api/service/get").then(function (r) {
                 if (r.data.status == 'ok') {
-                    var d = r.data;
-                    app.browser.hostname = d['hostname'];
-                    app.browser.http.enabled = d['http_enabled'];
-                    app.browser.https.enabled = d['https_enabled'];
-                    app.browser.mdns.enabled = d['mdns_enabled'];
-                    app.browser.auth.enabled = d['auth_enabled'];
-                    app.browser.auth.username = d['auth_username'];
-                    app.browser.auth.password = d['auth_password'];
-                    app.browser.ota.enabled = d['ota_enabled'];
-                    app.browser.ota.password = d['ota_password'];
+                    merge(app.service, r.data, ['hostname', 'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password', 'ota_enabled', 'ota_password']);
                 }
             });
         }

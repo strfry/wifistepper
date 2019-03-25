@@ -189,18 +189,18 @@ gulp.task('html', function() {
         .pipe(cheerio(minifyjs))
         .pipe(minifyhtml())
         .pipe(gzip())
-        .pipe(gulp.dest('./publish'))
+        .pipe(gulp.dest('../firmware/wifistepper/data'))
 });
 
 gulp.task('images', function() {
     return gulp.src('./build/img/*.png')
-        .pipe(gulp.dest('./publish/img'))
+        .pipe(gulp.dest('../firmware/wifistepper/data/img'))
 });
 
 gulp.task('javascript', function() {
     return gulp.src('./build/js/*.min.js')
         .pipe(gzip())
-        .pipe(gulp.dest('./publish/js'))
+        .pipe(gulp.dest('../firmware/wifistepper/data/js'))
 });
 
 gulp.task('postprocess', ['html', 'images', 'javascript']);

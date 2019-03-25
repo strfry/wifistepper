@@ -45,6 +45,7 @@ void jsonwifi_init() {
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
     root["ip"] = state.wifi.ip;
+    root["rssi"] = state.wifi.rssi;
     root["mode"] = json_serialize(config.wifi.mode);
     root["accesspoint_ssid"] = config.wifi.accesspoint.ssid;
     root["accesspoint_password"] = config.wifi.accesspoint.encryption? config.wifi.accesspoint.password : "";
@@ -102,9 +103,9 @@ void jsonservice_init() {
   server.on("/api/service/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
+    root["hostname"] = config.service.hostname;
     root["http_enabled"] = config.service.http.enabled;
     root["mdns_enabled"] = config.service.mdns.enabled;
-    root["mdns_hostname"] = config.service.mdns.hostname;
     root["auth_enabled"] = config.service.auth.enabled;
     root["auth_username"] = config.service.auth.username;
     root["auth_password"] = config.service.auth.password;
@@ -118,9 +119,9 @@ void jsonservice_init() {
   });
   server.on("/api/service/set", [](){
     json_addheaders();
+    if (server.hasArg("hostname"))      strlcpy(config.service.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("http_enabled"))  config.service.http.enabled = server.arg("http_enabled") == "true";
     if (server.hasArg("mdns_enabled"))  config.service.mdns.enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("mdns_hostname")) strlcpy(config.service.mdns.hostname, server.arg("mdns_hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("auth_enabled"))  config.service.auth.enabled = server.arg("auth_enabled") == "true";
     if (server.hasArg("auth_username")) strlcpy(config.service.auth.username, server.arg("auth_username").c_str(), LEN_USERNAME);
     if (server.hasArg("auth_password")) strlcpy(config.service.auth.password, server.arg("auth_password").c_str(), LEN_PASSWORD);
@@ -139,6 +140,9 @@ void jsondaisy_init() {
     JsonObject& root = jsonbuf.createObject();
     root["enabled"] = config.daisy.enabled;
     root["master"] = config.daisy.master;
+    if (config.daisy.master) {
+      root["slaves"] = state.daisy.slaves;
+    }
     root["slavewifioff"] = config.daisy.slavewifioff;
     root["status"] = "ok";
     JsonVariant v = root;
@@ -504,6 +508,27 @@ void jsonmotor_init() {
     id_t id = nextid();
     if (target == 0)  cmd_stop(id, hiz, soft);
     else              daisy_stop(target, id, hiz, soft);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/command/estop", [](){
+    json_addheaders();
+    int target = 0;
+    if (server.hasArg("target")) {
+      target = server.arg("target").toInt();
+      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
+        server.send(200, "application/json", json_error("failed to set target"));
+        return;
+      }
+      if (target < 0 || target > state.daisy.slaves) {
+        server.send(200, "application/json", json_error("invalid target"));
+        return;
+      }
+    }
+    bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
+    bool soft = server.hasArg("soft") && server.arg("soft") == "true";
+    id_t id = nextid();
+    if (target == 0)  cmd_estop(id, hiz, soft);
+    else              daisy_estop(target, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
 }
