@@ -86,8 +86,17 @@ layout: default
                     <option value="voltage">Voltage</option>
                 </select>
             </span>
-            control:
+            control
         </span>
+        <span class="nobreak" v-if="master && slaves > 0">
+            on target
+            <span class="select">
+                <select v-model="target" v-on:change="fullrefresh">
+                    <option v-for="(name, index) in targetlist" v-bind:value="index">{% raw %}{{ name }}{% endraw %}</option>
+                </select>
+            </span>
+        </span>
+        :
     </div>
     <div v-if="profile == 'none'" style="height: 200px;">
         <div class="has-text-centered" style="max-width: 500px;">
@@ -1071,8 +1080,8 @@ state = MOTOR.getState()
                 directionsw: false
             },
 
-            master: true,
-            slaves: 5,
+            master: false,
+            slaves: 0,
             target: 0,
 
             setdirection: 'forward',
@@ -1133,6 +1142,13 @@ state = MOTOR.getState()
             }
         },
         computed: {
+            targetlist: function() {
+                var list = ['Master 0'];
+                for (var i = 0; i < this.slaves; i++) {
+                    list.push('Slave #'+(i+1));
+                }
+                return list;
+            },
             setpos: function() {
                 return Math.round(this.setangle / 360 * 200 * this.stepsize);
             },
@@ -1212,13 +1228,14 @@ state = MOTOR.getState()
             },
             readstate: function(initial) {
                 if (this.protocol == 'ws' && !initial) {
-                    var ba = new ArrayBuffer(1);
+                    var ba = new ArrayBuffer(2);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x11);
+                    v.setUint8(1, this.target);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http' || initial) {
-                    axios.get("{{ site.apiurl }}/api/motor/state").then(function (r) {
+                    axios.get("{{ site.apiurl }}/api/motor/state", {params: {target: this.target}}).then(function (r) {
                         if (r.data.status == 'ok') {
                             app.getrpm = r.data.stepss * 60 / 200;
                             app.getangle = r.data.position / 200 / app.stepsize * 360;
@@ -1237,7 +1254,7 @@ state = MOTOR.getState()
                 }
             },
             readmotor: function() {
-                axios.get("{{ site.apiurl }}/api/motor/get").then(function (r) {
+                axios.get("{{ site.apiurl }}/api/motor/get", {params: {target: this.target}}).then(function (r) {
                     if (r.data.status == 'ok') {
                         merge(app, r.data,
                             ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
@@ -1250,7 +1267,7 @@ state = MOTOR.getState()
             writemotor: function(keys) {
                 keys = keys || ['ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
                 var params = {};
-                merge(params, this, keys.concat(['save']));
+                merge(params, this, keys.concat(['target', 'save']));
                 axios.get("{{ site.apiurl }}/api/motor/set", {params: params});
             },
             /*readadc: function() {
@@ -1266,83 +1283,94 @@ state = MOTOR.getState()
             },*/
             writestop: function(hiz, soft) {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(3);
+                    var ba = new ArrayBuffer(4);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x21);
-                    v.setUint8(1, hiz? 0x01 : 0x00);
-                    v.setUint8(2, 0x01);
+                    v.setUint8(1, this.target);
+                    v.setUint8(2, hiz? 0x01 : 0x00);
+                    v.setUint8(3, 0x01);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/stop", {params: {hiz: hiz, soft: soft}});
+                    axios.get("{{ site.apiurl }}/api/motor/command/stop", {params: {target: this.target, hiz: hiz, soft: soft}});
                 }
             },
             writeestop: function(hiz, soft) {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(3);
+                    var ba = new ArrayBuffer(4);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x12);
-                    v.setUint8(1, hiz? 0x01 : 0x00);
-                    v.setUint8(2, 0x01);
+                    v.setUint8(1, this.target);
+                    v.setUint8(2, hiz? 0x01 : 0x00);
+                    v.setUint8(3, 0x01);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/estop", {params: {hiz: hiz, soft: soft}});
+                    axios.get("{{ site.apiurl }}/api/motor/command/estop", {params: {target: this.target, hiz: hiz, soft: soft}});
                 }
             },
             writeresetpos: function() {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(5);
+                    var ba = new ArrayBuffer(6);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x31);
-                    v.setInt32(1, 0, true);
+                    v.setUint8(1, this.target);
+                    v.setInt32(2, 0, true);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') { 
-                    axios.get("{{ site.apiurl }}/api/motor/pos/reset");
+                    axios.get("{{ site.apiurl }}/api/motor/pos/reset", {params: {target: this.target}});
                 }
                 this.getangle = 0;
             },
             writeservo: /*throttle(*/function() {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(5);
+                    var ba = new ArrayBuffer(6);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x22);
-                    v.setInt32(1, this.setpos, true);
+                    v.setUint8(1, this.target);
+                    v.setInt32(2, this.setpos, true);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') { 
-                    axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {position: app.setpos}});
+                    axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {target: this.target, position: app.setpos}});
                 }
             }/*, 250, 30)*/,
             writespeed: /*throttle(*/function(direction) {
                 this.setdirection = direction;
 
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(6);
+                    var ba = new ArrayBuffer(7);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x23);
-                    v.setUint8(1, this.setdirection == 'forward'? 0x66 : 0x72);
-                    v.setFloat32(2, this.setstepss, true);
+                    v.setUint8(1, this.target);
+                    v.setUint8(2, this.setdirection == 'forward'? 0x66 : 0x72);
+                    v.setFloat32(3, this.setstepss, true);
                     socket.send(ba);
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {stepss: app.setstepss, direction: app.setdirection}});
+                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {target: this.target, stepss: this.setstepss, direction: this.setdirection}});
                 }
             }/*, 250, 100)*/,
             writestepclock: /*throttle(*/function() {
                 this.setdirection = this.extstepclock.stepreverse ? 'reverse' : 'forward';
 
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(2);
+                    var ba = new ArrayBuffer(3);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x24);
-                    v.setUint8(1, this.setdirection == 'forward'? 0x66 : 0x72);
+                    v.setUint8(1, this.target);
+                    v.setUint8(2, this.setdirection == 'forward'? 0x66 : 0x72);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/stepclock", {params: {direction: app.setdirection}});
+                    axios.get("{{ site.apiurl }}/api/motor/command/stepclock", {params: {target: this.target, direction: this.setdirection}});
                 }
-            }/*, 1000, 100)*/
+            }/*, 1000, 100)*/,
+            fullrefresh: function() {
+                console.log("Full refresh with target "+this.target);
+                this.readstate(true);
+                this.readmotor();
+            }
         },
         filters: {
             capitalize: function(s) {
@@ -1364,8 +1392,7 @@ state = MOTOR.getState()
                 this.animate();
             }.bind(this), 33);
 
-            this.readstate(true);
-            this.readmotor();
+            this.fullrefresh();
             pollstate();
 
             axios.get("{{ site.apiurl }}/api/service/get").then(function (r) {
@@ -1373,10 +1400,17 @@ state = MOTOR.getState()
                     merge(app.service, r.data, ['hostname']);
                 }
             });
-
             axios.get("{{ site.apiurl }}/api/wifi/get").then(function (r) {
                 if (r.data.status == 'ok') {
                     merge(app.wifi, r.data, ['ip', 'rssi']);
+                }
+            });
+            axios.get("{{ site.apiurl }}/api/daisy/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    app.master = r.data.enabled && r.data.master;
+                    if (app.master) {
+                        app.slaves = r.data.slaves;
+                    }
                 }
             });
 

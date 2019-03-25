@@ -290,8 +290,7 @@ void jsonmotor_init() {
     if (server.hasArg("save"))      root["save"] = server.arg("save") == "true";
     JsonVariant v = root;
     id_t id = nextid();
-    if (target == 0)  cmd_setconfig(id, v.as<String>().c_str());
-    else              daisy_setconfig(target, id, v.as<String>().c_str());
+    m_setconfig(target, id, v.as<String>().c_str());
     jsonbuf.clear();
     server.send(200, "application/json", json_okid(id));
   });
@@ -358,8 +357,7 @@ void jsonmotor_init() {
       }
     }
     id_t id = nextid();
-    if (target == 0)  cmd_resetpos(id);
-    else              daisy_resetpos(target, id);
+    m_resetpos(target, id);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/pos/set", [](){
@@ -382,8 +380,7 @@ void jsonmotor_init() {
     }
     int pos = server.arg("position").toInt();
     id_t id = nextid();
-    if (target == 0)  cmd_setpos(id, pos);
-    else              daisy_setpos(target, id, pos);
+    m_setpos(target, id, pos);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/mark/set", [](){
@@ -406,8 +403,7 @@ void jsonmotor_init() {
     }
     int mark = server.arg("position").toInt();
     id_t id = nextid();
-    if (target == 0)  cmd_setmark(id, mark);
-    else              daisy_setmark(target, id, mark);
+    m_setmark(target, id, mark);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/run", [](){
@@ -431,8 +427,7 @@ void jsonmotor_init() {
     ps_direction dir = parse_direction(server.arg("direction"), FWD);
     float stepss = server.arg("stepss").toFloat();
     id_t id = nextid();
-    if (target == 0)  cmd_run(id, dir, stepss);
-    else              daisy_run(target, id, dir, stepss);
+    m_run(target, id, dir, stepss);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/goto", [](){
@@ -457,11 +452,9 @@ void jsonmotor_init() {
     int pos = server.arg("position").toInt();
     if (server.hasArg("direction")) {
       ps_direction dir = parse_direction(server.arg("direction"), FWD);
-      if (target == 0)  cmd_goto(id, pos, dir);
-      else              daisy_goto(target, id, pos, dir);
+      m_goto(target, id, pos, dir);
     } else {
-      if (target == 0)  cmd_goto(id, pos);
-      else              daisy_goto(target, id, pos);
+      m_goto(target, id, pos);
     }
     server.send(200, "application/json", json_okid(id));
   });
@@ -485,8 +478,7 @@ void jsonmotor_init() {
     }
     ps_direction dir = parse_direction(server.arg("direction"), FWD);
     id_t id = nextid();
-    if (target == 0)  cmd_stepclock(id, dir);
-    else              daisy_stepclock(target, id, dir);
+    m_stepclock(target, id, dir);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/stop", [](){
@@ -506,8 +498,7 @@ void jsonmotor_init() {
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
     id_t id = nextid();
-    if (target == 0)  cmd_stop(id, hiz, soft);
-    else              daisy_stop(target, id, hiz, soft);
+    m_stop(target, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/estop", [](){
@@ -527,8 +518,7 @@ void jsonmotor_init() {
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
     id_t id = nextid();
-    if (target == 0)  cmd_estop(id, hiz, soft);
-    else              daisy_estop(target, id, hiz, soft);
+    m_estop(target, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
 }

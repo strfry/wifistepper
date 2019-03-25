@@ -237,6 +237,16 @@ sup {
     }
 }
 
+#daisy-master {
+    & + label::before {
+        background-color: #393;
+    }
+
+    &:checked + label::before {
+        background-color: #00f;
+    }
+}
+
 #speed-hizstop {
     & + label::before {
         background-color: #900;

@@ -3,3 +3,5 @@ build/
 node_modules/
 .sass-cache
 .jekyll-metadata
+Gemfile.lock
+package-lock.json

@@ -34,7 +34,8 @@ volatile bool flag_wifiled = false;
 
 config_t config = {
   .wifi = {
-    .mode = M_STATION,
+    //.mode = M_STATION,
+    .mode = M_ACCESSPOINT,
     .accesspoint = {
       .ssid = {0},
       .password = {0},
@@ -139,12 +140,13 @@ unsigned long timesince(unsigned long t1, unsigned long t2) {
   return (t1 <= t2)? (t2 - t1) : (ULONG_MAX - t1 + t2);
 }
 
-void seterror(uint8_t subsystem, id_t onid, int type) {
+void seterror(uint8_t subsystem, id_t onid, int type, int arg) {
   if (!state.error.errored) {
     state.error.when = millis();
     state.error.subsystem = subsystem;
     state.error.id = onid;
     state.error.type = type;
+    state.error.arg = arg;
   }
 }
 
@@ -514,7 +516,7 @@ void setup() {
     // Set default ap name
     byte mac[6];
     WiFi.macAddress(mac);
-    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x", mac[4], mac[5]);
+    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x%02x", mac[3], mac[4], mac[5]);
   }
 
   // Initialize FS

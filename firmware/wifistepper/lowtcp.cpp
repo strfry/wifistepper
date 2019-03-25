@@ -4,8 +4,11 @@
 
 #include "wifistepper.h"
 
-#define LTC_SIZE      (5)
+#define LTC_SIZE      (3)
 #define LTC_PORT      (1000)
+
+#define LTCB_ISIZE     (2048)
+#define LTCB_OSIZE     (LTCB_ISIZE / 2)
 
 // PACKET LAYOUT
 // | MAGIC_1 (1) | MAGIC_2 (2) | VERSION (1) | CHECKSUM (4) | OPCODE (1) | SUBCODE (1) | ADDRESS (1) | NONCE (4) | ID (8) | LENGTH (2) | ... DATA (size = LENGTH) ... |
@@ -29,20 +32,31 @@
 #define lt_len(len)   (L_HEADER + (len))
 static inline uint8_t * lt_body(uint8_t * packet) { return &packet[L_HEADER]; }
 
-#define ADDR_NONE     (0xFF)
+#define ADDR_NONE         (0xFF)
 
-#define OPCODE_PING   (0x00)
-#define OPCODE_HELO   (0x01)
+#define OPCODE_PING       (0x00)
+#define OPCODE_HELO       (0x01)
 
-#define SUBCODE_NACK  (0x00)
-#define SUBCODE_ACK   (0x01)
-#define SUBCODE_CMD   (0x02)
+#define OPCODE_ESTOP      (0x11)
+#define OPCODE_STOP       (0x12)
+#define OPCODE_GOTO       (0x13)
+#define OPCODE_RUN        (0x14)
+#define OPCODE_WAITBUSY   (0x21)
+#define OPCODE_WAITRUNNING (0x22)
+#define OPCODE_WAITMS     (0x23)
 
-#define LTO_PING      (1000)
+#define SUBCODE_NACK      (0x00)
+#define SUBCODE_ACK       (0x01)
+#define SUBCODE_CMD       (0x02)
+
+#define LTO_PING          (1000)
 
 WiFiServer lowtcp_server(LTC_PORT);
 struct {
   WiFiClient sock;
+  uint8_t I[LTCB_ISIZE];
+  uint8_t O[LTCB_OSIZE];
+  size_t Ilen, Olen;
   bool active;
   bool initialized;
   uint32_t nonce;
@@ -91,6 +105,47 @@ static void lt_pack(uint8_t * packet, size_t length, uint8_t opcode, uint8_t sub
   lt_packuint32(lt_checksum32(&packet[LC_START], length - LC_START), &packet[LO_CHECKSUM]);
 }
 
+static void lt_handle(size_t i, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t * data, size_t length) {
+  switch (opcode) {
+    case OPCODE_ESTOP: {
+      bool hiz = data[0];
+      bool soft = data[1];
+      m_estop(address, nextid(), hiz, soft);
+      break;
+    }
+    case OPCODE_STOP: {
+      bool hiz = data[0];
+      bool soft = data[1];
+      m_stop(address, nextid(), hiz, soft);
+      break;
+    }
+    case OPCODE_GOTO: {
+      int32_t pos = lt_buf2int32(&data[0]);
+      m_goto(address, nextid(), pos);
+      break;
+    }
+    case OPCODE_RUN: {
+      ps_direction dir = data[0]? FWD : REV;
+      float stepss = lt_buf2float(&data[1]);
+      m_run(address, nextid(), dir, stepss);
+      break;
+    }
+    case OPCODE_WAITBUSY: {
+      m_waitbusy(address, nextid());
+      break;
+    }
+    case OPCODE_WAITRUNNING: {
+      m_waitrunning(address, nextid());
+      break;
+    }
+    case OPCODE_WAITMS: {
+      int32_t millis = lt_buf2uint32(&data[0]);
+      m_waitms(address, nextid(), millis);
+      break;
+    }
+  }
+}
+
 void lowtcp_init() {
   lowtcp_server.begin();
   lowtcp_server.setNoDelay(true);
@@ -101,7 +156,66 @@ void lowtcp_init() {
 }
 
 void lowtcp_loop(unsigned long now) {
-  
+  // Check all packets for rx
+  for (size_t i = 0; i < LTC_SIZE; i++) {
+    if (lowtcp_client[i].active && lowtcp_client[i].sock.available()) {
+      // Check limit
+      if (lowtcp_client[i].Ilen == LTCB_ISIZE) {
+        // Input buffer is full, drain here (bad data, could not parse)
+        seterror(ESUB_LOWTCP, 0, ETYPE_IBUF, i);
+        lowtcp_client[i].Ilen = 0;
+      }
+      
+      // Read in as much as possible
+      size_t bytes = lowtcp_client[i].sock.read(&lowtcp_client[i].I[lowtcp_client[i].Ilen], LTCB_ISIZE - lowtcp_client[i].Ilen);
+      lowtcp_client[i].Ilen += bytes;
+    }
+  }
+
+  // Handle payload
+  for (size_t i = 0; i < LTC_SIZE; i++) {
+    if (lowtcp_client[i].active && lowtcp_client[i].Ilen > 0) {
+      uint8_t * B = lowtcp_client[i].I;
+      size_t Blen = lowtcp_client[i].Ilen;
+
+      // Check for valid SOF
+      if (B[LO_MAGIC_1] != L_MAGIC_1) {
+        // Not valid, find first instance of magic, sync to that
+        size_t index = 1;
+        for (; index < Blen; index++) {
+          if (B[index] == L_MAGIC_1) break;
+        }
+
+        if (index < lowtcp_client[i].Ilen) memmove(B, &B[index], Blen - index);
+        lowtcp_client[i].Ilen -= index;
+        continue;
+      }
+
+      // Ensure full header is in buffer
+      if (Blen < L_HEADER) continue;
+
+      // Check for valid packet header
+      // TODO - (assumes valid packet)
+
+      uint8_t opcode = B[LO_OPCODE];
+      size_t length = lt_buf2uint16(&B[LO_LENGTH]);
+      switch (opcode) {
+        case OPCODE_PING: {
+          lowtcp_client[i].last.ping = now;
+          break;
+        }
+        default: {
+          lt_handle(i, opcode, B[LO_SUBCODE], B[LO_ADDRESS], &B[L_HEADER], length);
+          break;
+        }
+      }
+
+      // Clear packet from buffer
+      size_t fullsize = L_HEADER + length;
+      memmove(B, &B[fullsize], Blen - fullsize);
+      lowtcp_client[i].Ilen -= fullsize;
+    }
+  }
 }
 
 void lowtcp_update(unsigned long now) {
@@ -109,11 +223,10 @@ void lowtcp_update(unsigned long now) {
     size_t i = 0;
     for (; i < LTC_SIZE; i++) {
       if (!lowtcp_client[i].active) {
+        memset(&lowtcp_client[i], 0, sizeof(lowtcp_client[i]));
         lowtcp_client[i].sock = lowtcp_server.available();
         lowtcp_client[i].active = true;
-        lowtcp_client[i].initialized = false;
         //lowtcp_client[i].nonce = ?  // TODO
-        lowtcp_client[i].last.id = 0;
         lowtcp_client[i].last.ping = now;
         break;
       }
@@ -121,11 +234,17 @@ void lowtcp_update(unsigned long now) {
 
     if (i == LTC_SIZE) {
       // No open slots
-      lowtcp_server.available().stop();
+      //lowtcp_server.available().stop();
     }
   }
 
-  // TODO - Check active sockets
+  for (size_t i = 0; i < LTC_SIZE; i++) {
+    if (lowtcp_client[i].active && (timesince(lowtcp_client[i].last.ping, now) > LTO_PING || !lowtcp_client[i].sock.connected())) {
+      // Socket has timed out
+      //if (lowtcp_client[i].sock.connected()) lowtcp_client[i].sock.stop();
+      lowtcp_client[i].active = false;
+    }
+  }
 
   if (timesince(sketch.service.lowtcp.last.ping, now) > LTO_PING) {
     sketch.service.lowtcp.last.ping = now;

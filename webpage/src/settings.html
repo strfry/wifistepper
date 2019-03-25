@@ -4,6 +4,7 @@ menu: settings
 css:
     - bulma-tooltip
     - bulma-checkradio
+    - bulma-switch
     - bulma-divider
 layout: default
 ---
@@ -250,11 +251,57 @@ layout: default
                     <div class="modal-background" v-on:click="service.changemodal = false"></div>
                         <div class="modal-content">
                             <div class="box has-text-centered">
-                                <div class="title is-4">{% mdicon sync-alert %}Browser Settings Changed</div>
+                                <div class="title is-4">{% mdicon sync-alert %}Service Settings Changed</div>
                                 <div>You may need to refresh the page to see changes.</div>
                             </div>
                         </div>
                     <button class="modal-close is-large" v-on:click="service.changemodal = false"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon lan %}Daisy Chaining</span></div>
+        <div class="message-body">
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"></div>
+                    <div class="field-body">
+                        <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="daisy-enable" type="checkbox" v-model="daisy.enabled" />
+                                <label class="is-checkradio-enable" for="daisy-enable"><strong>Enabled</strong></label>
+                            </span>
+                    </div>
+                </div>
+
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"></div>
+                    <div class="field-body">
+                        <div class="field has-addons">
+                            <span class="control">
+                                <span class="button is-label">
+                                    <label class="is-switch-label" for="daisy-master">Slave</label>
+                                    <input class="switch" id="daisy-master" type="checkbox" v-model="daisy.master" />
+                                    <label class="is-switch-label" for="daisy-master">Master</label>
+                                </span>
+                            </span>
+                            <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_daisy }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="field has-text-centered">
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="writedaisy">Apply</button></span>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': daisy.changemodal}">
+                    <div class="modal-background" v-on:click="daisy.changemodal = false"></div>
+                        <div class="modal-content">
+                            <div class="box has-text-centered">
+                                <div class="title is-4">{% mdicon sync-alert %}Daisy Chaining Settings Changed</div>
+                                <div>You may need to refresh the page to see changes.</div>
+                            </div>
+                        </div>
+                    <button class="modal-close is-large" v-on:click="daisy.changemodal = false"></button>
                 </div>
             </div>
         </div>
@@ -319,7 +366,6 @@ layout: default
                 station_forcegateway: '',
                 station_revertap: true
             },
-
             service: {
                 changemodal: false,
                 hostname: '',
@@ -330,6 +376,11 @@ layout: default
                 auth_password: '',
                 ota_enabled: true,
                 ota_password: ''
+            },
+            daisy: {
+                changemodal: false,
+                enabled: true,
+                master: false
             }
         },
         watch: {
@@ -406,6 +457,15 @@ layout: default
                 });
                 this.service.changemodal = true;
             },
+            writedaisy: function() {
+                axios.get("{{ site.apiurl }}/api/daisy/set", {
+                    params: {
+                        enabled: app.daisy.enabled,
+                        master: app.daisy.master
+                    }
+                });
+                this.daisy.changemodal = true;
+            },
             resetmotor: function() {
                 console.log("Reset motor");
                 axios.get("{{ site.apiurl }}/api/motor/reset");
@@ -426,6 +486,11 @@ layout: default
             axios.get("{{ site.apiurl }}/api/service/get").then(function (r) {
                 if (r.data.status == 'ok') {
                     merge(app.service, r.data, ['hostname', 'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password', 'ota_enabled', 'ota_password']);
+                }
+            });
+            axios.get("{{ site.apiurl }}/api/daisy/get").then(function (r) {
+                if (r.data.status == 'ok') {
+                    merge(app.daisy, r.data, ['enabled', 'master']);
                 }
             });
         }

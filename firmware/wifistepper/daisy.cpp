@@ -649,6 +649,8 @@ bool daisy_empty(uint8_t address, id_t id) {
 }
 
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft) {
-  return daisy_pack(daisy_alloc(address, id, CMD_ESTOP, 0)) != NULL;
+  cmd_stop_t * cmd = (cmd_stop_t *)daisy_alloc(address, id, CMD_ESTOP, sizeof(cmd_stop_t));
+  if (cmd != NULL) *cmd = { .hiz = hiz, .soft = soft };
+  return daisy_pack(cmd) != NULL;
 }
 

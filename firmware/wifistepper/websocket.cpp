@@ -63,6 +63,20 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
       switch (data[0]) {
         case WS_READSTATE: {
           motor_state * st = &state.motor;
+
+          if (len != 2) {
+            seterror(ESUB_HTTP);
+            return;
+          }
+
+          uint8_t target = data[1];
+          if ((target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) || target > state.daisy.slaves) {
+            seterror(ESUB_HTTP);
+            return;
+          }
+          if (target > 0) {
+            st = &sketch.daisy.slave[target-1].state.motor;
+          }
           
           uint8_t movement = '?';
           switch (st->status.movement) {
@@ -96,62 +110,72 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
         }
 
         case WS_ESTOP: {
-          if (len != 3) {
+          if (len != 4) {
             seterror(ESUB_HTTP);
             return;
           }
-          cmd_estop(nextid(), data[1], data[2]);
+          uint8_t target = data[1];
+          bool hiz = data[2];
+          bool soft = data[3];
+          m_estop(target, nextid(), hiz, soft);
           break;
         }
 
         case WS_STOP: {
-          if (len != 3) {
+          if (len != 4) {
             seterror(ESUB_HTTP);
             return;
           }
-          cmd_stop(nextid(), data[1], data[2]);
+          uint8_t target = data[1];
+          bool hiz = data[2];
+          bool soft = data[3];
+          m_stop(target, nextid(), hiz, soft);
           break;
         }
 
         case WS_GOTO: {
-          if (len != 5) {
-            seterror(ESUB_HTTP);
-            return;
-          }
-          int32_t pos = ws_buf2int(&data[1]);
-          cmd_goto(nextid(), pos);
-          break;
-        }
-
-        case WS_RUN: {
           if (len != 6) {
             seterror(ESUB_HTTP);
             return;
           }
-          ps_direction dir = data[1] == 'r'? REV : FWD;
-          float stepss = ws_buf2float(&data[2]);
-          cmd_run(nextid(), dir, stepss);
+          uint8_t target = data[1];
+          int32_t pos = ws_buf2int(&data[2]);
+          m_goto(target, nextid(), pos);
+          break;
+        }
+
+        case WS_RUN: {
+          if (len != 7) {
+            seterror(ESUB_HTTP);
+            return;
+          }
+          uint8_t target = data[1];
+          ps_direction dir = data[2] == 'r'? REV : FWD;
+          float stepss = ws_buf2float(&data[3]);
+          m_run(target, nextid(), dir, stepss);
           break;
         }
 
         case WS_STEPCLOCK: {
-          if (len != 2) {
+          if (len != 3) {
             seterror(ESUB_HTTP);
             return;
           }
-          ps_direction dir = data[1] == 'r'? REV : FWD;
-          cmd_stepclock(nextid(), dir);
+          uint8_t target = data[1];
+          ps_direction dir = data[2] == 'r'? REV : FWD;
+          m_stepclock(target, nextid(), dir);
           break;
         }
 
         case WS_POS: {
-          if (len != 5) {
+          if (len != 6) {
             seterror(ESUB_HTTP);
             return;
           }
-          int pos = ws_buf2int(&data[1]);
-          if (pos == 0)   cmd_resetpos(nextid());
-          else            cmd_setpos(nextid(), pos);
+          uint8_t target = data[1];
+          int pos = ws_buf2int(&data[2]);
+          if (pos == 0)   m_resetpos(target, nextid());
+          else            m_setpos(target, nextid(), pos);
           break;
         }
       }
