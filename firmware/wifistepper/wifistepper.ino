@@ -34,7 +34,7 @@ volatile bool flag_wifiled = false;
 
 config_t config = {
   .wifi = {
-    //.mode = M_STATION,
+    //.mode = M_STATION,    // TODO
     .mode = M_ACCESSPOINT,
     .accesspoint = {
       .ssid = {0},
@@ -140,7 +140,7 @@ unsigned long timesince(unsigned long t1, unsigned long t2) {
   return (t1 <= t2)? (t2 - t1) : (ULONG_MAX - t1 + t2);
 }
 
-void seterror(uint8_t subsystem, id_t onid, int type, int arg) {
+void seterror(uint8_t subsystem, id_t onid, int type, int8_t arg) {
   if (!state.error.errored) {
     state.error.when = millis();
     state.error.subsystem = subsystem;
@@ -207,7 +207,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
     case M_ACCESSPOINT: {
       WiFi.mode(WIFI_AP);
       WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
-      strlcpy(state.wifi.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
+      state.wifi.ip = WiFi.softAPIP();
       state.wifi.mode = M_ACCESSPOINT;
       success = true;
       break;
@@ -227,7 +227,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
       }
 
       if (WiFi.status() == WL_CONNECTED) {
-        strlcpy(state.wifi.ip, WiFi.localIP().toString().c_str(), LEN_IP);
+        state.wifi.ip = WiFi.localIP();
         state.wifi.mode = M_STATION;
         success = true;
       }
@@ -236,7 +236,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
     case M_OFF: {
       WiFi.mode(WIFI_OFF);
       state.wifi.mode = M_OFF;
-      state.wifi.ip[0] = 0;
+      state.wifi.ip = 0;
       success = true;
       break;
     }
@@ -248,7 +248,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
   Serial.print(" success=");
   Serial.print(success);
   Serial.print(", ip=");
-  Serial.print(state.wifi.ip);
+  Serial.print(IPAddress(state.wifi.ip).toString());
   Serial.println();
   
   return success;
@@ -513,10 +513,12 @@ void setup() {
     cmd_init();
     daisy_init();
 
+    // Get wifi info from ESP
+    state.wifi.chipid = ESP.getChipId();
+    WiFi.macAddress(state.wifi.mac);
+
     // Set default ap name
-    byte mac[6];
-    WiFi.macAddress(mac);
-    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x%02x", mac[3], mac[4], mac[5]);
+    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x%02x", state.wifi.mac[3], state.wifi.mac[4], state.wifi.mac[5]);
   }
 
   // Initialize FS

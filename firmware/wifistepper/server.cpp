@@ -44,7 +44,7 @@ void jsonwifi_init() {
   server.on("/api/wifi/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
-    root["ip"] = state.wifi.ip;
+    root["ip"] = IPAddress(state.wifi.ip).toString();
     root["rssi"] = state.wifi.rssi;
     root["mode"] = json_serialize(config.wifi.mode);
     root["accesspoint_ssid"] = config.wifi.accesspoint.ssid;
@@ -450,12 +450,8 @@ void jsonmotor_init() {
     }
     id_t id = nextid();
     int pos = server.arg("position").toInt();
-    if (server.hasArg("direction")) {
-      ps_direction dir = parse_direction(server.arg("direction"), FWD);
-      m_goto(target, id, pos, dir);
-    } else {
-      m_goto(target, id, pos);
-    }
+    ps_direction dir = parse_direction(server.arg("direction"), FWD);
+    m_goto(target, id, pos, server.hasArg("direction"), dir);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/stepclock", [](){
@@ -549,6 +545,7 @@ void json_init() {
       obj["subsystem"] = state.error.subsystem;
       obj["id"] = state.error.id;
       obj["type"] = state.error.type;
+      obj["arg"] = state.error.arg;
     }
     obj["status"] = "ok";
     JsonVariant v = obj;

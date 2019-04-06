@@ -158,15 +158,16 @@ typedef struct {
 #define ESUB_CMD      (0x02)
 #define ESUB_MOTOR    (0x03)
 #define ESUB_DAISY    (0x04)
-#define ESUB_LOWTCP   (0x05)
+#define ESUB_LC       (0x05)
 #define ESUB_HTTP     (0x06)
 
 #define ETYPE_UNK     (0x00)
 #define ETYPE_MEM     (0x01)
 #define ETYPE_IBUF    (0x02)
 #define ETYPE_OBUF    (0x03)
+#define ETYPE_MSG     (0x04)
 
-void seterror(uint8_t subsystem = ESUB_UNK, id_t onid = 0, int type = ETYPE_UNK, int arg = -1);
+void seterror(uint8_t subsystem = ESUB_UNK, id_t onid = 0, int type = ETYPE_UNK, int8_t arg = -1);
 void clearerror();
 
 typedef struct ispacked {
@@ -175,7 +176,7 @@ typedef struct ispacked {
   uint8_t subsystem;
   id_t id;
   int type;
-  int arg;
+  int8_t arg;
 } error_state;
 
 typedef struct ispacked {
@@ -186,7 +187,9 @@ typedef struct ispacked {
 
 typedef struct ispacked {
   wifi_mode mode;
-  char ip[LEN_IP];
+  uint32_t ip;
+  uint8_t mac[6];
+  uint32_t chipid;
   long rssi;
 } wifi_state;
 
@@ -345,8 +348,9 @@ bool cmd_stop(id_t id, bool hiz, bool soft);
 bool cmd_run(id_t id, ps_direction dir, float stepss);
 bool cmd_stepclock(id_t id, ps_direction dir);
 bool cmd_move(id_t id, ps_direction dir, uint32_t microsteps);
-bool cmd_goto(id_t id, int32_t pos);
-bool cmd_goto(id_t id, int32_t pos, ps_direction dir);
+//bool cmd_goto(id_t id, int32_t pos);
+//bool cmd_goto(id_t id, int32_t pos, ps_direction dir);
+bool cmd_goto(id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD);
 bool cmd_gountil(id_t id, ps_posact action, ps_direction dir, float stepss);
 bool cmd_releasesw(id_t id, ps_posact action, ps_direction dir);
 bool cmd_gohome(id_t id);
@@ -378,8 +382,9 @@ bool daisy_stop(uint8_t address, id_t id, bool hiz, bool soft);
 bool daisy_run(uint8_t address, id_t id, ps_direction dir, float stepss);
 bool daisy_stepclock(uint8_t address, id_t id, ps_direction dir);
 bool daisy_move(uint8_t address, id_t id, ps_direction dir, uint32_t microsteps);
-bool daisy_goto(uint8_t address, id_t id, int32_t pos);
-bool daisy_goto(uint8_t address, id_t id, int32_t pos, ps_direction dir);
+//bool daisy_goto(uint8_t address, id_t id, int32_t pos);
+//bool daisy_goto(uint8_t address, id_t id, int32_t pos, ps_direction dir);
+bool daisy_goto(uint8_t address, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD);
 bool daisy_gountil(uint8_t address, id_t id, ps_posact action, ps_direction dir, float stepss);
 bool daisy_releasesw(uint8_t address, id_t id, ps_posact action, ps_direction dir);
 bool daisy_gohome(uint8_t address, id_t id);
@@ -400,8 +405,9 @@ static inline bool m_stop(uint8_t address, id_t id, bool hiz, bool soft) { if (a
 static inline bool m_run(uint8_t address, id_t id, ps_direction dir, float stepss) { if (address == 0) { return cmd_run(id, dir, stepss); } else { return daisy_run(address, id, dir, stepss); } }
 static inline bool m_stepclock(uint8_t address, id_t id, ps_direction dir) { if (address == 0) { return cmd_stepclock(id, dir); } else { return daisy_stepclock(address, id, dir); } }
 static inline bool m_move(uint8_t address, id_t id, ps_direction dir, uint32_t microsteps) { if (address == 0) { return cmd_move(id, dir, microsteps); } else { return daisy_move(address, id, dir, microsteps); } }
-static inline bool m_goto(uint8_t address, id_t id, int32_t pos) { if (address == 0) { return cmd_goto(id, pos); } else { return daisy_goto(address, id, pos); } }
-static inline bool m_goto(uint8_t address, id_t id, int32_t pos, ps_direction dir) { if (address == 0) { return cmd_goto(id, pos, dir); } else { return daisy_goto(address, id, pos, dir); } }
+//static inline bool m_goto(uint8_t address, id_t id, int32_t pos) { if (address == 0) { return cmd_goto(id, pos); } else { return daisy_goto(address, id, pos); } }
+//static inline bool m_goto(uint8_t address, id_t id, int32_t pos, ps_direction dir) { if (address == 0) { return cmd_goto(id, pos, dir); } else { return daisy_goto(address, id, pos, dir); } }
+static inline bool m_goto(uint8_t address, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD) { if (address == 0) { return cmd_goto(id, pos, hasdir, dir); } else { return daisy_goto(address, id, pos, hasdir, dir); } }
 static inline bool m_gountil(uint8_t address, id_t id, ps_posact action, ps_direction dir, float stepss) { if (address == 0) { return cmd_gountil(id, action, dir, stepss); } else { return daisy_gountil(address, id, action, dir, stepss); } }
 static inline bool m_releasesw(uint8_t address, id_t id, ps_posact action, ps_direction dir) { if (address == 0) { return cmd_releasesw(id, action, dir); } else { return daisy_releasesw(address, id, action, dir); } }
 static inline bool m_gohome(uint8_t address, id_t id) { if (address == 0) { return cmd_gohome(id); } else { return daisy_gohome(address, id); } }

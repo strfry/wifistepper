@@ -295,7 +295,7 @@ bool cmd_move(id_t id, ps_direction dir, uint32_t microsteps) {
   return cmd != NULL;
 }
 
-bool cmd_goto(id_t id, int32_t pos) {
+/*bool cmd_goto(id_t id, int32_t pos) {
   cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
   if (cmd != NULL) *cmd = { .hasdir = false, .dir = FWD, .pos = pos };
   return cmd != NULL;
@@ -304,6 +304,12 @@ bool cmd_goto(id_t id, int32_t pos) {
 bool cmd_goto(id_t id, int32_t pos, ps_direction dir) {
   cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
   if (cmd != NULL) *cmd = { .hasdir = true, .dir = dir, .pos = pos };
+  return cmd != NULL;
+}*/
+
+bool cmd_goto(id_t id, int32_t pos, bool hasdir, ps_direction dir) {
+  cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
+  if (cmd != NULL) *cmd = { .hasdir = hasdir, .dir = dir, .pos = pos };
   return cmd != NULL;
 }
 
