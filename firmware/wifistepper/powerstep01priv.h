@@ -232,7 +232,7 @@ typedef union __ps_config_reg {
 #define CM_TSW_MASK         (0x1F)
 
 /* KVALS */
-#define KTVALS_COEFF        (0.00392)
+#define KTVALS_COEFF        (0.00392156)
 
 /* VM BEMF */
 #define BEMFSPEEDCO_COEFF   (0.0596)

@@ -561,25 +561,25 @@ void ps_setvoltcomp(bool voltage_compensation) {
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 
-ps_ktvals ps_getktvals() {
+ps_ktvals ps_getktvals(ps_mode mode) {
   uint8_t kthold = 0, ktrun = 0, ktacc = 0, ktdec = 0;
   ps_xfer("getparam ktvalhold", CMD_GETPARAM(PARAM_KTVALHOLD), &kthold, 1);
   ps_xfer("getparam ktvalrun", CMD_GETPARAM(PARAM_KTVALRUN), &ktrun, 1);
   ps_xfer("getparam ktvalacc", CMD_GETPARAM(PARAM_KTVALACC), &ktacc, 1);
   ps_xfer("getparam ktvaldec", CMD_GETPARAM(PARAM_KTVALDEC), &ktdec, 1);
   return (ps_ktvals){
-    .hold = ((float)kthold) * KTVALS_COEFF,
-    .run = ((float)ktrun) * KTVALS_COEFF,
-    .accel = ((float)ktacc) * KTVALS_COEFF,
-    .decel = ((float)ktdec) * KTVALS_COEFF
+    .hold = (float)kthold * KTVALS_COEFF * (mode == MODE_VOLTAGE? 1.0 : 2.0),
+    .run = (float)ktrun * KTVALS_COEFF * (mode == MODE_VOLTAGE? 1.0 : 2.0),
+    .accel = (float)ktacc * KTVALS_COEFF * (mode == MODE_VOLTAGE? 1.0 : 2.0),
+    .decel = (float)ktdec * KTVALS_COEFF * (mode == MODE_VOLTAGE? 1.0 : 2.0)
   };
 }
 
-void ps_setktvals(float hold, float run, float accel, float decel) {
-  uint8_t kthold = (uint8_t)round(constrain(hold, 0.0, 1.0) / KTVALS_COEFF);
-  uint8_t ktrun = (uint8_t)round(constrain(run, 0.0, 1.0) / KTVALS_COEFF);
-  uint8_t ktacc = (uint8_t)round(constrain(accel, 0.0, 1.0) / KTVALS_COEFF);
-  uint8_t ktdec = (uint8_t)round(constrain(decel, 0.0, 1.0) / KTVALS_COEFF);
+void ps_setktvals(ps_mode mode, float hold, float run, float accel, float decel) {
+  uint8_t kthold = (uint8_t)(round(constrain(hold, 0.0, 1.0) * (1.0 / KTVALS_COEFF) * (mode == MODE_VOLTAGE? 1.0 : 0.5)));
+  uint8_t ktrun = (uint8_t)(round(constrain(run, 0.0, 1.0) * (1.0 / KTVALS_COEFF) * (mode == MODE_VOLTAGE? 1.0 : 0.5)));
+  uint8_t ktacc = (uint8_t)(round(constrain(accel, 0.0, 1.0) * (1.0 / KTVALS_COEFF) * (mode == MODE_VOLTAGE? 1.0 : 0.5)));
+  uint8_t ktdec = (uint8_t)(round(constrain(decel, 0.0, 1.0) * (1.0 / KTVALS_COEFF) * (mode == MODE_VOLTAGE? 1.0 : 0.5)));
   ps_xfer("setparam ktvalhold", CMD_SETPARAM(PARAM_KTVALHOLD), &kthold, 1);
   ps_xfer("setparam ktvalrun", CMD_SETPARAM(PARAM_KTVALRUN), &ktrun, 1);
   ps_xfer("setparam ktvalacc", CMD_SETPARAM(PARAM_KTVALACC), &ktacc, 1);

@@ -225,7 +225,7 @@ void motorcfg_read() {
   motorcfg.minspeed = minspeed.steps_per_sec;
   motorcfg.accel = ps_getaccel();
   motorcfg.decel = ps_getdecel();
-  ps_ktvals ktvals = ps_getktvals();
+  ps_ktvals ktvals = ps_getktvals(motorcfg.mode);
   motorcfg.kthold = ktvals.hold;
   motorcfg.ktrun = ktvals.run;
   motorcfg.ktaccel = ktvals.accel;
@@ -280,7 +280,7 @@ void motorcfg_update() {
   ps_setswmode(SW_USER);
   ps_setclocksel(MOTOR_CLOCK);
 
-  ps_setktvals(motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
+  ps_setktvals(motorcfg.mode, motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
   ps_setalarmconfig(true, true, true, true);
 }
 
@@ -998,6 +998,11 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
 
 void setup() {
   Serial.begin(115200);
+
+  // Initialize ecc
+  {
+    //ecc_i2cinit();
+  }
 
   // Initialize FS
   {

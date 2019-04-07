@@ -172,8 +172,8 @@ typedef struct __ps_ktvals {
   float decel;
 } ps_ktvals;
 
-ps_ktvals ps_getktvals();
-void ps_setktvals(float hold, float run, float accel, float decel);
+ps_ktvals ps_getktvals(ps_mode mode);
+void ps_setktvals(ps_mode mode, float hold, float run, float accel, float decel);
 
 /* CONFIG */
 bool ps_getvoltcomp();
