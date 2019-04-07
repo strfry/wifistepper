@@ -4,7 +4,6 @@ menu: documentation
 layout: default
 ---
 <h1 class="title is-3">{% mdicon book-open-variant %}Documentation</h1>
-<hr />
 <div class="message">
     <div class="message-header"><span class="title is-5" id="hookup-guide">{% mdicon wrench %}Hookup guide</span></div>
     <div class="message-body content">
@@ -30,17 +29,17 @@ layout: default
         </p>
     </div>
 </div>
-<div class="message">
+<!--<div class="message">
     <div class="message-header"><span class="title is-5">{% mdicon wifi %}WiFi Configuration</span></div>
     <div class="message-body content">
         <p></p>
     </div>
-</div>
+</div>-->
 <div class="message">
     <div class="message-header"><span class="title is-5" id="high-voltage">{% mdicon flash %}High Voltage Operation (50 volts and above)</span></div>
     <div class="message-body content">
         <p>
-            With proper configuration, this board can handle input voltages up to 85 volts. However, board modification is needed when driving 50 volts and higher. This is due to two factors: 1) Input ratings on the barrel connector 2) the maximum input voltage of the DC-DC regulator.
+            With proper configuration, this board can handle input voltages up to 85 volts. However, board modification is needed when driving 50 volts and higher. This is due to two factors: 1) Input ratings on the barrel connector 2) the maximum input voltage of the DC-DC regulator. When operating at 50+ volts, please ensure the following:
         </p>
         <ol>
             <li>Use <strong>only</strong> the screw terminals for voltage input. (The barrel connector is not rated for more than 50 volts)</li>
@@ -48,15 +47,20 @@ layout: default
         </ol>
     </div>
 </div>
-<div class="message">
+<!--<div class="message">
     <div class="message-header"><span class="title is-5">{% mdicon tilde %}Voltage and Current Modes</span></div>
     <div class="message-body content">
         <p></p>
     </div>
-</div>
+</div>-->
 <div class="message">
     <div class="message-header"><span class="title is-5" id="hardware-reset">{% mdicon bomb %}Hardware Reset</span></div>
     <div class="message-body content">
-        <p></p>
+        <p>There is a hard reset button located on the board that will restore the configuration to factory defaults. The hard reset procedure is as follows:</p>
+        <ol>
+            <li>With the board not powered, press and hold the reset button.</li>
+            <li>Power the board with the button still pressed and hold for 3 seconds.</li>
+            <li>Release the button. The board will now wipe the configuration files, revert to factory defaults, and reboot.</li>
+        </ol>
     </div>
 </div>

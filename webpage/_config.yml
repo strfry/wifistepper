@@ -2,5 +2,5 @@ title: WiFi Stepper
 source: src
 destination: build
 
-apiurl: http://192.168.1.134
-wsurl: ws://192.168.1.134
+apiurl: http://10.1.10.247
+wsurl: ws://10.1.10.247:81

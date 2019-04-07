@@ -2,14 +2,15 @@
 <html lang="en">
     <head>
         <title>{{ page.title }}</title>
-        <link rel="stylesheet" href="/css/main.css" inline />
+        <meta name="viewport" content="width=device-width initial-scale=1" />
+        <link rel="stylesheet" href="/css/main.css" inline clean minify />
         {% for css in page.css %}
             <link rel="stylesheet" href="/css/{{ css }}.css" inline clean minify />
         {% endfor %}
-        <script type="module" src="/js/bulmajs/plugins/navbar.js" es6 inline></script>
-        <script src="/js/axios{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
-        <script src="/js/vue{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
-        <script src="/js/vue-cookies{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+        <script type="module" src="/js/bulmajs/plugins/navbar.js" es6 inline minify></script>
+        <script src="/js/axios{% if jekyll.environment == 'production' %}.min{% endif %}.js"></script>
+        <script src="/js/vue{% if jekyll.environment == 'production' %}.min{% endif %}.js"></script>
+        <script src="/js/vue-cookies{% if jekyll.environment == 'production' %}.min{% endif %}.js"></script>
 
         <!-- BulmaJS files -->
         {% for js in page.bulmajs %}
@@ -18,9 +19,9 @@
 
         <!-- Prism code highlighter -->
         {% if page.prism == true %}
-            <link rel="stylesheet" href="/css/prism{% if jekyll.environment == 'production' %}.min{% endif %}.css" inline />
-            <script src="/js/prism{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
-            <script src="/js/clipboard{% if jekyll.environment == 'production' %}.min{% endif %}.js" inline></script>
+            <link rel="stylesheet" href="/css/prism{% if jekyll.environment == 'production' %}.min{% endif %}.css" inline minify />
+            <script src="/js/prism{% if jekyll.environment == 'production' %}.min{% endif %}.js"></script>
+            <script src="/js/clipboard{% if jekyll.environment == 'production' %}.min{% endif %}.js"></script>
         {% endif %}
     </head>
     <body>
@@ -38,7 +39,7 @@
                     <div class="navbar-item has-dropdown is-hoverable">
                         <div class="navbar-dropdown is-boxed">
                             <a class="navbar-item" href="/quickstart">{% mdicon rocket %}Quick Start</a>
-                            <a class="navbar-item" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a>
+                            <!--<a class="navbar-item" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a>-->
                             <a class="navbar-item" href="/settings">{% mdicon lock %}Settings</a>
                             <a class="navbar-item" href="/documentation">{% mdicon book-open-variant %}Documentation</a>
                             <a class="navbar-item" href="/troubleshoot">{% mdicon led-off %}Troubleshoot</a>
@@ -54,7 +55,7 @@
                 <p class="menu-label">Menu</p>
                 <ul class="menu-list">
                     <li><a class="{% if page.menu == 'quickstart' %}is-active{% endif %}" href="/quickstart">{% mdicon rocket %}Quick Start</a></li>
-                    <li><a class="{% if page.menu == 'dashboard' %}is-active{% endif %}" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a></li>
+                    <!--<li><a class="{% if page.menu == 'dashboard' %}is-active{% endif %}" href="/dashboard">{% mdicon view-dashboard %}Dashboard</a></li>-->
                     <li><a class="{% if page.menu == 'settings' %}is-active{% endif %}" href="/settings">{% mdicon lock %}Settings</a></li>
                     <li><a class="{% if page.menu == 'documentation' %}is-active{% endif %}" href="/documentation">{% mdicon book-open-variant %}Documentation</a></li>
                     <li><a class="{% if page.menu == 'troubleshoot' %}is-active{% endif %}" href="/troubleshoot">{% mdicon led-off %}Troubleshoot</a></li>

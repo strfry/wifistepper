@@ -1,19 +1,24 @@
 #ifndef __POWERSTEP01_H
 #define __POWERSTEP01_H
 
-typedef enum __ps_dir {
+#ifndef __ps_packed
+#define __ps_packed   __attribute__((packed))
+#endif
+
+
+typedef enum __ps_packed {
   REV       = 0x0,
   FWD       = 0x1
 } ps_direction;
 
-typedef enum __ps_movement {
+typedef enum __ps_packed {
   M_STOPPED     = 0x0,
   M_ACCEL       = 0x1,
   M_DECEL       = 0x2,
   M_CONSTSPEED  = 0x3
 } ps_movement;
 
-typedef struct __ps_alarms {
+typedef struct __ps_packed {
   bool command_error;
   bool overcurrent;
   bool undervoltage;
@@ -24,7 +29,7 @@ typedef struct __ps_alarms {
   bool adc_undervoltage;
 } ps_alarms;
 
-typedef struct __ps_status {
+typedef struct __ps_packed {
   ps_direction direction;
   ps_movement movement;
   bool hiz;
@@ -34,7 +39,7 @@ typedef struct __ps_status {
   ps_alarms alarms;
 } ps_status;
 
-typedef enum __ps_posact {
+typedef enum {
   POS_RESET         = 0x0,
   POS_COPYMARK      = 0x1
 } ps_posact;
@@ -53,7 +58,7 @@ float ps_getmaxspeed();
 void ps_setmaxspeed(float steps_per_second);
 
 /* MINSPEED */
-typedef struct __ps_minspeed {
+typedef struct {
   float steps_per_sec;
   bool lowspeed_optim;
 } ps_minspeed;
@@ -65,7 +70,7 @@ void ps_setminspeed(float steps_per_second, bool lowspeed_optim);
 int ps_readadc();
 
 /* OCDTH */
-typedef struct __ps_ocd {
+typedef struct {
   float millivolts;
   bool shutdown;
 } ps_ocd;
@@ -74,7 +79,7 @@ ps_ocd ps_getocd();
 void ps_setocd(float millivolts, bool shutdown =true);
 
 /* FULLSPEED */
-typedef struct __ps_fullstepspeed {
+typedef struct {
   float steps_per_sec;
   bool boost_mode;
 } ps_fullstepspeed;
@@ -83,12 +88,12 @@ ps_fullstepspeed ps_getfullstepspeed();
 void ps_setfullstepspeed(float steps_per_sec, bool boost_mode =false);
 
 /* STEPMODE */
-typedef enum __ps_mode {
+typedef enum __ps_packed {
   MODE_VOLTAGE  = 0x0,
   MODE_CURRENT  = 0x1
 } ps_mode;
 
-typedef enum __ps_stepsize {
+typedef enum {
   STEP_1    = 0x0,
   STEP_2    = 0x1,
   STEP_4    = 0x2,
@@ -99,12 +104,12 @@ typedef enum __ps_stepsize {
   STEP_128  = 0x7
 } ps_stepsize;
 
-typedef enum __ps_sync {
+typedef enum {
   SYNC_BUSY     = 0x0,
   SYNC_STEP     = 0x1
 } ps_sync;
 
-typedef struct __ps_stepmode {
+typedef struct {
   ps_sync sync_mode;
   ps_stepsize sync_stepsize;
 } ps_syncinfo;
@@ -123,7 +128,7 @@ void ps_setalarmconfig(bool command_error, bool overcurrent, bool undervoltage, 
 ps_alarms ps_getalarms();
 
 /* SLEW RATES */
-typedef enum __ps_slewrate {
+typedef enum {
   SR_114        = (0x40 | 0x18),
   SR_220        = (0x60 | 0x0C),
   SR_400        = (0x80 | 0x07),
@@ -165,7 +170,7 @@ ps_swmode ps_getswmode();
 void ps_setswmode(ps_swmode swmode);
 
 /* KTVLAS */
-typedef struct __ps_ktvals {
+typedef struct {
   float hold;
   float run;
   float accel;
@@ -204,7 +209,7 @@ float ps_vm_getstall();
 void ps_vm_setstall(float millivolts);
 
 /* CM */
-typedef struct __ps_cm_controltimes {
+typedef struct {
   float min_on_us;
   float min_off_us;
   float fast_off_us;
@@ -254,7 +259,11 @@ void ps_spiinit();
 
 typedef void (*ps_waitcb)(void);
 ps_status ps_getstatus(bool clear_errors =false);
+bool ps_isbusy();
 void ps_waitbusy(ps_waitcb waitf =NULL);
+
+bool ps_isrunning();
+bool ps_ishiz();
 
 void ps_reset();
 void ps_nop();

@@ -1,799 +1,473 @@
 #include <FS.h>
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
+#include <WebSocketsServer.h>
+#include <PubSubClient.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
-#include <WebSocketsServer.h>
 
 #include "powerstep01.h"
 #include "wifistepper.h"
-
-#define RESET_PIN         (5)
-#define RESET_TIMEOUT     (3000)
-#define WIFI_PIN          (16)
-#define MOTOR_ADCCOEFF    (2.65625)
-#define MOTOR_CLOCK       (CLK_INT16)
-
-#define FNAME_WIFICFG     "/wificfg.json"
-#define FNAME_BROWSERCFG  "/browsercfg.json"
-#define FNAME_MOTORCFG    "/motorcfg.json"
-
-#define PORT_HTTP     80
-#define PORT_HTTPWS   81
-
-#define LEN_HOSTNAME  24
-#define LEN_USERNAME  64
-#define LEN_SSID      32
-#define LEN_PASSWORD  64
-#define LEN_IP        16
-
-#define DEFAULT_APSSID  {'w','s','x','1','0','0','-','a','p',0}
 
 #define TYPE_HTML     "text/html"
 #define TYPE_CSS      "text/css"
 #define TYPE_JS       "application/javascript"
 #define TYPE_PNG      "image/png"
 
+#define WTO_REVERTAP  (5 * 60 * 1000)
+#define WTO_CONNECT   (1000)
+#define WTO_RSSI      (1000)
+
+volatile id_t _id = ID_START;
+
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
+
+WiFiClient * mqtt_conn = NULL;
+PubSubClient * mqtt_client = NULL;
+
 StaticJsonBuffer<2048> jsonbuf;
 StaticJsonBuffer<1024> configbuf;
 
 volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
 
-typedef enum {
-  M_OFF = 0x0,
-  M_ACCESSPOINT = 0x1,
-  M_STATION = 0x2
-} wifi_mode;
-
-typedef enum {
-  WS_READSTATUS = 0x11,
-  WS_READSTATE = 0x12,
-  
-  WS_CMDSTOP = 0x21,
-  WS_CMDHIZ = 0x22,
-  WS_CMDGOTO = 0x23,
-  WS_CMDRUN = 0x24,
-  WS_STEPCLOCK = 0x25,
-
-  WS_POS = 0x31,
-} ws_opcode;
-
-struct {
-  wifi_mode mode;
-  char ap_ssid[LEN_SSID];
-  char ap_password[LEN_PASSWORD];
-  bool ap_encryption;
-  int ap_channel;
-  bool ap_hidden;
-  char stn_ssid[LEN_SSID];
-  char stn_password[LEN_PASSWORD];
-  bool stn_encryption;
-  char stn_forceip[LEN_IP];
-  char stn_forcesubnet[LEN_IP];
-  char stn_forcegateway[LEN_IP];
-  bool stn_revertap;
-  char ip[LEN_IP];
-} wificfg = {
-  .mode = M_ACCESSPOINT,
-  .ap_ssid = DEFAULT_APSSID,
-  .ap_password = {0},
-  .ap_encryption = false,
-  .ap_channel = 1,
-  .ap_hidden = false,
-  .stn_ssid = {0},
-  .stn_password = {0},
-  .stn_encryption = false,
-  .stn_forceip = {0},
-  .stn_forcesubnet = {0},
-  .stn_forcegateway = {0},
-  .stn_revertap = true,
-  .ip = {0}
+config_t config = {
+  .wifi = {
+    //.mode = M_STATION,    // TODO
+    .mode = M_ACCESSPOINT,
+    .accesspoint = {
+      .ssid = {0},
+      .password = {0},
+      .encryption = false,
+      .channel = 1,
+      .hidden = false
+    },
+    .station = {
+      .ssid = {'B','D','F','i','r','e',0},
+      .password = {'m','c','d','e','r','m','o','t','t',0},
+      .encryption = true,
+      .forceip = {0},
+      .forcesubnet = {0},
+      .forcegateway = {0},
+      .revertap = true
+    }
+  },
+  .service = {
+    .hostname = {'w','s','x','1','0','0',0},
+    .http = {
+      .enabled = true,
+    },
+    .mdns = {
+      .enabled = true
+    },
+    .auth = {
+      .enabled = false,
+      .username = {0},
+      .password = {0}
+    },
+    .lowtcp = {
+      .enabled = true
+    },
+    .mqtt = {
+      .enabled = false,
+      .server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
+      .port = 1883,
+      .username = {'a','k','l','o','f','a','s',0},
+      .key = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
+      .state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
+      .state_publish_period = 5.0,
+      .command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
+    },
+    .ota = {
+      .enabled = true,
+      .password = {0}
+    }
+  },
+  .daisy = {
+    .enabled = true,
+    .master = false,
+    .slavewifioff = true
+  },
+  .io = {
+    .wifiled = {
+      .usercontrol = false,
+      .is_output = true
+    }
+  },
+  .motor = {
+    .mode = MODE_CURRENT,
+    .stepsize = STEP_16,
+    .ocd = 500.0,
+    .ocdshutdown = true,
+    .maxspeed = 10000.0,
+    .minspeed = 0.0,
+    .accel = 1000.0,
+    .decel = 1000.0,
+    .kthold = 0.15,
+    .ktrun = 0.15,
+    .ktaccel = 0.15,
+    .ktdecel = 0.15,
+    .fsspeed = 2000.0,
+    .fsboost = false,
+    .cm = {
+      .switchperiod = 44,
+      .predict = true,
+      .minon = 21,
+      .minoff = 21,
+      .fastoff = 4,
+      .faststep = 20
+    },
+    .vm = {
+      .pwmfreq = 23.4,
+      .stall = 531.25,
+      .bemf_slopel = 0.0375,
+      .bemf_speedco = 61.5072,
+      .bemf_slopehacc = 0.0615,
+      .bemf_slopehdec = 0.0615
+    },
+    .reverse = false
+  }
 };
 
-struct {
-  char hostname[LEN_HOSTNAME];
-  bool http_enabled;
-  bool https_enabled;
-  bool mdns_enabled;
-  bool auth_enabled;
-  char auth_username[LEN_USERNAME];
-  char auth_password[LEN_PASSWORD];
-  bool ota_enabled;
-  char ota_password[LEN_PASSWORD];
-} browsercfg = {
-  .hostname = {'w','s','x','1','0','0',0},
-  .http_enabled = true,
-  .https_enabled = false,
-  .mdns_enabled = true,
-  .auth_enabled = false,
-  .auth_username = {0},
-  .auth_password = {0},
-  .ota_enabled = true,
-  .ota_password = {0}
-};
+state_t state = { 0 };
+sketch_t sketch = { 0 };
 
-struct {
-  ps_mode mode;
-  ps_stepsize stepsize;
-  float ocd;
-  bool ocdshutdown;
-  float maxspeed, minspeed;
-  float accel, decel;
-  float kthold, ktrun, ktaccel, ktdecel;
-  float fsspeed;
-  bool fsboost;
-  float cm_switchperiod;
-  bool cm_predict;
-  float cm_minon;
-  float cm_minoff;
-  float cm_fastoff;
-  float cm_faststep;
-  float vm_pwmfreq;
-  float vm_stall;
-  float vm_bemf_slopel;
-  float vm_bemf_speedco;
-  float vm_bemf_slopehacc;
-  float vm_bemf_slopehdec;
-  bool reverse;
-} motorcfg = {
-  .mode = MODE_CURRENT,
-  .stepsize = STEP_16,
-  .ocd = 500.0,
-  .ocdshutdown = true,
-  .maxspeed = 10000.0,
-  .minspeed = 0.0,
-  .accel = 1000.0,
-  .decel = 1000.0,
-  .kthold = 0.2,
-  .ktrun = 0.2,
-  .ktaccel = 0.2,
-  .ktdecel = 0.2,
-  .fsspeed = 2000.0,
-  .fsboost = false,
-  .cm_switchperiod = 44,
-  .cm_predict = true,
-  .cm_minon = 21,
-  .cm_minoff = 21,
-  .cm_fastoff = 4,
-  .cm_faststep = 20,
-  .vm_pwmfreq = 23.4,
-  .vm_stall = 531.25,
-  .vm_bemf_slopel = 0.0375,
-  .vm_bemf_speedco = 61.5072,
-  .vm_bemf_slopehacc = 0.0615,
-  .vm_bemf_slopehdec = 0.0615,
-  .reverse = false
-};
+id_t nextid() { return _id++; }
+id_t currentid() { return _id; }
 
-struct {
-  int pos, mark;
-  float stepss;
-  bool busy;
-} statecache = { 0 };
-
-void wificfg_save() {
-  JsonObject& root = jsonbuf.createObject();
-  root["mode"] = json_serialize(wificfg.mode);
-  root["ap_ssid"] = wificfg.ap_ssid;
-  root["ap_password"] = wificfg.ap_password;
-  root["ap_encryption"] = wificfg.ap_encryption;
-  root["ap_channel"] = wificfg.ap_channel;
-  root["ap_hidden"] = wificfg.ap_hidden;
-  root["stn_ssid"] = wificfg.stn_ssid;
-  root["stn_password"] = wificfg.stn_password;
-  root["stn_encryption"] = wificfg.stn_encryption;
-  root["stn_forceip"] = wificfg.stn_forceip;
-  root["stn_forcesubnet"] = wificfg.stn_forcesubnet;
-  root["stn_forcegateway"] = wificfg.stn_forcegateway;
-  root["stn_revertap"] = wificfg.stn_revertap;
-  JsonVariant v = root;
-  File cfg = SPIFFS.open(FNAME_WIFICFG, "w");
-  root.printTo(cfg);
-  cfg.close();
-  jsonbuf.clear();
+unsigned long timesince(unsigned long t1, unsigned long t2) {
+  return (t1 <= t2)? (t2 - t1) : (ULONG_MAX - t1 + t2);
 }
 
-void browsercfg_save() {
-  JsonObject& root = jsonbuf.createObject();
-  root["hostname"] = browsercfg.hostname;
-  root["http_enabled"] = browsercfg.http_enabled;
-  root["https_enabled"] = browsercfg.https_enabled;
-  root["mdns_enabled"] = browsercfg.mdns_enabled;
-  root["auth_enabled"] = browsercfg.auth_enabled;
-  root["auth_username"] = browsercfg.auth_username;
-  root["auth_password"] = browsercfg.auth_password;
-  root["ota_enabled"] = browsercfg.ota_enabled;
-  root["ota_password"] = browsercfg.ota_password;
-  JsonVariant v = root;
-  File cfg = SPIFFS.open(FNAME_BROWSERCFG, "w");
-  root.printTo(cfg);
-  cfg.close();
-  jsonbuf.clear();
-}
-
-void motorcfg_read() {
-  motorcfg.mode = ps_getmode();
-  motorcfg.stepsize = ps_getstepsize();
-  ps_ocd ocd = ps_getocd();
-  motorcfg.ocd = ocd.millivolts;
-  motorcfg.ocdshutdown = ocd.shutdown;
-  motorcfg.maxspeed = ps_getmaxspeed();
-  ps_minspeed minspeed = ps_getminspeed();
-  motorcfg.minspeed = minspeed.steps_per_sec;
-  motorcfg.accel = ps_getaccel();
-  motorcfg.decel = ps_getdecel();
-  ps_ktvals ktvals = ps_getktvals(motorcfg.mode);
-  motorcfg.kthold = ktvals.hold;
-  motorcfg.ktrun = ktvals.run;
-  motorcfg.ktaccel = ktvals.accel;
-  motorcfg.ktdecel = ktvals.decel;
-  ps_fullstepspeed fullstepspeed = ps_getfullstepspeed();
-  motorcfg.fsspeed = fullstepspeed.steps_per_sec;
-  motorcfg.fsboost = fullstepspeed.boost_mode;
-  if (motorcfg.mode == MODE_VOLTAGE) {
-    ps_vm_pwmfreq pwmfreq = ps_vm_getpwmfreq();
-    motorcfg.vm_pwmfreq = ps_vm_coeffs2pwmfreq(MOTOR_CLOCK, &pwmfreq) / 1000.0;
-    motorcfg.vm_stall = ps_vm_getstall();
-    ps_vm_bemf bemf = ps_vm_getbemf();
-    motorcfg.vm_bemf_slopel = bemf.slopel;
-    motorcfg.vm_bemf_speedco = bemf.speedco;
-    motorcfg.vm_bemf_slopehacc = bemf.slopehacc;
-    motorcfg.vm_bemf_slopehdec = bemf.slopehdec;
-  } else {
-    motorcfg.cm_switchperiod = ps_cm_getswitchperiod();
-    motorcfg.cm_predict = ps_cm_getpredict();
-    ps_cm_ctrltimes ctrltimes = ps_cm_getctrltimes();
-    motorcfg.cm_minon = ctrltimes.min_on_us;
-    motorcfg.cm_minoff = ctrltimes.min_off_us;
-    motorcfg.cm_fastoff = ctrltimes.fast_off_us;
-    motorcfg.cm_faststep = ctrltimes.fast_step_us;
+void seterror(uint8_t subsystem, id_t onid, int type, int8_t arg) {
+  if (!state.error.errored) {
+    state.error.when = millis();
+    state.error.subsystem = subsystem;
+    state.error.id = onid;
+    state.error.type = type;
+    state.error.arg = arg;
   }
 }
 
-void motorcfg_update() {
+void clearerror() {
+  memset(&state.error, 0, sizeof(error_state));
+}
+
+void wificfg_read(wifi_config * cfg) {
+  File fp = SPIFFS.open(FNAME_WIFICFG, "r");
+  if (fp) {
+    size_t size = fp.size();
+    std::unique_ptr<char[]> buf(new char[size]);
+    fp.readBytes(buf.get(), size);
+    JsonObject& root = jsonbuf.parseObject(buf.get());
+    if (root.containsKey("mode"))                   cfg->mode = parse_wifimode(root["mode"].as<char *>());
+    if (root.containsKey("accesspoint_ssid"))       strlcpy(cfg->accesspoint.ssid, root["accesspoint_ssid"].as<char *>(), LEN_SSID);
+    if (root.containsKey("accesspoint_password"))   strlcpy(cfg->accesspoint.password, root["accesspoint_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("accesspoint_encryption")) cfg->accesspoint.encryption = root["accesspoint_encryption"].as<bool>();
+    if (root.containsKey("accesspoint_channel"))    cfg->accesspoint.channel = root["accesspoint_channel"].as<int>();
+    if (root.containsKey("accesspoint_hidden"))     cfg->accesspoint.hidden = root["accesspoint_hidden"].as<bool>();
+    if (root.containsKey("station_ssid"))           strlcpy(cfg->station.ssid, root["station_ssid"].as<char *>(), LEN_SSID);
+    if (root.containsKey("station_password"))       strlcpy(cfg->station.password, root["station_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("station_encryption"))     cfg->station.encryption = root["station_encryption"].as<bool>();
+    if (root.containsKey("station_forceip"))        strlcpy(cfg->station.forceip, root["station_forceip"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_forcesubnet"))    strlcpy(cfg->station.forcesubnet, root["station_forcesubnet"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_forcegateway"))   strlcpy(cfg->station.forcegateway, root["station_forcegateway"].as<char *>(), LEN_IP);
+    if (root.containsKey("station_revertap"))       cfg->station.revertap = root["station_revertap"].as<bool>();
+    jsonbuf.clear();
+    fp.close();
+  }
+}
+
+void wificfg_write(wifi_config * const cfg) {
+  JsonObject& root = jsonbuf.createObject();
+  root["mode"] = json_serialize(cfg->mode);
+  root["accesspoint_ssid"] = cfg->accesspoint.ssid;
+  root["accesspoint_password"] = cfg->accesspoint.password;
+  root["accesspoint_encryption"] = cfg->accesspoint.encryption;
+  root["accesspoint_channel"] = cfg->accesspoint.channel;
+  root["accesspoint_hidden"] = cfg->accesspoint.hidden;
+  root["station_ssid"] = cfg->station.ssid;
+  root["station_password"] = cfg->station.password;
+  root["station_encryption"] = cfg->station.encryption;
+  root["station_forceip"] = cfg->station.forceip;
+  root["station_forcesubnet"] = cfg->station.forcesubnet;
+  root["station_forcegateway"] = cfg->station.forcegateway;
+  root["station_revertap"] = cfg->station.revertap;
+  JsonVariant v = root;
+  File fp = SPIFFS.open(FNAME_WIFICFG, "w");
+  root.printTo(fp);
+  fp.close();
+  jsonbuf.clear();
+}
+
+bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
+  bool success = false;
+  switch (mode) {
+    case M_ACCESSPOINT: {
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
+      state.wifi.ip = WiFi.softAPIP();
+      state.wifi.mode = M_ACCESSPOINT;
+      success = true;
+      break;
+    }
+    case M_STATION: {
+      WiFi.mode(WIFI_STA);
+      if (cfg->station.forceip[0] != 0 && cfg->station.forcesubnet[0] != 0 && cfg->station.forcegateway[0] != 0) {
+        IPAddress addr, subnet, gateway;
+        if (addr.fromString(cfg->station.forceip) && subnet.fromString(cfg->station.forcesubnet) && gateway.fromString(cfg->station.forcegateway)) {
+          WiFi.config(addr, subnet, gateway);
+        }
+      }
+      WiFi.begin(cfg->station.ssid, cfg->station.password);
+      for (int i=0; i < 200 && WiFi.status() != WL_CONNECTED; i++) {
+        ESP.wdtFeed();
+        delay(50);
+      }
+
+      if (WiFi.status() == WL_CONNECTED) {
+        state.wifi.ip = WiFi.localIP();
+        state.wifi.mode = M_STATION;
+        success = true;
+      }
+      break;
+    }
+    case M_OFF: {
+      WiFi.mode(WIFI_OFF);
+      state.wifi.mode = M_OFF;
+      state.wifi.ip = 0;
+      success = true;
+      break;
+    }
+  }
+
+  Serial.println();
+  Serial.print("Wifi Config: ");
+  Serial.print(mode);
+  Serial.print(" success=");
+  Serial.print(success);
+  Serial.print(", ip=");
+  Serial.print(IPAddress(state.wifi.ip).toString());
+  Serial.println();
+  
+  return success;
+}
+
+void wificfg_update(unsigned long now) {
+  if (timesince(sketch.wifi.last.rssi, now) > WTO_RSSI) {
+    sketch.wifi.last.rssi = now;
+    state.wifi.rssi = WiFi.RSSI();
+  }
+  
+  if (state.wifi.mode == M_ACCESSPOINT && config.wifi.mode == M_STATION && config.wifi.station.revertap && timesince(sketch.wifi.last.revertap, now) > WTO_REVERTAP) {
+    // We've reverted to AP some time ago, try to reconnect in station mode now
+    sketch.wifi.last.revertap = now;
+    if (!wificfg_connect(M_STATION, &config.wifi)) {
+      // Could not connect to station, revert back to AP mode
+      wificfg_connect(M_ACCESSPOINT, &config.wifi);
+    }
+  }
+  
+  if (state.wifi.mode == M_STATION && timesince(sketch.wifi.last.connection_check, now) > WTO_CONNECT) {
+    // Lost connection, try to reconnect
+    sketch.wifi.last.connection_check = now;
+    if (WiFi.status() != WL_CONNECTED && !wificfg_connect(M_STATION, &config.wifi)) {
+      // Station connection failed, revert to AP if configured
+      if (config.wifi.station.revertap) wificfg_connect(M_ACCESSPOINT, &config.wifi);
+    }
+  }
+}
+
+void servicecfg_read(service_config * cfg) {
+  File fp = SPIFFS.open(FNAME_SERVICECFG, "r");
+  if (fp) {
+    size_t size = fp.size();
+    std::unique_ptr<char[]> buf(new char[size]);
+    fp.readBytes(buf.get(), size);
+    JsonObject& root = jsonbuf.parseObject(buf.get());
+    if (root.containsKey("hostname"))  strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
+    if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
+    if (root.containsKey("mdns_enabled"))   cfg->mdns.enabled = root["mdns_enabled"].as<bool>();
+    if (root.containsKey("auth_enabled"))   cfg->auth.enabled = root["auth_enabled"].as<bool>();
+    if (root.containsKey("auth_username"))  strlcpy(cfg->auth.username, root["auth_username"].as<char *>(), LEN_USERNAME);
+    if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
+    if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("mqtt_enabled"))   cfg->mqtt.enabled = root["mqtt_enabled"].as<bool>();
+    if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
+    if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
+    if (root.containsKey("mqtt_username"))  strlcpy(cfg->mqtt.username, root["mqtt_username"].as<char *>(), LEN_USERNAME);
+    if (root.containsKey("mqtt_key"))       strlcpy(cfg->mqtt.key, root["mqtt_key"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("mqtt_state_topic")) strlcpy(cfg->mqtt.state_topic, root["mqtt_state_topic"].as<char *>(), LEN_URL);
+    if (root.containsKey("mqtt_state_publish_period")) cfg->mqtt.state_publish_period = root["mqtt_state_publish_period"].as<float>();
+    if (root.containsKey("mqtt_command_topic")) strlcpy(cfg->mqtt.command_topic, root["mqtt_command_topic"].as<char *>(), LEN_URL);
+    jsonbuf.clear();
+    fp.close();
+  }
+}
+
+void servicecfg_write(service_config * const cfg) {
+  JsonObject& root = jsonbuf.createObject();
+  root["hostname"] = cfg->hostname;
+  root["http_enabled"] = cfg->http.enabled;
+  root["mdns_enabled"] = cfg->mdns.enabled;
+  root["auth_enabled"] = cfg->auth.enabled;
+  root["auth_username"] = cfg->auth.username;
+  root["auth_password"] = cfg->auth.password;
+  root["ota_enabled"] = cfg->ota.enabled;
+  root["ota_password"] = cfg->ota.password;
+  root["mqtt_enabled"] = cfg->mqtt.enabled;
+  root["mqtt_server"] = cfg->mqtt.server;
+  root["mqtt_port"] = cfg->mqtt.port;
+  root["mqtt_username"] = cfg->mqtt.username;
+  root["mqtt_key"] = cfg->mqtt.key;
+  root["mqtt_state_topic"] = cfg->mqtt.state_topic;
+  root["mqtt_state_publish_period"] = cfg->mqtt.state_publish_period;
+  root["mqtt_command_topic"] = cfg->mqtt.command_topic;
+  JsonVariant v = root;
+  File fp = SPIFFS.open(FNAME_SERVICECFG, "w");
+  root.printTo(fp);
+  fp.close();
+  jsonbuf.clear();
+}
+
+void daisycfg_read(daisy_config * cfg) {
+  File fp = SPIFFS.open(FNAME_DAISYCFG, "r");
+  if (fp) {
+    size_t size = fp.size();
+    std::unique_ptr<char[]> buf(new char[size]);
+    fp.readBytes(buf.get(), size);
+    JsonObject& root = jsonbuf.parseObject(buf.get());
+    if (root.containsKey("enabled"))  cfg->enabled = root["enabled"].as<bool>();
+    if (root.containsKey("master"))   cfg->master = root["master"].as<bool>();
+    jsonbuf.clear();
+    fp.close();
+  }
+}
+
+void daisycfg_write(daisy_config * const cfg) {
+  JsonObject& root = jsonbuf.createObject();
+  root["enabled"] = cfg->enabled;
+  root["master"] = cfg->master;
+  JsonVariant v = root;
+  File fp = SPIFFS.open(FNAME_DAISYCFG, "w");
+  root.printTo(fp);
+  fp.close();
+  jsonbuf.clear();
+}
+
+void motorcfg_pull(motor_config * cfg) {
+  cfg->mode = ps_getmode();
+  cfg->stepsize = ps_getstepsize();
+  ps_ocd ocd = ps_getocd();
+  cfg->ocd = ocd.millivolts;
+  cfg->ocdshutdown = ocd.shutdown;
+  cfg->maxspeed = ps_getmaxspeed();
+  ps_minspeed minspeed = ps_getminspeed();
+  cfg->minspeed = minspeed.steps_per_sec;
+  cfg->accel = ps_getaccel();
+  cfg->decel = ps_getdecel();
+  ps_ktvals ktvals = ps_getktvals(cfg->mode);
+  cfg->kthold = ktvals.hold;
+  cfg->ktrun = ktvals.run;
+  cfg->ktaccel = ktvals.accel;
+  cfg->ktdecel = ktvals.decel;
+  ps_fullstepspeed fullstepspeed = ps_getfullstepspeed();
+  cfg->fsspeed = fullstepspeed.steps_per_sec;
+  cfg->fsboost = fullstepspeed.boost_mode;
+  if (cfg->mode == MODE_CURRENT) {
+    cfg->cm.switchperiod = ps_cm_getswitchperiod();
+    cfg->cm.predict = ps_cm_getpredict();
+    ps_cm_ctrltimes ctrltimes = ps_cm_getctrltimes();
+    cfg->cm.minon = ctrltimes.min_on_us;
+    cfg->cm.minoff = ctrltimes.min_off_us;
+    cfg->cm.fastoff = ctrltimes.fast_off_us;
+    cfg->cm.faststep = ctrltimes.fast_step_us;
+  } else {
+    ps_vm_pwmfreq pwmfreq = ps_vm_getpwmfreq();
+    cfg->vm.pwmfreq = ps_vm_coeffs2pwmfreq(MOTOR_CLOCK, &pwmfreq) / 1000.0;
+    cfg->vm.stall = ps_vm_getstall();
+    ps_vm_bemf bemf = ps_vm_getbemf();
+    cfg->vm.bemf_slopel = bemf.slopel;
+    cfg->vm.bemf_speedco = bemf.speedco;
+    cfg->vm.bemf_slopehacc = bemf.slopehacc;
+    cfg->vm.bemf_slopehdec = bemf.slopehdec;
+  }
+}
+
+void motorcfg_push(motor_config * cfg) {
   ps_setsync(SYNC_BUSY);
-  ps_setmode(motorcfg.mode);
-  ps_setstepsize(motorcfg.stepsize);
-  ps_setmaxspeed(motorcfg.maxspeed);
-  ps_setminspeed(motorcfg.minspeed, true);
-  ps_setaccel(motorcfg.accel);
-  ps_setdecel(motorcfg.decel);
-  ps_setfullstepspeed(motorcfg.fsspeed, motorcfg.fsboost);
+  ps_setmode(cfg->mode);
+  ps_setstepsize(cfg->stepsize);
+  ps_setmaxspeed(cfg->maxspeed);
+  ps_setminspeed(cfg->minspeed, true);
+  ps_setaccel(cfg->accel);
+  ps_setdecel(cfg->decel);
+  ps_setfullstepspeed(cfg->fsspeed, cfg->fsboost);
   
   ps_setslewrate(SR_520);
 
-  ps_setocd(motorcfg.ocd, motorcfg.ocdshutdown);
-  if (motorcfg.mode == MODE_VOLTAGE) {
-    ps_vm_pwmfreq pwmfreq = ps_vm_pwmfreq2coeffs(MOTOR_CLOCK, motorcfg.vm_pwmfreq * 1000.0);
-    ps_vm_setpwmfreq(&pwmfreq);
-    ps_vm_setstall(motorcfg.vm_stall);
-    ps_vm_setbemf(motorcfg.vm_bemf_slopel, motorcfg.vm_bemf_speedco, motorcfg.vm_bemf_slopehacc, motorcfg.vm_bemf_slopehdec);
+  ps_setocd(cfg->ocd, cfg->ocdshutdown);
+  if (cfg->mode == MODE_CURRENT) {
+    ps_cm_setswitchperiod(cfg->cm.switchperiod);
+    ps_cm_setpredict(cfg->cm.predict);
+    ps_cm_setctrltimes(cfg->cm.minon, cfg->cm.minoff, cfg->cm.fastoff, cfg->cm.faststep);
   } else {
-    ps_cm_setswitchperiod(motorcfg.cm_switchperiod);
-    ps_cm_setpredict(motorcfg.cm_predict);
-    ps_cm_setctrltimes(motorcfg.cm_minon, motorcfg.cm_minoff, motorcfg.cm_fastoff, motorcfg.cm_faststep);
+    ps_vm_pwmfreq pwmfreq = ps_vm_pwmfreq2coeffs(MOTOR_CLOCK, cfg->vm.pwmfreq * 1000.0);
+    ps_vm_setpwmfreq(&pwmfreq);
+    ps_vm_setstall(cfg->vm.stall);
+    ps_vm_setbemf(cfg->vm.bemf_slopel, cfg->vm.bemf_speedco, cfg->vm.bemf_slopehacc, cfg->vm.bemf_slopehdec);
   }
+  
   ps_setvoltcomp(false);
   ps_setswmode(SW_USER);
   ps_setclocksel(MOTOR_CLOCK);
 
-  ps_setktvals(motorcfg.mode, motorcfg.kthold, motorcfg.ktrun, motorcfg.ktaccel, motorcfg.ktdecel);
+  ps_setktvals(cfg->mode, cfg->kthold, cfg->ktrun, cfg->ktaccel, cfg->ktdecel);
   ps_setalarmconfig(true, true, true, true);
+
+  // Clear errors at end of push
+  ps_getstatus(true);
 }
 
-void motorcfg_save() {
+void motorcfg_write(motor_config * cfg) {
   JsonObject& root = jsonbuf.createObject();
-  root["mode"] = json_serialize(motorcfg.mode);
-  root["stepsize"] = json_serialize(motorcfg.stepsize);
-  root["ocd"] = motorcfg.ocd;
-  root["ocdshutdown"] = motorcfg.ocdshutdown;
-  root["maxspeed"] = motorcfg.maxspeed;
-  root["minspeed"] = motorcfg.minspeed;
-  root["accel"] = motorcfg.accel;
-  root["decel"] = motorcfg.decel;
-  root["kthold"] = motorcfg.kthold;
-  root["ktrun"] = motorcfg.ktrun;
-  root["ktaccel"] = motorcfg.ktaccel;
-  root["ktdecel"] = motorcfg.ktdecel;
-  root["fsspeed"] = motorcfg.fsspeed;
-  root["fsboost"] = motorcfg.fsboost;
-  root["cm_switchperiod"] = motorcfg.cm_switchperiod;
-  root["cm_predict"] = motorcfg.cm_predict;
-  root["cm_minon"] = motorcfg.cm_minon;
-  root["cm_minoff"] = motorcfg.cm_minoff;
-  root["cm_fastoff"] = motorcfg.cm_fastoff;
-  root["cm_faststep"] = motorcfg.cm_faststep;
-  root["vm_pwmfreq"] = motorcfg.vm_pwmfreq;
-  root["vm_stall"] = motorcfg.vm_stall;
-  root["vm_bemf_slopel"] = motorcfg.vm_bemf_slopel;
-  root["vm_bemf_speedco"] = motorcfg.vm_bemf_speedco;
-  root["vm_bemf_slopehacc"] = motorcfg.vm_bemf_slopehacc;
-  root["vm_bemf_slopehdec"] = motorcfg.vm_bemf_slopehdec;
-  root["reverse"] = motorcfg.reverse;
+  root["mode"] = json_serialize(cfg->mode);
+  root["stepsize"] = json_serialize(cfg->stepsize);
+  root["ocd"] = cfg->ocd;
+  root["ocdshutdown"] = cfg->ocdshutdown;
+  root["maxspeed"] = cfg->maxspeed;
+  root["minspeed"] = cfg->minspeed;
+  root["accel"] = cfg->accel;
+  root["decel"] = cfg->decel;
+  root["kthold"] = cfg->kthold;
+  root["ktrun"] = cfg->ktrun;
+  root["ktaccel"] = cfg->ktaccel;
+  root["ktdecel"] = cfg->ktdecel;
+  root["fsspeed"] = cfg->fsspeed;
+  root["fsboost"] = cfg->fsboost;
+  root["cm_switchperiod"] = cfg->cm.switchperiod;
+  root["cm_predict"] = cfg->cm.predict;
+  root["cm_minon"] = cfg->cm.minon;
+  root["cm_minoff"] = cfg->cm.minoff;
+  root["cm_fastoff"] = cfg->cm.fastoff;
+  root["cm_faststep"] = cfg->cm.faststep;
+  root["vm_pwmfreq"] = cfg->vm.pwmfreq;
+  root["vm_stall"] = cfg->vm.stall;
+  root["vm_bemf_slopel"] = cfg->vm.bemf_slopel;
+  root["vm_bemf_speedco"] = cfg->vm.bemf_speedco;
+  root["vm_bemf_slopehacc"] = cfg->vm.bemf_slopehacc;
+  root["vm_bemf_slopehdec"] = cfg->vm.bemf_slopehdec;
+  root["reverse"] = cfg->reverse;
   JsonVariant v = root;
-  File cfg = SPIFFS.open(FNAME_MOTORCFG, "w");
-  root.printTo(cfg);
-  cfg.close();
+  File fp = SPIFFS.open(FNAME_MOTORCFG, "w");
+  root.printTo(fp);
+  fp.close();
   jsonbuf.clear();
 }
 
-ps_direction motorcfg_dir(ps_direction d) {
-  if (!motorcfg.reverse)  return d;
-  switch (d) {
-    case FWD: return REV;
-    case REV: return FWD;
-  }
-}
 
-int motorcfg_pos(int p) {
-  return motorcfg.reverse? -p : p;
-}
-
-wifi_mode parse_wifimode(const char * m) {
-  if (strcmp(m, "station") == 0)  return M_STATION;
-  else                            return M_ACCESSPOINT;
-}
-
-int parse_channel(const String& c, int d) {
-  int i = c.toInt();
-  return i > 0 && i <= 13? i : d;
-}
-
-ps_mode parse_motormode(const String& m, ps_mode d) {
-  if (m == "voltage")       return MODE_VOLTAGE;
-  else if (m == "current")  return MODE_CURRENT;
-  else                      return d;
-}
-
-ps_stepsize parse_stepsize(int s, ps_stepsize d) {
-  switch (s) {
-    case 1:   return STEP_1;
-    case 2:   return STEP_2;
-    case 4:   return STEP_4;
-    case 8:   return STEP_8;
-    case 16:  return STEP_16;
-    case 32:  return STEP_32;
-    case 64:  return STEP_64;
-    case 128: return STEP_128;
-    default:  return d;
-  }
-}
-
-ps_direction parse_direction(const String& s, ps_direction d) {
-  if (s == "forward")       return FWD;
-  else if (s == "reverse")  return REV;
-  else                      return d;
-}
-
-#define json_ok()         "{\"status\":\"ok\"}"
-#define json_error(msg)   "{\"status\":\"error\",\"message\":\"" msg "\"}"
-
-void json_addheaders() {
-  server.sendHeader("Access-Control-Allow-Credentials", "true");
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Access-Control-Allow-Methods", "GET, POST");
-  server.sendHeader("Access-Control-Allow-Headers", "Authorization, application/json");
-}
-
-const char * json_serialize(wifi_mode m) {
-  switch (m) {
-    case M_OFF:         return "off";
-    case M_ACCESSPOINT: return "accesspoint";
-    case M_STATION:     return "station";
-    default:            return "";
-  }
-}
-
-const char * json_serialize(ps_mode m) {
-  switch (m) {
-    case MODE_VOLTAGE:  return "voltage";
-    case MODE_CURRENT:  return "current";
-    default:            return "";
-  }
-}
-
-int json_serialize(ps_stepsize s) {
-  switch (s) {
-    case STEP_1:    return 1;
-    case STEP_2:    return 2;
-    case STEP_4:    return 4;
-    case STEP_8:    return 8;
-    case STEP_16:   return 16;
-    case STEP_32:   return 32;
-    case STEP_64:   return 64;
-    case STEP_128:  return 128;
-    default:        return 0;
-  }
-}
-
-const char * json_serialize(ps_direction d) {
-  switch (d) {
-    case FWD:   return "forward";
-    case REV:   return "reverse";
-    default:    return "";
-  }
-}
-
-const char * json_serialize(ps_movement m) {
-  switch (m) {
-    case M_STOPPED:     return "idle";
-    case M_ACCEL:       return "accelerating";
-    case M_DECEL:       return "decelerating";
-    case M_CONSTSPEED:  return "spinning";
-    default:            return "";
-  }
-}
-
-
-void jsonwifi_init() {
-  server.on("/api/wifi/scan", [](){
-    json_addheaders();
-    int n = WiFi.scanNetworks();
-    JsonObject& root = jsonbuf.createObject();
-    JsonArray& networks = root.createNestedArray("networks");
-    for (int i = 0; i < n; ++i) {
-      JsonObject& network = jsonbuf.createObject();
-      network["ssid"] = WiFi.SSID(i);
-      network["rssi"] = WiFi.RSSI(i);
-      network["encryption"] = WiFi.encryptionType(i) != ENC_TYPE_NONE;
-      networks.add(network);
-    }
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/wifi/get", [](){
-    json_addheaders();
-    JsonObject& root = jsonbuf.createObject();
-    root["ip"] = wificfg.ip;
-    root["mode"] = json_serialize(wificfg.mode);
-    if (wificfg.mode == M_ACCESSPOINT) {
-      root["ssid"] = wificfg.ap_ssid;
-      root["password"] = wificfg.ap_encryption? wificfg.ap_password : "";
-      root["encryption"] = wificfg.ap_encryption;
-      root["channel"] = wificfg.ap_channel;
-      root["hidden"] = wificfg.ap_hidden;
-      
-    } else if (wificfg.mode == M_STATION) {
-      root["ssid"] = wificfg.stn_ssid;
-      root["password"] = wificfg.stn_encryption? wificfg.stn_password : "";
-      root["encryption"] = wificfg.stn_encryption;
-      root["forceip"] = wificfg.stn_forceip;
-      root["forcesubnet"] = wificfg.stn_forcesubnet;
-      root["forcegateway"] = wificfg.stn_forcegateway;
-      root["revertap"] = wificfg.stn_revertap;
-    }
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/wifi/set/off", [](){
-    json_addheaders();
-    wificfg.mode = M_OFF;
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/wifi/set/accesspoint", [](){
-    json_addheaders();
-    wificfg.mode = M_ACCESSPOINT;
-    if (server.hasArg("ssid"))      strlcpy(wificfg.ap_ssid, server.arg("ssid").c_str(), LEN_SSID);
-    if (server.hasArg("password"))  strlcpy(wificfg.ap_password, server.arg("password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ssid"))      wificfg.ap_encryption = server.hasArg("password") && server.arg("password").length() > 0;
-    if (server.hasArg("channel"))   wificfg.ap_channel = parse_channel(server.arg("channel"), wificfg.ap_channel);
-    if (server.hasArg("hidden"))    wificfg.ap_hidden = server.arg("hidden") == "true";
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/wifi/set/station", [](){
-    json_addheaders();
-    wificfg.mode = M_STATION;
-    if (server.hasArg("ssid"))      strlcpy(wificfg.stn_ssid, server.arg("ssid").c_str(), LEN_SSID);
-    if (server.hasArg("password"))  strlcpy(wificfg.stn_password, server.arg("password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ssid"))      wificfg.stn_encryption = server.hasArg("password") && server.arg("password").length() > 0;
-    if (server.hasArg("forceip"))   strlcpy(wificfg.stn_forceip, server.arg("forceip").c_str(), LEN_IP);
-    if (server.hasArg("forcesubnet")) strlcpy(wificfg.stn_forcesubnet, server.arg("forcesubnet").c_str(), LEN_IP);
-    if (server.hasArg("forcegateway")) strlcpy(wificfg.stn_forcegateway, server.arg("forcegateway").c_str(), LEN_IP);
-    if (server.hasArg("revertap"))  wificfg.stn_revertap = server.arg("revertap") == "true";
-    wificfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
-    server.send(200, "application/json", json_ok());
-  });
-}
-
-void jsonbrowser_init() {
-  server.on("/api/browser/get", [](){
-    json_addheaders();
-    JsonObject& root = jsonbuf.createObject();
-    root["hostname"] = browsercfg.hostname;
-    root["http_enabled"] = browsercfg.http_enabled;
-    root["https_enabled"] = browsercfg.https_enabled;
-    root["mdns_enabled"] = browsercfg.mdns_enabled;
-    root["auth_enabled"] = browsercfg.auth_enabled;
-    root["auth_username"] = browsercfg.auth_username;
-    root["auth_password"] = browsercfg.auth_password;
-    root["ota_enabled"] = browsercfg.ota_enabled;
-    root["ota_password"] = browsercfg.ota_password;
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/browser/set", [](){
-    json_addheaders();
-    if (server.hasArg("hostname"))      strlcpy(browsercfg.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
-    if (server.hasArg("http_enabled"))  browsercfg.http_enabled = server.arg("http_enabled") == "true";
-    if (server.hasArg("https_enabled")) browsercfg.https_enabled = server.arg("https_enabled") == "true";
-    if (server.hasArg("mdns_enabled"))  browsercfg.mdns_enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("auth_enabled"))  browsercfg.auth_enabled = server.arg("auth_enabled") == "true";
-    if (server.hasArg("auth_username")) strlcpy(browsercfg.auth_username, server.arg("auth_username").c_str(), LEN_USERNAME);
-    if (server.hasArg("auth_password")) strlcpy(browsercfg.auth_password, server.arg("auth_password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ota_enabled"))   browsercfg.ota_enabled = server.arg("ota_enabled") == "true";
-    if (server.hasArg("ota_password"))  strlcpy(browsercfg.ota_password, server.arg("ota_password").c_str(), LEN_PASSWORD);
-    browsercfg_save();
-    flag_reboot = server.hasArg("restart") && server.arg("restart") == "true";
-    server.send(200, "application/json", json_ok());
-  });
-}
-
-void jsoncpu_init() {
-  server.on("/api/cpu/adc", [](){
-    json_addheaders();
-    int adc = analogRead(A0);
-    JsonObject& root = jsonbuf.createObject();
-    if (server.hasArg("raw") && server.arg("raw") == "true") {
-      root["value"] = adc;
-    } else {
-      root["value"] = adc;
-    }
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-}
-
-void jsonmotor_init() {
-  server.on("/api/motor/get", [](){
-    json_addheaders();
-    if (!server.hasArg("cached") || server.arg("cached") != "true") {
-      motorcfg_read();
-    }
-    JsonObject& root = jsonbuf.createObject();
-    root["mode"] = json_serialize(motorcfg.mode);
-    root["stepsize"] = json_serialize(motorcfg.stepsize);
-    root["ocd"] = motorcfg.ocd;
-    root["ocdshutdown"] = motorcfg.ocdshutdown;
-    root["maxspeed"] = motorcfg.maxspeed;
-    root["minspeed"] = motorcfg.minspeed;
-    root["accel"] = motorcfg.accel;
-    root["decel"] = motorcfg.decel;
-    root["kthold"] = motorcfg.kthold;
-    root["ktrun"] = motorcfg.ktrun;
-    root["ktaccel"] = motorcfg.ktaccel;
-    root["ktdecel"] = motorcfg.ktdecel;
-    root["fsspeed"] = motorcfg.fsspeed;
-    root["fsboost"] = motorcfg.fsboost;
-    root["cm_switchperiod"] = motorcfg.cm_switchperiod;
-    root["cm_predict"] = motorcfg.cm_predict;
-    root["cm_minon"] = motorcfg.cm_minon;
-    root["cm_minoff"] = motorcfg.cm_minoff;
-    root["cm_fastoff"] = motorcfg.cm_fastoff;
-    root["cm_faststep"] = motorcfg.cm_faststep;
-    root["vm_pwmfreq"] = motorcfg.vm_pwmfreq;
-    root["vm_stall"] = motorcfg.vm_stall;
-    root["vm_bemf_slopel"] = motorcfg.vm_bemf_slopel;
-    root["vm_bemf_speedco"] = motorcfg.vm_bemf_speedco;
-    root["vm_bemf_slopehacc"] = motorcfg.vm_bemf_slopehacc;
-    root["vm_bemf_slopehdec"] = motorcfg.vm_bemf_slopehdec;
-    root["reverse"] = motorcfg.reverse;
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/motor/set", [](){
-    json_addheaders();
-    if (server.hasArg("mode"))      motorcfg.mode = parse_motormode(server.arg("mode"), motorcfg.mode);
-    if (server.hasArg("stepsize"))  motorcfg.stepsize = parse_stepsize(server.arg("stepsize").toInt(), motorcfg.stepsize);
-    if (server.hasArg("ocd"))       motorcfg.ocd = server.arg("ocd").toFloat();
-    if (server.hasArg("ocdshutdown")) motorcfg.ocdshutdown = server.arg("ocdshutdown") == "true";
-    if (server.hasArg("maxspeed"))  motorcfg.maxspeed = server.arg("maxspeed").toFloat();
-    if (server.hasArg("minspeed"))  motorcfg.minspeed = server.arg("minspeed").toFloat();
-    if (server.hasArg("accel"))     motorcfg.accel = server.arg("accel").toFloat();
-    if (server.hasArg("decel"))     motorcfg.decel = server.arg("decel").toFloat();
-    if (server.hasArg("kthold"))    motorcfg.kthold = server.arg("kthold").toFloat();
-    if (server.hasArg("ktrun"))     motorcfg.ktrun = server.arg("ktrun").toFloat();
-    if (server.hasArg("ktaccel"))   motorcfg.ktaccel = server.arg("ktaccel").toFloat();
-    if (server.hasArg("ktdecel"))   motorcfg.ktdecel = server.arg("ktdecel").toFloat();
-    if (server.hasArg("fsspeed"))   motorcfg.fsspeed = server.arg("fsspeed").toFloat();
-    if (server.hasArg("fsboost"))   motorcfg.fsboost = server.arg("fsboost") == "true";
-    if (server.hasArg("cm_switchperiod")) motorcfg.cm_switchperiod = server.arg("cm_switchperiod").toFloat();
-    if (server.hasArg("cm_predict")) motorcfg.cm_predict = server.arg("cm_predict") == "true";
-    if (server.hasArg("cm_minon"))  motorcfg.cm_minon = server.arg("cm_minon").toFloat();
-    if (server.hasArg("cm_minoff")) motorcfg.cm_minoff = server.arg("cm_minoff").toFloat();
-    if (server.hasArg("cm_fastoff")) motorcfg.cm_fastoff = server.arg("cm_fastoff").toFloat();
-    if (server.hasArg("cm_faststep")) motorcfg.cm_faststep = server.arg("cm_faststep").toFloat();
-    if (server.hasArg("vm_pwmfreq")) motorcfg.vm_pwmfreq = server.arg("vm_pwmfreq").toFloat();
-    if (server.hasArg("vm_stall"))  motorcfg.vm_stall = server.arg("vm_stall").toFloat();
-    if (server.hasArg("vm_bemf_slopel")) motorcfg.vm_bemf_slopel = server.arg("vm_bemf_slopel").toFloat();
-    if (server.hasArg("vm_bemf_speedco")) motorcfg.vm_bemf_speedco = server.arg("vm_bemf_speedco").toFloat();
-    if (server.hasArg("vm_bemf_slopehacc")) motorcfg.vm_bemf_slopehacc = server.arg("vm_bemf_slopehacc").toFloat();
-    if (server.hasArg("vm_bemf_slopehdec")) motorcfg.vm_bemf_slopehdec = server.arg("vm_bemf_slopehdec").toFloat();
-    if (server.hasArg("reverse"))   motorcfg.reverse = server.arg("reverse") == "true";
-    motorcfg_update();
-    if (server.hasArg("save") && server.arg("save") == "true") {
-      motorcfg_save();
-    }
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/status", [](){
-    json_addheaders();
-    ps_status status = ps_getstatus(server.arg("clearerrors") == "true");
-    JsonObject& root = jsonbuf.createObject();
-    root["direction"] = json_serialize(motorcfg_dir(status.direction));
-    root["movement"] = json_serialize(status.movement);
-    root["hiz"] = status.hiz;
-    root["busy"] = status.busy;
-    root["switch"] = status.user_switch;
-    root["stepclock"] = status.step_clock;
-    JsonObject& alarms = root.createNestedObject("alarms");
-    alarms["commanderror"] = status.alarms.command_error;
-    alarms["overcurrent"] = status.alarms.overcurrent;
-    alarms["undervoltage"] = status.alarms.undervoltage;
-    alarms["thermalshutdown"] = status.alarms.thermal_shutdown;
-    alarms["thermalwarning"] = status.alarms.thermal_warning;
-    alarms["stalldetect"] = status.alarms.stall_detect;
-    alarms["switch"] = status.alarms.user_switch;
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/motor/state", [](){
-    json_addheaders();
-    JsonObject& root = jsonbuf.createObject();
-    root["position"] = motorcfg_pos(statecache.pos);
-    root["mark"] = motorcfg_pos(statecache.mark);
-    root["stepss"] = statecache.stepss;
-    root["busy"] = statecache.busy;
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/motor/adc", [](){
-    json_addheaders();
-    int adc = ps_readadc();
-    JsonObject& root = jsonbuf.createObject();
-    if (server.hasArg("raw") && server.arg("raw") == "true") {
-      root["value"] = adc;
-    } else {
-      root["value"] = (float)adc * MOTOR_ADCCOEFF;
-    }
-    root["status"] = "ok";
-    JsonVariant v = root;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-  server.on("/api/motor/reset", [](){
-    json_addheaders();
-    ps_reset();
-    ps_getstatus(true);
-    motorcfg_update();
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/pos/reset", [](){
-    json_addheaders();
-    ps_resetpos();
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/pos/set", [](){
-    json_addheaders();
-    if (!server.hasArg("position")) {
-      server.send(200, "application/json", json_error("position arg must be specified"));
-      return;
-    }
-    ps_setpos(motorcfg_pos(server.arg("position").toInt()));
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/mark/set", [](){
-    json_addheaders();
-    if (!server.hasArg("position")) {
-      server.send(200, "application/json", json_error("position arg must be specified"));
-      return;
-    }
-    ps_setmark(motorcfg_pos(server.arg("position").toInt()));
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/run", [](){
-    json_addheaders();
-    if (!server.hasArg("stepss") || !server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("stepss, direction args must be specified. Optional stopswitch"));
-      return;
-    }
-    if (server.hasArg("stopswitch") && server.arg("stopswitch") == "true") {
-      ps_gountil(POS_RESET, motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
-    } else {
-      ps_run(motorcfg_dir(parse_direction(server.arg("direction"), FWD)), server.arg("stepss").toFloat());
-    }
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/goto", [](){
-    json_addheaders();
-    if (!server.hasArg("position")) {
-      server.send(200, "application/json", json_error("position arg must be specified"));
-      return;
-    }
-    if (server.hasArg("direction")) {
-      ps_goto(motorcfg_pos(server.arg("position").toInt()), motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
-    } else {
-      ps_goto(motorcfg_pos(server.arg("position").toInt()));
-    }
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/stepclock", [](){
-    json_addheaders();
-    if (!server.hasArg("direction")) {
-      server.send(200, "application/json", json_error("direction arg must be specified"));
-      return;
-    }
-    ps_stepclock(motorcfg_dir(parse_direction(server.arg("direction"), FWD)));
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/stop", [](){
-    json_addheaders();
-    if (server.hasArg("soft") && server.arg("soft") == "true") {
-      ps_softstop();
-    } else {
-      ps_hardstop();
-    }
-    server.send(200, "application/json", json_ok());
-  });
-  server.on("/api/motor/command/hiz", [](){
-    json_addheaders();
-    if (server.hasArg("soft") && server.arg("soft") == "true") {
-      ps_softhiz();
-    } else {
-      ps_hardhiz();
-    }
-    server.send(200, "application/json", json_ok());
-  });
-}
-
-void json_init() {
-  jsonwifi_init();
-  jsonbrowser_init();
-  jsoncpu_init();
-  jsonmotor_init();
-  
-  server.on("/api/ping", [](){
-    json_addheaders();
-    
-    JsonObject& obj = jsonbuf.createObject();
-    obj["status"] = "ok";
-    obj["data"] = "pong";
-
-    JsonVariant v = obj;
-    server.send(200, "application/json", v.as<String>());
-    jsonbuf.clear();
-  });
-
-  server.on("/api/factoryreset", [](){
-    json_addheaders();
-    SPIFFS.remove(FNAME_WIFICFG);
-    SPIFFS.remove(FNAME_BROWSERCFG);
-    SPIFFS.remove(FNAME_MOTORCFG);
-    flag_reboot = true;
-    server.send(200, "application/json", json_ok());
-  });
-}
 
 void static_serve(String contenttype, String path) {
   File fp = SPIFFS.open(path, "r");
@@ -808,8 +482,7 @@ void static_serve(String contenttype, String path) {
 void static_init() {
   server.on("/", [](){
     String path;
-    char def_apssid[] = DEFAULT_APSSID;
-    if (wificfg.mode == M_ACCESSPOINT && strcmp(wificfg.ap_ssid, def_apssid) == 0) {
+    if (config.wifi.mode == M_ACCESSPOINT && memcmp(config.wifi.accesspoint.ssid, "wsx100-", 7) == 0) {
       path = "/settings";
     } else {
       path = "/quickstart";
@@ -832,172 +505,21 @@ void static_init() {
   server.on("/js/vue-cookies.min.js", [](){ static_serve(TYPE_JS, "/js/vue-cookies.min.js.gz"); });
 }
 
-typedef union {
-  float f32;
-  int i32;
-  uint8_t b[4];
-} wsc4_t;
 
-float ws_buf2float(uint8_t * b) {
-  wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
-  return c.f32;
-}
-
-void ws_packfloat(float f, uint8_t * b) {
-  wsc4_t c; c.f32 = f;
-  b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
-}
-
-int ws_buf2int(uint8_t * b) {
-  wsc4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3];
-  return c.i32;
-}
-
-void ws_packint(int i, uint8_t * b) {
-  wsc4_t c; c.i32 = i;
-  b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3];
-}
-
-void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
-  if (len < 1) return;
-  
-  switch(type) {
-    case WStype_TEXT: {
-      // TODO - create text interface
-      /*
-      Serial.print("WS Text ");
-      Serial.println(len);
-      for (int i=0; i<len; i++) {
-        Serial.printf("R[%d] = 0x", i);
-        Serial.println(data[i], HEX);
-      }
-      websocket.sendBIN(num, data, len);
-      */
-      break;
-    }
-
-    case WStype_BIN: {
-      switch (data[0]) {
-        case WS_READSTATUS: {
-          ps_status status = ps_getstatus(data[1]);
-          uint8_t movement = '?';
-          switch (status.movement) {
-            case M_STOPPED:     movement = 'x';   break;
-            case M_ACCEL:       movement = 'a';   break;
-            case M_DECEL:       movement = 'd';   break;
-            case M_CONSTSPEED:  movement = 's';   break;
-          }
-          
-          uint8_t buf[14] = {0};
-          buf[0] = WS_READSTATUS;
-          buf[1] = motorcfg_dir(status.direction) == FWD? 'f' : 'r';
-          buf[2] = movement;
-          buf[3] = status.hiz? 0x1 : 0x0;
-          buf[4] = status.busy? 0x1 : 0x0;
-          buf[5] = status.user_switch? 0x1 : 0x0;
-          buf[6] = status.step_clock? 0x1 : 0x0;
-          buf[7] = status.alarms.command_error? 0x1 : 0x0;
-          buf[8] = status.alarms.overcurrent? 0x1 : 0x0;
-          buf[9] = status.alarms.undervoltage? 0x1 : 0x0;
-          buf[10] = status.alarms.thermal_shutdown? 0x1 : 0x0;
-          buf[11] = status.alarms.thermal_warning? 0x1 : 0x0;
-          buf[12] = status.alarms.stall_detect? 0x1 : 0x0;
-          buf[13] = status.alarms.user_switch? 0x1 : 0x0;
-          websocket.sendBIN(num, buf, sizeof(buf));
-          break;
-        }
-
-        case WS_READSTATE: {
-          uint8_t buf[1+4+4+4+1] = {0};
-          buf[0] = WS_READSTATE;
-          ws_packint(motorcfg_pos(statecache.pos), &buf[1]);
-          ws_packint(motorcfg_pos(statecache.mark), &buf[1+4]);
-          ws_packfloat(statecache.stepss, &buf[1+4+4]);
-          buf[1+4+4+4] = statecache.busy? 0x1 : 0x0;
-          websocket.sendBIN(num, buf, sizeof(buf));
-          break;
-        }
-
-        case WS_CMDSTOP: {
-          if (len != 2) {
-            Serial.print("Bad CMDSTOP length");
-            return;
-          }
-          
-          if (data[1])  ps_softstop();
-          else          ps_hardstop();
-          break;
-        }
-
-        case WS_CMDHIZ: {
-          if (len != 2) {
-            Serial.print("Bad CMDHIZ length");
-            return;
-          }
-          
-          if (data[1])  ps_softhiz();
-          else          ps_hardhiz();
-          break;
-        }
-
-        case WS_CMDGOTO: {
-          if (len != 5) {
-            Serial.print("Bad CMDGOTO length");
-            return;
-          }
-
-          int32_t pos = ws_buf2int(&data[1]);
-          ps_goto(motorcfg_pos(pos));
-          break;
-        }
-
-        case WS_CMDRUN: {
-          if (len != 7) {
-            Serial.print("Bad CMDRUN length");
-            return;
-          }
-          
-          ps_direction dir = data[1] == 'r'? REV : FWD;
-          float stepss = ws_buf2float(&data[2]);
-          bool stopswitch = data[6] == 0x1;
-          if (stopswitch) {
-            ps_gountil(POS_RESET, motorcfg_dir(dir), stepss);
-          } else {
-            ps_run(motorcfg_dir(dir), stepss);
-          }
-          break;
-        }
-
-        case WS_STEPCLOCK: {
-          if (len != 2) {
-            Serial.print("Bad STEPCLOCK length");
-            return;
-          }
-
-          ps_direction dir = data[1] == 'r'? REV : FWD;
-          ps_stepclock(motorcfg_dir(dir));
-          break;
-        }
-
-        case WS_POS: {
-          if (len != 5) {
-            Serial.print("Bad POS length");
-            return;
-          }
-
-          int pos = ws_buf2int(&data[1]);
-          if (pos == 0)   ps_resetpos();
-          else            ps_setpos(pos);
-          break;
-        }
-      }
-      break;
-    }
-  }
-}
 
 void setup() {
-  Serial.begin(115200);
+  // Initialize early subsystems
+  {
+    cmd_init();
+    daisy_init();
+
+    // Get wifi info from ESP
+    state.wifi.chipid = ESP.getChipId();
+    WiFi.macAddress(state.wifi.mac);
+
+    // Set default ap name
+    sprintf(config.wifi.accesspoint.ssid, "wsx100-ap-%02x%02x%02x", state.wifi.mac[3], state.wifi.mac[4], state.wifi.mac[5]);
+  }
 
   // Initialize ecc
   {
@@ -1017,7 +539,8 @@ void setup() {
       // Reset chosen
       Serial.println("Configuration Reset");
       SPIFFS.remove(FNAME_WIFICFG);
-      SPIFFS.remove(FNAME_BROWSERCFG);
+      SPIFFS.remove(FNAME_SERVICECFG);
+      SPIFFS.remove(FNAME_DAISYCFG);
       SPIFFS.remove(FNAME_MOTORCFG);
 
       // Wait for reset to depress
@@ -1027,215 +550,129 @@ void setup() {
     }
   }
 
-  // Read wifi configuration
+  // Read configuration
   {
-    File fp = SPIFFS.open(FNAME_WIFICFG, "r");
-    if (fp) {
-      size_t size = fp.size();
-      std::unique_ptr<char[]> buf(new char[size]);
-      fp.readBytes(buf.get(), size);
-      JsonObject& root = jsonbuf.parseObject(buf.get());
-      if (root.containsKey("mode"))           wificfg.mode = parse_wifimode(root["mode"].as<char *>());
-      if (root.containsKey("ap_ssid"))        strlcpy(wificfg.ap_ssid, root["ap_ssid"].as<char *>(), LEN_SSID);
-      if (root.containsKey("ap_password"))    strlcpy(wificfg.ap_password, root["ap_password"].as<char *>(), LEN_PASSWORD);
-      if (root.containsKey("ap_encryption"))  wificfg.ap_encryption = root["ap_encryption"].as<bool>();
-      if (root.containsKey("ap_channel"))     wificfg.ap_channel = root["ap_channel"].as<int>();
-      if (root.containsKey("ap_hidden"))      wificfg.ap_hidden = root["ap_hidden"].as<bool>();
-      if (root.containsKey("stn_ssid"))       strlcpy(wificfg.stn_ssid, root["stn_ssid"].as<char *>(), LEN_SSID);
-      if (root.containsKey("stn_password"))   strlcpy(wificfg.stn_password, root["stn_password"].as<char *>(), LEN_PASSWORD);
-      if (root.containsKey("stn_encryption")) wificfg.stn_encryption = root["stn_encryption"].as<bool>();
-      if (root.containsKey("stn_forceip"))    strlcpy(wificfg.stn_forceip, root["stn_forceip"].as<char *>(), LEN_IP);
-      if (root.containsKey("stn_forcesubnet")) strlcpy(wificfg.stn_forcesubnet, root["stn_forcesubnet"].as<char *>(), LEN_IP);
-      if (root.containsKey("stn_forcegateway")) strlcpy(wificfg.stn_forcegateway, root["stn_forcegateway"].as<char *>(), LEN_IP);
-      if (root.containsKey("stn_revertap"))   wificfg.stn_revertap = root["stn_revertap"].as<bool>();
-      jsonbuf.clear();
-      fp.close();
-    }
-  }
-
-  // Read browser configuration
-  {
-    File fp = SPIFFS.open(FNAME_BROWSERCFG, "r");
-    if (fp) {
-      size_t size = fp.size();
-      std::unique_ptr<char[]> buf(new char[size]);
-      fp.readBytes(buf.get(), size);
-      JsonObject& root = jsonbuf.parseObject(buf.get());
-      if (root.containsKey("hostname"))       strlcpy(browsercfg.hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
-      if (root.containsKey("http_enabled"))   browsercfg.http_enabled = root["http_enabled"].as<bool>();
-      if (root.containsKey("https_enabled"))  browsercfg.https_enabled = root["https_enabled"].as<bool>();
-      if (root.containsKey("mdns_enabled"))   browsercfg.mdns_enabled = root["mdns_enabled"].as<bool>();
-      if (root.containsKey("auth_enabled"))   browsercfg.auth_enabled = root["auth_enabled"].as<bool>();
-      if (root.containsKey("auth_username"))  strlcpy(browsercfg.auth_username, root["auth_username"].as<char *>(), LEN_USERNAME);
-      if (root.containsKey("auth_password"))  strlcpy(browsercfg.auth_password, root["auth_password"].as<char *>(), LEN_PASSWORD);
-      if (root.containsKey("ota_enabled"))    browsercfg.ota_enabled = root["ota_enabled"].as<bool>();
-      if (root.containsKey("ota_password"))   strlcpy(browsercfg.ota_password, root["ota_password"].as<char *>(), LEN_PASSWORD);
-      jsonbuf.clear();
-      fp.close();
-    }
+    wificfg_read(&config.wifi);
+    servicecfg_read(&config.service);
+    daisycfg_read(&config.daisy);
   }
 
   // Wifi connection
   {
-    pinMode(WIFI_PIN, OUTPUT);
-    digitalWrite(WIFI_PIN, HIGH);
+    WiFi.persistent(false);
+    WiFi.hostname(config.service.hostname);
     
-    if (browsercfg.mdns_enabled)
-      WiFi.hostname(browsercfg.hostname);
+    if (!config.io.wifiled.usercontrol) {
+      pinMode(WIFILED_PIN, OUTPUT);
+      digitalWrite(WIFILED_PIN, HIGH);
+    }
     
-    if (wificfg.mode == M_STATION) {
-      Serial.println("Station Mode");
-      Serial.println(wificfg.stn_ssid);
-      Serial.println(wificfg.stn_password);
-      WiFi.mode(WIFI_STA);
-      if (wificfg.stn_forceip[0] != 0 && wificfg.stn_forcesubnet[0] != 0 && wificfg.stn_forcegateway[0] != 0) {
-        IPAddress addr, subnet, gateway;
-        if (addr.fromString(wificfg.stn_forceip) && subnet.fromString(wificfg.stn_forcesubnet) && gateway.fromString(wificfg.stn_forcegateway)) {
-          WiFi.config(addr, subnet, gateway);
+    if (!wificfg_connect(config.wifi.mode, &config.wifi)) {
+      switch (config.wifi.mode) {
+        case M_STATION: {
+          // Station could not connect, revert to AP or off
+          if (config.wifi.station.revertap)   wificfg_connect(M_ACCESSPOINT, &config.wifi);
+          else                                wificfg_connect(M_OFF, &config.wifi);
+          break;
         }
       }
-      WiFi.begin(wificfg.stn_ssid, wificfg.stn_password);
-      for (int i=0; i < 20 && WiFi.status() != WL_CONNECTED; i++) {
-        delay(500);
-      }
-
-      if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Could not connect");
-        if (wificfg.stn_revertap) {
-          Serial.println("Reverting to AP mode");
-          wificfg.mode = M_ACCESSPOINT;
-          
-        } else {
-          // Shut down wifi
-          wificfg.mode = M_OFF;
-        }
-      } else {
-         strlcpy(wificfg.ip, WiFi.localIP().toString().c_str(), LEN_IP);
-         digitalWrite(WIFI_PIN, LOW);
-      }
     }
-
-    if (wificfg.mode == M_ACCESSPOINT) {
-      Serial.println("AP Mode");
-      Serial.println(wificfg.ap_ssid);
-      Serial.println(wificfg.ap_password);
-      WiFi.mode(WIFI_AP);
-      WiFi.softAP(wificfg.ap_ssid, wificfg.ap_password, wificfg.ap_channel, wificfg.ap_hidden);
-      strlcpy(wificfg.ip, WiFi.softAPIP().toString().c_str(), LEN_IP);
-    }
-
-    if (wificfg.mode == M_OFF) {
-      WiFi.mode(WIFI_OFF);
-    }
-    
-    Serial.println("Wifi connected");
-    Serial.println(wificfg.ip);
   }
 
   // Initialize web services
   {
-    if (browsercfg.mdns_enabled) {
-      if (!MDNS.begin(browsercfg.hostname)) {
-        Serial.println("Error: Could not start mDNS.");
-      }
+    lowtcp_init();
+    
+    if (config.service.mdns.enabled) {
+      MDNS.begin(config.service.hostname);
+      // TODO - add services eg: MDNS.addService("https", "tcp", 443);
     }
 
-    if (browsercfg.ota_enabled) {
-      ArduinoOTA.setHostname(browsercfg.hostname);
-      if (browsercfg.ota_password[0] != 0)
-        ArduinoOTA.setPassword(browsercfg.ota_password);
+    if (config.service.ota.enabled) {
+      ArduinoOTA.setHostname(config.service.hostname);
+      if (config.service.ota.password[0] != 0)
+        ArduinoOTA.setPassword(config.service.ota.password);
       ArduinoOTA.begin();
     }
 
-    if (browsercfg.http_enabled) {
+    if (config.service.http.enabled) {
       json_init();
       static_init();
       server.begin();
-      websocket.begin();
-      websocket.onEvent(ws_event);
+      websocket_init();
+    }
+
+    if (config.service.mqtt.enabled) {
+      mqtt_init();
     }
   }
 
-  // Read motor configuration
+  // Initialize SPI and Stepper Motor config
   {
+    ps_spiinit();
+
+    // Read motor config
     File fp = SPIFFS.open(FNAME_MOTORCFG, "r");
     if (fp) {
       size_t size = fp.size();
       std::unique_ptr<char[]> buf(new char[size]);
       fp.readBytes(buf.get(), size);
-      JsonObject& root = jsonbuf.parseObject(buf.get());
-      if (root.containsKey("mode"))       motorcfg.mode = motorcfg.mode = parse_motormode(root["mode"], motorcfg.mode);
-      if (root.containsKey("stepsize"))   motorcfg.stepsize = parse_stepsize(root["stepsize"].as<int>(), motorcfg.stepsize);
-      if (root.containsKey("ocd"))        motorcfg.ocd = root["ocd"].as<float>();
-      if (root.containsKey("ocdshutdown")) motorcfg.ocdshutdown = root["ocdshutdown"].as<bool>();
-      if (root.containsKey("maxspeed"))   motorcfg.maxspeed = root["maxspeed"].as<float>();
-      if (root.containsKey("minspeed"))   motorcfg.minspeed = root["minspeed"].as<float>();
-      if (root.containsKey("accel"))      motorcfg.accel = root["accel"].as<float>();
-      if (root.containsKey("decel"))      motorcfg.decel = root["decel"].as<float>();
-      if (root.containsKey("kthold"))     motorcfg.kthold = root["kthold"].as<float>();
-      if (root.containsKey("ktrun"))      motorcfg.ktrun = root["ktrun"].as<float>();
-      if (root.containsKey("ktaccel"))    motorcfg.ktaccel = root["ktaccel"].as<float>();
-      if (root.containsKey("ktdecel"))    motorcfg.ktdecel = root["ktdecel"].as<float>();
-      if (root.containsKey("fsspeed"))    motorcfg.fsspeed = root["fsspeed"].as<float>();
-      if (root.containsKey("fsboost"))    motorcfg.fsboost = root["fsboost"].as<bool>();
-      if (root.containsKey("cm_switchperiod")) motorcfg.cm_switchperiod = root["cm_switchperiod"].as<float>();
-      if (root.containsKey("cm_predict")) motorcfg.cm_predict = root["cm_predict"].as<bool>();
-      if (root.containsKey("cm_minon"))   motorcfg.cm_minon = root["cm_minon"].as<float>();
-      if (root.containsKey("cm_minoff"))  motorcfg.cm_minoff = root["cm_minoff"].as<float>();
-      if (root.containsKey("cm_fastoff")) motorcfg.cm_fastoff = root["cm_fastoff"].as<float>();
-      if (root.containsKey("cm_faststep")) motorcfg.cm_faststep = root["cm_faststep"].as<float>();
-      if (root.containsKey("vm_pwmfreq")) motorcfg.vm_pwmfreq = root["vm_pwmfreq"].as<float>();
-      if (root.containsKey("vm_stall"))   motorcfg.vm_stall = root["vm_stall"].as<float>();
-      if (root.containsKey("vm_bemf_slopel")) motorcfg.vm_bemf_slopel = root["vm_bemf_slopel"].as<float>();
-      if (root.containsKey("vm_bemf_speedco")) motorcfg.vm_bemf_speedco = root["vm_bemf_speedco"].as<float>();
-      if (root.containsKey("vm_bemf_slopehacc")) motorcfg.vm_bemf_slopehacc = root["vm_bemf_slopehacc"].as<float>();
-      if (root.containsKey("vm_bemf_slopehdec")) motorcfg.vm_bemf_slopehdec = root["vm_bemf_slopehdec"].as<float>();
-      if (root.containsKey("reverse"))    motorcfg.reverse = root["reverse"].as<bool>();
-      jsonbuf.clear();
+      cmd_setconfig(nextid(), buf.get());
       fp.close();
+      
+    } else {
+      // No motor config, send default
+      cmd_setconfig(nextid(), "");
     }
-  }
-
-  // Initialize SPI and Stepper Motor
-  {
-    ps_spiinit();
-    motorcfg_update();
-  }
-
-  // Clear any errors, final init
-  {
-    ps_getstatus(true);
   }
 }
 
-unsigned long last_statepoll = 0;
+#define HANDLE_LOOPS()     ({ lowtcp_loop(now); daisy_loop(now); cmd_loop(now); })
+
+//static volatile unsigned long last_statepoll = 0;
 void loop() {
   unsigned long now = millis();
-  if ((now - last_statepoll) > 10) {
-    ps_status status = ps_getstatus();
-    statecache.pos = ps_getpos();
-    statecache.mark = ps_getmark();
-    statecache.stepss = ps_getspeed();
-    statecache.busy = status.busy;
-    last_statepoll = now;
-  }
 
-  if (wificfg.mode == M_ACCESSPOINT) {
-    bool isoff = ((now / 200) % 20) == 1;
-    digitalWrite(WIFI_PIN, isoff? HIGH : LOW);
-  }
+  HANDLE_LOOPS();
 
-  if (browsercfg.http_enabled) {
+  if (config.service.http.enabled) {
     websocket.loop();
     server.handleClient();
   }
 
-  if (browsercfg.ota_enabled) {
+  HANDLE_LOOPS();
+
+  if (config.service.mqtt.enabled) {
+    mqtt_loop(now);
+  }
+
+  HANDLE_LOOPS();
+
+  if (config.service.mdns.enabled) {
+    MDNS.update();
+  }
+
+  if (config.service.ota.enabled) {
     ArduinoOTA.handle();
   }
 
+
   // Reboot if requested
-  if (flag_reboot)
+  if (flag_reboot) {
     ESP.restart();
+  }
+
+  cmd_update(now);
+  daisy_update(now);
+  lowtcp_update(now);
+  wificfg_update(now);
+
+  // Handle wifi LED blinks
+  if (!config.io.wifiled.usercontrol) {
+    if (config.wifi.mode == M_ACCESSPOINT) {
+      bool isoff = ((now / 200) % 20) == 1;
+      digitalWrite(WIFILED_PIN, isoff? HIGH : LOW);
+    }
+  }  
 }
 

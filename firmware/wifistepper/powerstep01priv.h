@@ -1,3 +1,9 @@
+#ifndef __POWERSTEP01PRIV_H
+#define __POWERSTEP01PRIV_H
+
+#ifndef __ps_packed
+#define __ps_packed   __attribute__((packed))
+#endif
 
 #define __MS(v, m, s)           (((v) & m) << s)
 
@@ -72,7 +78,7 @@
 #define ABSPOS_MASK       (0x003FFFFF)
 
 /* REG ELPOS */
-typedef struct __attribute__((packed)) __ps_elpos_reg {
+typedef struct __ps_packed {
   uint8_t __unused : 7;
   uint8_t step_U : 1;
   
@@ -100,7 +106,7 @@ typedef struct __attribute__((packed)) __ps_elpos_reg {
 #define MAXSPEED_MASK     (0x03FF)
 
 /* REG MINSPEED */
-typedef struct __attribute__((packed)) __ps_minspeed_reg {
+typedef struct __ps_packed {
   uint8_t min_speed_U : 4;
   uint8_t lspd_opt : 1;
   uint8_t __unused : 3;
@@ -116,7 +122,7 @@ typedef struct __attribute__((packed)) __ps_minspeed_reg {
 #define OCDTH_MASK        (0x1F)
 
 /* REG FSSPD */
-typedef struct __attribute__((packed)) __ps_fsspd_reg {
+typedef struct __ps_packed {
   uint8_t fs_spd_U : 2;
   uint8_t boost_mode : 1;
   uint8_t __unused : 5;
@@ -129,7 +135,7 @@ typedef struct __attribute__((packed)) __ps_fsspd_reg {
 #define FSSPD_MASK        (0x03FF)
 
 /* REG STEPMODE */
-typedef struct __attribute__((packed)) __ps_stepmode_reg {
+typedef struct __ps_packed {
   uint8_t step_sel : 3;
   uint8_t cm_vm : 1;
   uint8_t sync_sel : 3;
@@ -137,7 +143,7 @@ typedef struct __attribute__((packed)) __ps_stepmode_reg {
 } ps_stepmode_reg;
 
 /* REG ALARMEN */
-typedef struct __attribute__((packed)) __ps_alarms_reg {
+typedef struct __ps_packed {
   uint8_t overcurrent : 1;
   uint8_t thermal_shutdown : 1;
   uint8_t thermal_warning : 1;
@@ -149,7 +155,7 @@ typedef struct __attribute__((packed)) __ps_alarms_reg {
 } ps_alarms_reg;
 
 /* REG GATECFG1 */
-typedef struct __attribute__((packed)) __ps_gatecfg1_reg {
+typedef struct __ps_packed {
   uint8_t tboost : 3;
   uint8_t wd_en : 1;
   uint8_t __unused : 4;
@@ -158,13 +164,13 @@ typedef struct __attribute__((packed)) __ps_gatecfg1_reg {
 } ps_gatecfg1_reg;
 
 /* REG GATECFG2 */
-typedef struct __attribute__((packed)) __ps_gatecfg2_reg {
+typedef struct __ps_packed {
   uint8_t tdt : 5;
   uint8_t tblank : 3;
 } ps_gatecfg2_reg;
 
 /* REG STATUS */
-typedef struct __attribute__((packed)) __ps_status_reg {
+typedef struct __ps_packed {
   uint8_t stck_mod : 1;
   uint8_t uvlo : 1;
   uint8_t uvlo_adc : 1;
@@ -190,7 +196,7 @@ typedef enum __ps_thstatus {
 } ps_thstatus;
 
 /* REG CONFIG */
-typedef struct __attribute__((packed)) __ps_config_vm_reg {
+typedef struct __ps_packed {
   uint8_t __mask3 : 2;
   uint8_t f_pwm_dec : 3;
   uint8_t f_pwm_int : 3;
@@ -200,7 +206,7 @@ typedef struct __attribute__((packed)) __ps_config_vm_reg {
   uint8_t __mask2 : 1;
 } ps_config_vm_reg;
 
-typedef struct __attribute__((packed)) __ps_config_cm_reg {
+typedef struct __ps_packed {
   uint8_t __mask3 : 2;
   uint8_t tsw : 5;
   uint8_t pred_en : 1;
@@ -210,7 +216,7 @@ typedef struct __attribute__((packed)) __ps_config_cm_reg {
   uint8_t __mask2 : 1;
 } ps_config_cm_reg;
 
-typedef struct __attribute__((packed)) __ps_config_com_reg {
+typedef struct __ps_packed {
   uint8_t uvloval : 1;
   uint8_t vccval : 1;
   uint8_t __mask2 : 6;
@@ -251,7 +257,7 @@ typedef union __ps_config_reg {
 #define MINCTRL_MASK        (0x7F)
 
 /* REG TFAST */
-typedef struct __attribute__((packed)) {
+typedef struct __ps_packed {
   uint8_t fast_step : 4;
   uint8_t toff_fast : 4;
 } ps_tfast_reg;
@@ -263,3 +269,4 @@ typedef struct __attribute__((packed)) {
 /* CMD MOVE */
 #define MOVE_MASK         (0x003FFFFF)
 
+#endif
