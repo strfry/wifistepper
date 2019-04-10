@@ -34,8 +34,8 @@ volatile bool flag_wifiled = false;
 
 config_t config = {
   .wifi = {
-    //.mode = M_STATION,    // TODO
-    .mode = M_ACCESSPOINT,
+    .mode = M_STATION,    // TODO
+    //.mode = M_ACCESSPOINT,
     .accesspoint = {
       .ssid = {0},
       .password = {0},
@@ -44,8 +44,10 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      .ssid = {'B','D','F','i','r','e',0},
-      .password = {'m','c','d','e','r','m','o','t','t',0},
+      //.ssid = {'B','D','F','i','r','e',0},
+      //.password = {'m','c','d','e','r','m','o','t','t',0},
+      .ssid = {'A','T','T','5','4','9',0},
+      .password = {'9','0','7','1','9','1','8','6','0','1',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
@@ -96,8 +98,10 @@ config_t config = {
     }
   },
   .motor = {
-    .mode = MODE_CURRENT,
-    .stepsize = STEP_16,
+    //.mode = MODE_CURRENT,
+    //.stepsize = STEP_16,
+    .mode = MODE_VOLTAGE,
+    .stepsize = STEP_128,
     .ocd = 500.0,
     .ocdshutdown = true,
     .maxspeed = 10000.0,
@@ -121,6 +125,7 @@ config_t config = {
     .vm = {
       .pwmfreq = 23.4,
       .stall = 531.25,
+      .volt_comp = true,
       .bemf_slopel = 0.0375,
       .bemf_speedco = 61.5072,
       .bemf_slopehacc = 0.0615,
@@ -388,6 +393,7 @@ void motorcfg_pull(motor_config * cfg) {
     ps_vm_pwmfreq pwmfreq = ps_vm_getpwmfreq();
     cfg->vm.pwmfreq = ps_vm_coeffs2pwmfreq(MOTOR_CLOCK, &pwmfreq) / 1000.0;
     cfg->vm.stall = ps_vm_getstall();
+    cfg->vm.volt_comp = ps_vm_getvscomp();
     ps_vm_bemf bemf = ps_vm_getbemf();
     cfg->vm.bemf_slopel = bemf.slopel;
     cfg->vm.bemf_speedco = bemf.speedco;
@@ -413,14 +419,15 @@ void motorcfg_push(motor_config * cfg) {
     ps_cm_setswitchperiod(cfg->cm.switchperiod);
     ps_cm_setpredict(cfg->cm.predict);
     ps_cm_setctrltimes(cfg->cm.minon, cfg->cm.minoff, cfg->cm.fastoff, cfg->cm.faststep);
+    ps_cm_settqreg(false);
   } else {
     ps_vm_pwmfreq pwmfreq = ps_vm_pwmfreq2coeffs(MOTOR_CLOCK, cfg->vm.pwmfreq * 1000.0);
     ps_vm_setpwmfreq(&pwmfreq);
     ps_vm_setstall(cfg->vm.stall);
     ps_vm_setbemf(cfg->vm.bemf_slopel, cfg->vm.bemf_speedco, cfg->vm.bemf_slopehacc, cfg->vm.bemf_slopehdec);
+    ps_vm_setvscomp(cfg->vm.volt_comp);
   }
   
-  ps_setvoltcomp(false);
   ps_setswmode(SW_USER);
   ps_setclocksel(MOTOR_CLOCK);
 
@@ -455,6 +462,7 @@ void motorcfg_write(motor_config * cfg) {
   root["cm_faststep"] = cfg->cm.faststep;
   root["vm_pwmfreq"] = cfg->vm.pwmfreq;
   root["vm_stall"] = cfg->vm.stall;
+  root["vm_volt_comp"] = cfg->vm.volt_comp;
   root["vm_bemf_slopel"] = cfg->vm.bemf_slopel;
   root["vm_bemf_speedco"] = cfg->vm.bemf_speedco;
   root["vm_bemf_slopehacc"] = cfg->vm.bemf_slopehacc;
@@ -563,8 +571,8 @@ void setup() {
     WiFi.hostname(config.service.hostname);
     
     if (!config.io.wifiled.usercontrol) {
-      pinMode(WIFILED_PIN, OUTPUT);
-      digitalWrite(WIFILED_PIN, HIGH);
+      pinMode(WIFI_LEDPIN, OUTPUT);
+      digitalWrite(WIFI_LEDPIN, HIGH);
     }
     
     if (!wificfg_connect(config.wifi.mode, &config.wifi)) {
@@ -671,7 +679,7 @@ void loop() {
   if (!config.io.wifiled.usercontrol) {
     if (config.wifi.mode == M_ACCESSPOINT) {
       bool isoff = ((now / 200) % 20) == 1;
-      digitalWrite(WIFILED_PIN, isoff? HIGH : LOW);
+      digitalWrite(WIFI_LEDPIN, isoff? HIGH : LOW);
     }
   }  
 }

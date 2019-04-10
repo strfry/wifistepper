@@ -138,9 +138,9 @@ void ps_print(const ps_config_reg * r) {
   Serial.println("Configuration:");
   Serial.print("V PWM Int: "); Serial.println(r->vm.f_pwm_int, BIN);
   Serial.print("V PWM Dec: "); Serial.println(r->vm.f_pwm_dec, BIN);
+  Serial.print("V Volt Comp: "); Serial.println(r->vm.en_vscomp, BIN);
   Serial.print("C Pred: "); Serial.println(r->cm.pred_en, BIN);
   Serial.print("C TSW: "); Serial.println(r->cm.tsw, BIN);
-  Serial.print("- Volt Comp: "); Serial.println(r->com.en_voltcomp, BIN);
   Serial.print("- VCC: "); Serial.println(r->com.vccval, BIN);
   Serial.print("- UVLO: "); Serial.println(r->com.uvloval, BIN);
   Serial.print("- OC SD: "); Serial.println(r->com.oc_sd, BIN);
@@ -566,19 +566,6 @@ ps_alarms ps_getalarms() {
   };
 }
 
-bool ps_getvoltcomp() {
-  ps_config_reg reg = {};
-  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  return (bool)reg.com.en_voltcomp;
-}
-
-void ps_setvoltcomp(bool voltage_compensation) {
-  ps_config_reg reg = {};
-  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
-  reg.com.en_voltcomp = voltage_compensation? 0x1 : 0x0;
-  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
-}
-
 ps_ktvals ps_getktvals(ps_mode mode) {
   uint8_t kthold = 0, ktrun = 0, ktacc = 0, ktdec = 0;
   ps_xfer("getparam ktvalhold", CMD_GETPARAM(PARAM_KTVALHOLD), &kthold, 1);
@@ -645,6 +632,19 @@ void ps_vm_setstall(float millivolts) {
   ps_xfer("setparam stallth", CMD_SETPARAM(PARAM_STALLTH), &stallth, 1);
 }
 
+bool ps_vm_getvscomp() {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (bool)reg.vm.en_vscomp;
+}
+
+void ps_vm_setvscomp(bool voltage_compensation) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.vm.en_vscomp = voltage_compensation? 0x1 : 0x0;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
+}
+
 ps_cm_ctrltimes ps_cm_getctrltimes() {
   uint8_t tonmin = 0, toffmin = 0;
   ps_tfast_reg reg = {};
@@ -699,6 +699,19 @@ void ps_cm_setswitchperiod(float period_us) {
   uint8_t tsw = min((int)round(period_us * CM_TSW_COEFF), CM_TSW_MASK);
   ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
   reg.cm.tsw = tsw;
+  ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
+}
+
+bool ps_cm_gettqreg() {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  return (bool)reg.cm.en_tqreg;
+}
+
+void ps_cm_settqreg(bool current_from_adc) {
+  ps_config_reg reg = {};
+  ps_xferreg("getparam config", CMD_GETPARAM(PARAM_CONFIG), reg);
+  reg.cm.en_tqreg = current_from_adc? 0x1 : 0x0;
   ps_xferreg("setparam config", CMD_SETPARAM(PARAM_CONFIG), reg);
 }
 

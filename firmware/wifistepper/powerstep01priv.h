@@ -201,7 +201,8 @@ typedef struct __ps_packed {
   uint8_t f_pwm_dec : 3;
   uint8_t f_pwm_int : 3;
 
-  uint8_t __mask1 : 6;
+  uint8_t __mask1 : 5;
+  uint8_t en_vscomp : 1;
   uint8_t __unused : 1;
   uint8_t __mask2 : 1;
 } ps_config_vm_reg;
@@ -211,7 +212,8 @@ typedef struct __ps_packed {
   uint8_t tsw : 5;
   uint8_t pred_en : 1;
 
-  uint8_t __mask1 : 6;
+  uint8_t __mask1 : 5;
+  uint8_t en_tqreg : 1;
   uint8_t __unused : 1;
   uint8_t __mask2 : 1;
 } ps_config_cm_reg;
@@ -223,8 +225,7 @@ typedef struct __ps_packed {
 
   uint8_t clk_sel : 4;
   uint8_t sw_mode : 1;
-  uint8_t en_voltcomp : 1;
-  uint8_t __unused : 1;
+  uint8_t __mask1 : 2;
   uint8_t oc_sd : 1;
 } ps_config_com_reg;
 

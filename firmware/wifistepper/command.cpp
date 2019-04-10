@@ -197,6 +197,7 @@ void cmd_loop(unsigned long now) {
           if (root.containsKey("cm_faststep")) config.motor.cm.faststep = root["cm_faststep"].as<float>();
           if (root.containsKey("vm_pwmfreq")) config.motor.vm.pwmfreq = root["vm_pwmfreq"].as<float>();
           if (root.containsKey("vm_stall"))   config.motor.vm.stall = root["vm_stall"].as<float>();
+          if (root.containsKey("vm_volt_comp")) config.motor.vm.volt_comp = root["vm_volt_comp"].as<bool>();
           if (root.containsKey("vm_bemf_slopel")) config.motor.vm.bemf_slopel = root["vm_bemf_slopel"].as<float>();
           if (root.containsKey("vm_bemf_speedco")) config.motor.vm.bemf_speedco = root["vm_bemf_speedco"].as<float>();
           if (root.containsKey("vm_bemf_slopehacc")) config.motor.vm.bemf_slopehacc = root["vm_bemf_slopehacc"].as<float>();

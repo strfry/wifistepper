@@ -8,7 +8,8 @@
 
 #define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
-#define WIFILED_PIN       (16)
+#define WIFI_LEDPIN       (16)
+#define WIFI_ADCCOEFF     (0.003223) /*(0.003125)*/
 #define MOTOR_ADCCOEFF    (2.65625)
 #define MOTOR_CLOCK       (CLK_INT16)
 
@@ -136,6 +137,7 @@ typedef struct ispacked {
   struct {
     float pwmfreq;
     float stall;
+    bool volt_comp;
     float bemf_slopel;
     float bemf_speedco;
     float bemf_slopehacc;

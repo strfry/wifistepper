@@ -179,13 +179,8 @@ void jsondaisy_init() {
 void jsoncpu_init() {
   server.on("/api/cpu/adc", [](){
     json_addheaders();
-    int adc = analogRead(A0);
     JsonObject& root = jsonbuf.createObject();
-    if (server.hasArg("raw") && server.arg("raw") == "true") {
-      root["value"] = adc;
-    } else {
-      root["value"] = adc;
-    }
+    root["value"] = (double)analogRead(A0) * WIFI_ADCCOEFF;
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -234,6 +229,7 @@ void jsonmotor_init() {
     root["cm_faststep"] = cfg->cm.faststep;
     root["vm_pwmfreq"] = cfg->vm.pwmfreq;
     root["vm_stall"] = cfg->vm.stall;
+    root["vm_volt_comp"] = cfg->vm.volt_comp;
     root["vm_bemf_slopel"] = cfg->vm.bemf_slopel;
     root["vm_bemf_speedco"] = cfg->vm.bemf_speedco;
     root["vm_bemf_slopehacc"] = cfg->vm.bemf_slopehacc;

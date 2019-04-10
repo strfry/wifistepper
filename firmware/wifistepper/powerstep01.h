@@ -181,8 +181,6 @@ ps_ktvals ps_getktvals(ps_mode mode);
 void ps_setktvals(ps_mode mode, float hold, float run, float accel, float decel);
 
 /* CONFIG */
-bool ps_getvoltcomp();
-void ps_setvoltcomp(bool voltage_compensation);
 
 /* VM */
 typedef struct {
@@ -208,6 +206,9 @@ void ps_vm_setbemf(float slopel, float speedco, float slopehacc, float slopehdec
 float ps_vm_getstall();
 void ps_vm_setstall(float millivolts);
 
+bool ps_vm_getvscomp();
+void ps_vm_setvscomp(bool voltage_compensation);
+
 /* CM */
 typedef struct {
   float min_on_us;
@@ -224,6 +225,9 @@ void ps_cm_setpredict(bool enable_predict);
 
 float ps_cm_getswitchperiod();
 void ps_cm_setswitchperiod(float period_us);
+
+bool ps_cm_gettqreg();
+void ps_cm_settqreg(bool current_from_adc);
 
 /* MOVE */
 uint32_t ps_move(ps_direction dir, uint32_t steps);
