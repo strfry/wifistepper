@@ -255,6 +255,14 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("mode"))      root["mode"] = server.arg("mode");
     if (server.hasArg("stepsize"))  root["stepsize"] = server.arg("stepsize").toInt();
@@ -286,7 +294,7 @@ void jsonmotor_init() {
     if (server.hasArg("save"))      root["save"] = server.arg("save") == "true";
     JsonVariant v = root;
     id_t id = nextid();
-    m_setconfig(target, id, v.as<String>().c_str());
+    m_setconfig(target, queue, id, v.as<String>().c_str());
     jsonbuf.clear();
     server.send(200, "application/json", json_okid(id));
   });
@@ -352,8 +360,16 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     id_t id = nextid();
-    m_resetpos(target, id);
+    m_resetpos(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/pos/set", [](){
@@ -370,13 +386,21 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
     int pos = server.arg("position").toInt();
     id_t id = nextid();
-    m_setpos(target, id, pos);
+    m_setpos(target, queue, id, pos);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/mark/set", [](){
@@ -393,13 +417,21 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
     int mark = server.arg("position").toInt();
     id_t id = nextid();
-    m_setmark(target, id, mark);
+    m_setmark(target, queue, id, mark);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/run", [](){
@@ -416,6 +448,14 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     if (!server.hasArg("stepss") || !server.hasArg("direction")) {
       server.send(200, "application/json", json_error("stepss, direction args must be specified."));
       return;
@@ -423,7 +463,7 @@ void jsonmotor_init() {
     ps_direction dir = parse_direction(server.arg("direction"), FWD);
     float stepss = server.arg("stepss").toFloat();
     id_t id = nextid();
-    m_run(target, id, dir, stepss);
+    m_run(target, queue, id, dir, stepss);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/goto", [](){
@@ -440,6 +480,14 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
@@ -447,7 +495,7 @@ void jsonmotor_init() {
     id_t id = nextid();
     int pos = server.arg("position").toInt();
     ps_direction dir = parse_direction(server.arg("direction"), FWD);
-    m_goto(target, id, pos, server.hasArg("direction"), dir);
+    m_goto(target, queue, id, pos, server.hasArg("direction"), dir);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/stepclock", [](){
@@ -464,13 +512,21 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     if (!server.hasArg("direction")) {
       server.send(200, "application/json", json_error("direction arg must be specified"));
       return;
     }
     ps_direction dir = parse_direction(server.arg("direction"), FWD);
     id_t id = nextid();
-    m_stepclock(target, id, dir);
+    m_stepclock(target, queue, id, dir);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/stop", [](){
@@ -487,10 +543,18 @@ void jsonmotor_init() {
         return;
       }
     }
+    int queue = 0;
+    if (server.hasArg("queue")) {
+      queue = server.arg("queue").toInt();
+      if (queue < 0 || queue >= QS_SIZE) {
+        server.send(200, "application/json", json_error("invalid queue"));
+        return;
+      }
+    }
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
     id_t id = nextid();
-    m_stop(target, id, hiz, soft);
+    m_stop(target, queue, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/command/estop", [](){

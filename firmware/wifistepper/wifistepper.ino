@@ -18,6 +18,7 @@
 #define WTO_CONNECT   (1000)
 #define WTO_RSSI      (1000)
 
+queue_t queue[QS_SIZE];
 volatile id_t _id = ID_START;
 
 ESP8266WebServer server(PORT_HTTP);
@@ -44,10 +45,10 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      //.ssid = {'B','D','F','i','r','e',0},
-      //.password = {'m','c','d','e','r','m','o','t','t',0},
-      .ssid = {'A','T','T','5','4','9',0},
-      .password = {'9','0','7','1','9','1','8','6','0','1',0},
+      .ssid = {'B','D','F','i','r','e',0},
+      .password = {'m','c','d','e','r','m','o','t','t',0},
+      //.ssid = {'A','T','T','5','4','9',0},
+      //.password = {'9','0','7','1','9','1','8','6','0','1',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
@@ -98,10 +99,10 @@ config_t config = {
     }
   },
   .motor = {
-    //.mode = MODE_CURRENT,
-    //.stepsize = STEP_16,
-    .mode = MODE_VOLTAGE,
-    .stepsize = STEP_128,
+    .mode = MODE_CURRENT,
+    .stepsize = STEP_16,
+    //.mode = MODE_VOLTAGE,
+    //.stepsize = STEP_128,
     .ocd = 500.0,
     .ocdshutdown = true,
     .maxspeed = 10000.0,
@@ -124,8 +125,8 @@ config_t config = {
     },
     .vm = {
       .pwmfreq = 23.4,
-      .stall = 531.25,
-      .volt_comp = true,
+      .stall = 750.0,
+      .volt_comp = false,
       .bemf_slopel = 0.0375,
       .bemf_speedco = 61.5072,
       .bemf_slopehacc = 0.0615,
@@ -625,12 +626,12 @@ void setup() {
       size_t size = fp.size();
       std::unique_ptr<char[]> buf(new char[size]);
       fp.readBytes(buf.get(), size);
-      cmd_setconfig(nextid(), buf.get());
+      cmd_setconfig(Q0, nextid(), buf.get());
       fp.close();
       
     } else {
       // No motor config, send default
-      cmd_setconfig(nextid(), "");
+      cmd_setconfig(Q0, nextid(), "");
     }
   }
 }

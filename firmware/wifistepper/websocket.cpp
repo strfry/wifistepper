@@ -122,60 +122,65 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
         }
 
         case WS_STOP: {
-          if (len != 4) {
+          if (len != 5) {
             seterror(ESUB_HTTP);
             return;
           }
           uint8_t target = data[1];
-          bool hiz = data[2];
-          bool soft = data[3];
-          m_stop(target, nextid(), hiz, soft);
+          uint8_t queue = data[2];
+          bool hiz = data[3];
+          bool soft = data[4];
+          m_stop(target, queue, nextid(), hiz, soft);
           break;
         }
 
         case WS_GOTO: {
-          if (len != 6) {
-            seterror(ESUB_HTTP);
-            return;
-          }
-          uint8_t target = data[1];
-          int32_t pos = ws_buf2int(&data[2]);
-          m_goto(target, nextid(), pos);
-          break;
-        }
-
-        case WS_RUN: {
           if (len != 7) {
             seterror(ESUB_HTTP);
             return;
           }
           uint8_t target = data[1];
-          ps_direction dir = data[2] == 'r'? REV : FWD;
-          float stepss = ws_buf2float(&data[3]);
-          m_run(target, nextid(), dir, stepss);
+          uint8_t queue = data[2];
+          int32_t pos = ws_buf2int(&data[3]);
+          m_goto(target, queue, nextid(), pos);
+          break;
+        }
+
+        case WS_RUN: {
+          if (len != 8) {
+            seterror(ESUB_HTTP);
+            return;
+          }
+          uint8_t target = data[1];
+          uint8_t queue = data[2];
+          ps_direction dir = data[3] == 'r'? REV : FWD;
+          float stepss = ws_buf2float(&data[4]);
+          m_run(target, queue, nextid(), dir, stepss);
           break;
         }
 
         case WS_STEPCLOCK: {
-          if (len != 3) {
+          if (len != 4) {
             seterror(ESUB_HTTP);
             return;
           }
           uint8_t target = data[1];
-          ps_direction dir = data[2] == 'r'? REV : FWD;
-          m_stepclock(target, nextid(), dir);
+          uint8_t queue = data[2];
+          ps_direction dir = data[3] == 'r'? REV : FWD;
+          m_stepclock(target, queue, nextid(), dir);
           break;
         }
 
         case WS_POS: {
-          if (len != 6) {
+          if (len != 7) {
             seterror(ESUB_HTTP);
             return;
           }
           uint8_t target = data[1];
-          int pos = ws_buf2int(&data[2]);
-          if (pos == 0)   m_resetpos(target, nextid());
-          else            m_setpos(target, nextid(), pos);
+          uint8_t queue = data[2];
+          int pos = ws_buf2int(&data[3]);
+          if (pos == 0)   m_resetpos(target, queue, nextid());
+          else            m_setpos(target, queue, nextid(), pos);
           break;
         }
       }

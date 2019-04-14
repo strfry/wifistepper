@@ -4,10 +4,10 @@
 
 #include "wifistepper.h"
 
-#define LTC_SIZE      (3)
+#define LTC_SIZE      (2)
 #define LTC_PORT      (1000)
 
-#define LTCB_ISIZE     (2048)
+#define LTCB_ISIZE     (1536)
 #define LTCB_OSIZE     (LTCB_ISIZE / 2)
 
 // PACKET LAYOUT
@@ -46,6 +46,7 @@ typedef struct ispacked {
   uint8_t opcode;
   uint8_t subcode;
   uint8_t address;
+  uint8_t queue;
   uint16_t packetid;
   uint16_t length;
 } lc_header;
@@ -70,6 +71,8 @@ typedef struct ispacked {
 } type_hello;
 
 #define OPCODE_PING       (0x00)
+#define OPCODE_INIT       (0x01)
+#define OPCODE_KILL       (0x02)
 
 #define OPCODE_ESTOP      (0x11)
 #define OPCODE_STOP       (0x12)
@@ -102,41 +105,6 @@ struct {
   } last;
 } lowtcp_client[LTC_SIZE];
 
-/*typedef union { uint64_t u64; uint8_t b[8]; } lt8_t;
-typedef union { float f32; int32_t i32; uint32_t u32; uint8_t b[4]; } lt4_t;
-typedef union { uint16_t u16; uint8_t b[2]; } lt2_t;
-
-static inline uint64_t lt_buf2uint64(uint8_t * b) { lt8_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; c.b[4] = b[4]; c.b[5] = b[5]; c.b[6] = b[6]; c.b[7] = b[7]; return c.u64; }
-static inline void lt_packuint64(uint64_t i, uint8_t * b) { lt8_t c; c.u64 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; b[4] = c.b[4]; b[5] = c.b[5]; b[6] = c.b[6]; b[7] = c.b[7]; }
-
-static inline float lt_buf2float(uint8_t * b) { lt4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.f32; }
-static inline void lt_packfloat(float f, uint8_t * b) { lt4_t c; c.f32 = f; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
-
-static inline int32_t lt_buf2int32(uint8_t * b) { lt4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.i32; }
-static inline void lt_packint32(int32_t i, uint8_t * b) { lt4_t c; c.i32 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
-
-static inline uint32_t lt_buf2uint32(uint8_t * b) { lt4_t c; c.b[0] = b[0]; c.b[1] = b[1]; c.b[2] = b[2]; c.b[3] = b[3]; return c.u32; }
-static inline void lt_packuint32(uint32_t i, uint8_t * b) { lt4_t c; c.u32 = i; b[0] = c.b[0]; b[1] = c.b[1]; b[2] = c.b[2]; b[3] = c.b[3]; }
-
-static inline uint16_t lt_buf2uint16(uint8_t * b) { lt2_t c; c.b[0] = b[0]; c.b[1] = b[1]; return c.u16; }
-static inline void lt_packuint16(uint16_t i, uint8_t * b) { lt2_t c; c.u16 = i; b[0] = c.b[0]; b[1] = c.b[1]; }
-
-#define lt_nonce(c)     ((c).nonce)
-#define lt_nextid(c)    (++((c).last.id))*/
-
-/*static void lt_pack(uint8_t * packet, size_t length, uint8_t opcode, uint8_t subcode, uint8_t address, uint32_t nonce, uint64_t id) {
-  packet[LO_MAGIC_1] = L_MAGIC_1;
-  lt_packuint16(L_MAGIC_2, &packet[LO_MAGIC_2]);
-  packet[LO_VERSION] = L_VERSION;
-  packet[LO_OPCODE] = opcode;
-  packet[LO_SUBCODE] = subcode;
-  packet[LO_ADDRESS] = address;
-  lt_packuint32(nonce, &packet[LO_NONCE]);
-  lt_packuint64(id, &packet[LO_ID]);
-  lt_packuint16(length - L_HEADER, &packet[LO_LENGTH]);
-  lt_packuint32(lt_checksum32(&packet[LC_START], length - LC_START), &packet[LO_CHECKSUM]);
-}*/
-
 static inline void lc_packpreamble(lc_preamble * p, uint8_t type) {
   if (p == NULL) return;
   p->magic1 = L_MAGIC_1;
@@ -161,8 +129,23 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
 
 #define lc_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_LC, 0, ETYPE_MSG, client); return; } })
 
-static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint16_t packetid, uint8_t * data, size_t len) {
+static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   switch (opcode) {
+    /*case OPCODE_INIT: {
+      break;
+    }
+    case OPCODE_KILL: {
+      if (len == 0 || (sizeof(lc_header) + len) > LSZ_LASTWILL) lowtcp_client[client].lastwill[0] = 0;
+      else {
+        lc_header * head = (lc_header *)(&lowtcp_client[client].lastwill[0]);
+        memset(head, 0, sizeof(lc_header));
+        head->opcode = opcode;
+        head->subcode = SUBCODE_CMD;
+        head-
+      }
+      break;
+    }*/
+    
     case OPCODE_ESTOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
@@ -172,35 +155,35 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
     case OPCODE_STOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
-      m_stop(address, nextid(), cmd->hiz, cmd->soft);
+      m_stop(address, queue, nextid(), cmd->hiz, cmd->soft);
       break;
     }
     case OPCODE_GOTO: {
       lc_expectlen(sizeof(cmd_goto_t));
       cmd_goto_t * cmd = (cmd_goto_t *)data;
-      m_goto(address, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
+      m_goto(address, queue, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
       break;
     }
     case OPCODE_RUN: {
       lc_expectlen(sizeof(cmd_run_t));
       cmd_run_t * cmd = (cmd_run_t *)data;
-      m_run(address, nextid(), cmd->dir, cmd->stepss);
+      m_run(address, queue, nextid(), cmd->dir, cmd->stepss);
       break;
     }
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
-      m_waitbusy(address, nextid());
+      m_waitbusy(address, queue, nextid());
       break;
     }
     case OPCODE_WAITRUNNING: {
       lc_expectlen(0);
-      m_waitrunning(address, nextid());
+      m_waitrunning(address, queue, nextid());
       break;
     }
     case OPCODE_WAITMS: {
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
-      m_waitms(address, nextid(), cmd->millis);
+      m_waitms(address, queue, nextid(), cmd->millis);
       break;
     }
   }
@@ -258,7 +241,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       if (len < elen) return 0;
 
       // TODO - validate header
-      lc_handlepacket(client, header->opcode, header->subcode, header->address, header->packetid, (uint8_t *)(&header[1]), header->length);
+      lc_handlepacket(client, header->opcode, header->subcode, header->address, header->queue, header->packetid, (uint8_t *)(&header[1]), header->length);
       return elen;
     }
 

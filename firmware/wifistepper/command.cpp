@@ -6,8 +6,6 @@
 
 //#define CMD_DEBUG
 
-#define Q_SIZE          (2048)
-
 #define QPRE_NONE       (0x00)
 #define QPRE_STATUS     (0x20)
 #define QPRE_NOTBUSY    (0x40)
@@ -37,10 +35,13 @@
 
 
 extern StaticJsonBuffer<2048> jsonbuf;
-extern volatile bool flag_cmderror;
 
-uint8_t Q[Q_SIZE] = {0};
-volatile size_t Qlen = 0;
+#define Q0_SIZE       (2048)
+#define Q_SIZE        (512)
+
+uint8_t __q0[Q0_SIZE];
+uint8_t __q[QS_SIZE-1][Q_SIZE];
+
 
 typedef struct {
   cmd_waitms_t cmd;
@@ -63,16 +64,20 @@ void cmd_debug(id_t id, uint8_t opcode, const char * msg) {
 #endif
 
 void cmd_init() {
-  
+  // Initialize queues
+  queue[0] = { .len = 0, .maxlen = Q0_SIZE, .Q = __q0 };
+  for (size_t i = 1; i < QS_SIZE; i++) {
+    queue[i] = { .len = 0, .maxlen = Q_SIZE, .Q = __q[i-1] };
+  }
 }
 
 void cmd_loop(unsigned long now) {
   state.command.this_command = 0;
   ESP.wdtFeed();
 
-  while (Qlen > 0) {
-    cmd_head_t * head = (cmd_head_t *)Q;
-    void * Qcmd = (void *)(&Q[sizeof(cmd_head_t)]);
+  while (Q0->len > 0) {
+    cmd_head_t * head = (cmd_head_t *)(Q0->Q);
+    void * Qcmd = (void *)&(Q0->Q[sizeof(cmd_head_t)]);
     
     state.command.this_command = head->id;
     size_t consume = sizeof(cmd_head_t);
@@ -226,8 +231,8 @@ void cmd_loop(unsigned long now) {
       }
     }
 
-    memmove(Q, &Q[consume], Qlen - consume);
-    Qlen -= consume;
+    memmove(Q0->Q, &(Q0->Q[consume]), Q0->len - consume);
+    Q0->len -= consume;
     state.command.last_command = head->id;
     state.command.last_completed = millis();
 
@@ -257,136 +262,126 @@ void cmd_update(unsigned long now) {
   }
 }
 
-static void * cmd_alloc(id_t id, uint8_t opcode, size_t len) {
-  if ((Q_SIZE - Qlen) < (sizeof(cmd_head_t) + len)) {
+static void * cmd_alloc(queue_t * queue, id_t id, uint8_t opcode, size_t len) {
+  if (queue == NULL) {
+    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
+    return NULL;
+  }
+  if ((queue->maxlen - queue->len) < (sizeof(cmd_head_t) + len)) {
     seterror(ESUB_CMD, id, ETYPE_MEM);
     return NULL;
   }
-  *(cmd_head_t *)(&Q[Qlen]) = { .id = id, .opcode = opcode };
-  void * p = &Q[Qlen + sizeof(cmd_head_t)];
-  Qlen += sizeof(cmd_head_t) + len;
+  *(cmd_head_t *)&(queue->Q[queue->len]) = { .id = id, .opcode = opcode };
+  void * p = &(queue->Q[queue->len + sizeof(cmd_head_t)]);
+  queue->len += sizeof(cmd_head_t) + len;
   return p;
 }
 
-bool cmd_nop(id_t id) {
-  return cmd_alloc(id, CMD_NOP, 0) != NULL;
+bool cmd_nop(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_NOP, 0) != NULL;
 }
 
-bool cmd_stop(id_t id, bool hiz, bool soft) {
-  cmd_stop_t * cmd = (cmd_stop_t *)cmd_alloc(id, CMD_STOP, sizeof(cmd_stop_t));
+bool cmd_stop(queue_t * queue, id_t id, bool hiz, bool soft) {
+  cmd_stop_t * cmd = (cmd_stop_t *)cmd_alloc(queue, id, CMD_STOP, sizeof(cmd_stop_t));
   if (cmd != NULL) *cmd = { .hiz = hiz, .soft = soft };
   return cmd != NULL;
 }
 
-bool cmd_run(id_t id, ps_direction dir, float stepss) {
-  cmd_run_t * cmd = (cmd_run_t *)cmd_alloc(id, CMD_RUN, sizeof(cmd_run_t));
+bool cmd_run(queue_t * queue, id_t id, ps_direction dir, float stepss) {
+  cmd_run_t * cmd = (cmd_run_t *)cmd_alloc(queue, id, CMD_RUN, sizeof(cmd_run_t));
   if (cmd != NULL) *cmd = { .dir = dir, .stepss = stepss };
   return cmd != NULL;
 }
 
-bool cmd_stepclock(id_t id, ps_direction dir) {
-  cmd_stepclk_t * cmd = (cmd_stepclk_t *)cmd_alloc(id, CMD_STEPCLK, sizeof(cmd_stepclk_t));
+bool cmd_stepclock(queue_t * queue, id_t id, ps_direction dir) {
+  cmd_stepclk_t * cmd = (cmd_stepclk_t *)cmd_alloc(queue, id, CMD_STEPCLK, sizeof(cmd_stepclk_t));
   if (cmd != NULL) *cmd = { .dir = dir };
   return cmd != NULL;
 }
 
-bool cmd_move(id_t id, ps_direction dir, uint32_t microsteps) {
-  cmd_move_t * cmd = (cmd_move_t *)cmd_alloc(id, CMD_MOVE, sizeof(cmd_move_t));
+bool cmd_move(queue_t * queue, id_t id, ps_direction dir, uint32_t microsteps) {
+  cmd_move_t * cmd = (cmd_move_t *)cmd_alloc(queue, id, CMD_MOVE, sizeof(cmd_move_t));
   if (cmd != NULL) *cmd = { .dir = dir, .microsteps = microsteps };
   return cmd != NULL;
 }
 
-/*bool cmd_goto(id_t id, int32_t pos) {
-  cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
-  if (cmd != NULL) *cmd = { .hasdir = false, .dir = FWD, .pos = pos };
-  return cmd != NULL;
-}
-
-bool cmd_goto(id_t id, int32_t pos, ps_direction dir) {
-  cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
-  if (cmd != NULL) *cmd = { .hasdir = true, .dir = dir, .pos = pos };
-  return cmd != NULL;
-}*/
-
-bool cmd_goto(id_t id, int32_t pos, bool hasdir, ps_direction dir) {
-  cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(id, CMD_GOTO, sizeof(cmd_goto_t));
+bool cmd_goto(queue_t * queue, id_t id, int32_t pos, bool hasdir, ps_direction dir) {
+  cmd_goto_t * cmd = (cmd_goto_t *)cmd_alloc(queue, id, CMD_GOTO, sizeof(cmd_goto_t));
   if (cmd != NULL) *cmd = { .hasdir = hasdir, .dir = dir, .pos = pos };
   return cmd != NULL;
 }
 
-bool cmd_gountil(id_t id, ps_posact action, ps_direction dir, float stepss) {
-  cmd_gountil_t * cmd = (cmd_gountil_t *)cmd_alloc(id, CMD_GOUNTIL, sizeof(cmd_gountil_t));
+bool cmd_gountil(queue_t * queue, id_t id, ps_posact action, ps_direction dir, float stepss) {
+  cmd_gountil_t * cmd = (cmd_gountil_t *)cmd_alloc(queue, id, CMD_GOUNTIL, sizeof(cmd_gountil_t));
   if (cmd != NULL) *cmd = { .action = action, .dir = dir, .stepss = stepss };
   return cmd != NULL;
 }
 
-bool cmd_releasesw(id_t id, ps_posact action, ps_direction dir) {
-  cmd_releasesw_t * cmd = (cmd_releasesw_t *)cmd_alloc(id, CMD_RELEASESW, sizeof(cmd_releasesw_t));
+bool cmd_releasesw(queue_t * queue, id_t id, ps_posact action, ps_direction dir) {
+  cmd_releasesw_t * cmd = (cmd_releasesw_t *)cmd_alloc(queue, id, CMD_RELEASESW, sizeof(cmd_releasesw_t));
   if (cmd != NULL) *cmd = { .action = action, .dir = dir };
   return cmd != NULL;
 }
 
-bool cmd_gohome(id_t id) {
-  return cmd_alloc(id, CMD_GOHOME, 0) != NULL;
+bool cmd_gohome(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_GOHOME, 0) != NULL;
 }
 
-bool cmd_gomark(id_t id) {
-  return cmd_alloc(id, CMD_GOMARK, 0) != NULL;
+bool cmd_gomark(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_GOMARK, 0) != NULL;
 }
 
-bool cmd_resetpos(id_t id) {
-  return cmd_alloc(id, CMD_RESETPOS, 0) != NULL;
+bool cmd_resetpos(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_RESETPOS, 0) != NULL;
 }
 
-bool cmd_setpos(id_t id, int32_t pos) {
-  cmd_setpos_t * cmd = (cmd_setpos_t *)cmd_alloc(id, CMD_SETPOS, sizeof(cmd_setpos_t));
+bool cmd_setpos(queue_t * queue, id_t id, int32_t pos) {
+  cmd_setpos_t * cmd = (cmd_setpos_t *)cmd_alloc(queue, id, CMD_SETPOS, sizeof(cmd_setpos_t));
   if (cmd != NULL) *cmd = { .pos = pos };
   return cmd != NULL;
 }
 
-bool cmd_setmark(id_t id, int32_t mark) {
-  cmd_setpos_t * cmd = (cmd_setpos_t *)cmd_alloc(id, CMD_SETMARK, sizeof(cmd_setpos_t));
+bool cmd_setmark(queue_t * queue, id_t id, int32_t mark) {
+  cmd_setpos_t * cmd = (cmd_setpos_t *)cmd_alloc(queue, id, CMD_SETMARK, sizeof(cmd_setpos_t));
   if (cmd != NULL) *cmd = { .pos = mark };
   return cmd != NULL;
 }
 
-bool cmd_setconfig(id_t id, const char * data) {
+bool cmd_setconfig(queue_t * queue, id_t id, const char * data) {
   size_t ldata = strlen(data) + 1;
-  void * buf = cmd_alloc(id, CMD_SETCONFIG, ldata);
+  void * buf = cmd_alloc(queue, id, CMD_SETCONFIG, ldata);
   if (buf != NULL) memcpy(buf, data, ldata);
   return buf != NULL;
 }
 
-bool cmd_waitbusy(id_t id) {
-  return cmd_alloc(id, CMD_WAITBUSY, 0) != NULL;
+bool cmd_waitbusy(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_WAITBUSY, 0) != NULL;
 }
 
-bool cmd_waitrunning(id_t id) {
-  return cmd_alloc(id, CMD_WAITRUNNING, 0) != NULL;
+bool cmd_waitrunning(queue_t * queue, id_t id) {
+  return cmd_alloc(queue, id, CMD_WAITRUNNING, 0) != NULL;
 }
 
-bool cmd_waitms(id_t id, uint32_t millis) {
-  sketch_waitms_t * cmd = (sketch_waitms_t *)cmd_alloc(id, CMD_WAITMS, sizeof(sketch_waitms_t));
+bool cmd_waitms(queue_t * queue, id_t id, uint32_t millis) {
+  sketch_waitms_t * cmd = (sketch_waitms_t *)cmd_alloc(queue, id, CMD_WAITMS, sizeof(sketch_waitms_t));
   if (cmd != NULL) *cmd = { .cmd = { .millis = millis }, .started = 0 };
   return cmd != NULL;
 }
 
-bool cmd_waitswitch(id_t id, bool state) {
-  cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)cmd_alloc(id, CMD_WAITSWITCH, sizeof(cmd_waitswitch_t));
+bool cmd_waitswitch(queue_t * queue, id_t id, bool state) {
+  cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)cmd_alloc(queue, id, CMD_WAITSWITCH, sizeof(cmd_waitswitch_t));
   if (cmd != NULL) *cmd = { .state = state };
   return cmd != NULL;
 }
 
 
 
-bool cmd_empty(id_t id) {
-  cmd_debug(id, 0xFF, "Empty queue");
-  Qlen = 0;
-  return cmd_nop(id);
+bool cmd_empty(queue_t * queue, id_t id) {
+  queue->len = 0;
+  return cmd_nop(queue, id);
 }
 
 bool cmd_estop(id_t id, bool hiz, bool soft) {
-  cmd_debug(id, 0xFF, "Estop");
   if (hiz) {
     if (soft)   ps_softhiz();
     else        ps_hardhiz();
@@ -394,7 +389,7 @@ bool cmd_estop(id_t id, bool hiz, bool soft) {
     if (soft)   ps_softstop();
     else        ps_hardstop();
   }
-  return cmd_empty(id);
+  return cmd_empty(Q0, id);
 }
 
 void cmd_clearerror() {

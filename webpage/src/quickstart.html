@@ -1193,7 +1193,7 @@ state = MOTOR.getState()
         methods: {
             animate: function() {
                 if (this.profile == 'speed' && this.getrpm > 0) {
-                    this.getangle += this.getrpm / 60 / 30 * 360 * (this.setdirection == 'reverse'? -1 : 1);
+                    this.getangle += this.getrpm / 60 / 30 * 360 * (this.getdirection == 'reverse'? -1 : 1);
                 }
             },
             updatepreset: function() {
@@ -1283,12 +1283,13 @@ state = MOTOR.getState()
             },*/
             writestop: function(hiz, soft) {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(4);
+                    var ba = new ArrayBuffer(2);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x21);
                     v.setUint8(1, this.target);
-                    v.setUint8(2, hiz? 0x01 : 0x00);
-                    v.setUint8(3, 0x01);
+                    v.setUint8(2, 0);
+                    v.setUint8(3, hiz? 0x01 : 0x00);
+                    v.setUint8(4, 0x01);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
@@ -1311,11 +1312,12 @@ state = MOTOR.getState()
             },
             writeresetpos: function() {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(6);
+                    var ba = new ArrayBuffer(7);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x31);
                     v.setUint8(1, this.target);
-                    v.setInt32(2, 0, true);
+                    v.setUint8(2, 0);
+                    v.setInt32(3, 0, true);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') { 
@@ -1325,11 +1327,12 @@ state = MOTOR.getState()
             },
             writeservo: /*throttle(*/function() {
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(6);
+                    var ba = new ArrayBuffer(7);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x22);
                     v.setUint8(1, this.target);
-                    v.setInt32(2, this.setpos, true);
+                    v.setUint8(2, 0);
+                    v.setInt32(3, this.setpos, true);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') { 
@@ -1340,12 +1343,13 @@ state = MOTOR.getState()
                 this.setdirection = direction;
 
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(7);
+                    var ba = new ArrayBuffer(8);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x23);
                     v.setUint8(1, this.target);
-                    v.setUint8(2, this.setdirection == 'forward'? 0x66 : 0x72);
-                    v.setFloat32(3, this.setstepss, true);
+                    v.setUint8(2, 0);
+                    v.setUint8(3, this.setdirection == 'forward'? 0x66 : 0x72);
+                    v.setFloat32(4, this.setstepss, true);
                     socket.send(ba);
                 } else if (this.protocol == 'http') {
                     axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {target: this.target, stepss: this.setstepss, direction: this.setdirection}});
@@ -1355,11 +1359,12 @@ state = MOTOR.getState()
                 this.setdirection = this.extstepclock.stepreverse ? 'reverse' : 'forward';
 
                 if (this.protocol == 'ws') {
-                    var ba = new ArrayBuffer(3);
+                    var ba = new ArrayBuffer(4);
                     var v = new DataView(ba);
                     v.setUint8(0, 0x24);
                     v.setUint8(1, this.target);
-                    v.setUint8(2, this.setdirection == 'forward'? 0x66 : 0x72);
+                    v.setUint8(2, 0);
+                    v.setUint8(3, this.setdirection == 'forward'? 0x66 : 0x72);
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
