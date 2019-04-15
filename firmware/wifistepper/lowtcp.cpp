@@ -70,17 +70,33 @@ typedef struct ispacked {
   char hostname[LEN_HOSTNAME];
 } type_hello;
 
-#define OPCODE_PING       (0x00)
-#define OPCODE_INIT       (0x01)
-#define OPCODE_KILL       (0x02)
+#define OPCODE_PING         (0x00)
+#define OPCODE_ESTOP        (0x01)
+#define OPCODE_SETCONFIG    (0x02)
+#define OPCODE_LASTWILL     (0x03)
 
-#define OPCODE_ESTOP      (0x11)
-#define OPCODE_STOP       (0x12)
-#define OPCODE_GOTO       (0x13)
-#define OPCODE_RUN        (0x14)
-#define OPCODE_WAITBUSY   (0x21)
-#define OPCODE_WAITRUNNING (0x22)
-#define OPCODE_WAITMS     (0x23)
+#define OPCODE_STOP         (0x11)
+#define OPCODE_RUN          (0x12)
+#define OPCODE_STEPCLOCK    (0x13)
+#define OPCODE_MOVE         (0x14)
+#define OPCODE_GOTO         (0x15)
+#define OPCODE_GOUNTIL      (0x16)
+#define OPCODE_RELEASESW    (0x17)
+#define OPCODE_GOHOME       (0x18)
+#define OPCODE_GOMARK       (0x19)
+#define OPCODE_RESETPOS     (0x1A)
+#define OPCODE_SETPOS       (0x1B)
+#define OPCODE_SETMARK      (0x1C)
+
+#define OPCODE_WAITBUSY     (0x21)
+#define OPCODE_WAITRUNNING  (0x22)
+#define OPCODE_WAITMS       (0x23)
+#define OPCODE_WAITSWITCH   (0x24)
+
+#define OPCODE_EMPTYQUEUE   (0x31)
+#define OPCODE_SAVEQUEUE    (0x32)
+#define OPCODE_LOADQUEUE    (0x33)
+
 
 #define SUBCODE_NACK      (0x00)
 #define SUBCODE_ACK       (0x01)
@@ -96,6 +112,7 @@ struct {
   size_t Ilen, Olen;
   bool active;
   bool initialized;
+  uint8_t lastwill;
   struct {
     uint32_t nonce;
     uint64_t challenge;
@@ -131,37 +148,30 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
 
 static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   switch (opcode) {
-    /*case OPCODE_INIT: {
+    case OPCODE_PING: {
+      lc_expectlen(0);
+      lowtcp_client[client].last.ping = millis();
       break;
     }
-    case OPCODE_KILL: {
-      if (len == 0 || (sizeof(lc_header) + len) > LSZ_LASTWILL) lowtcp_client[client].lastwill[0] = 0;
-      else {
-        lc_header * head = (lc_header *)(&lowtcp_client[client].lastwill[0]);
-        memset(head, 0, sizeof(lc_header));
-        head->opcode = opcode;
-        head->subcode = SUBCODE_CMD;
-        head-
-      }
-      break;
-    }*/
-    
     case OPCODE_ESTOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       m_estop(address, nextid(), cmd->hiz, cmd->soft);
       break;
     }
+    case OPCODE_SETCONFIG: {
+      break;
+    }
+    case OPCODE_LASTWILL: {
+      lc_expectlen(sizeof(uint8_t));
+      lowtcp_client[client].lastwill = data[0];
+      break;
+    }
+    
     case OPCODE_STOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       m_stop(address, queue, nextid(), cmd->hiz, cmd->soft);
-      break;
-    }
-    case OPCODE_GOTO: {
-      lc_expectlen(sizeof(cmd_goto_t));
-      cmd_goto_t * cmd = (cmd_goto_t *)data;
-      m_goto(address, queue, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
       break;
     }
     case OPCODE_RUN: {
@@ -170,6 +180,40 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       m_run(address, queue, nextid(), cmd->dir, cmd->stepss);
       break;
     }
+    case OPCODE_STEPCLOCK: {
+      break;
+    }
+    case OPCODE_MOVE: {
+      break;
+    }
+    case OPCODE_GOTO: {
+      lc_expectlen(sizeof(cmd_goto_t));
+      cmd_goto_t * cmd = (cmd_goto_t *)data;
+      m_goto(address, queue, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
+      break;
+    }
+    case OPCODE_GOUNTIL: {
+      break;
+    }
+    case OPCODE_RELEASESW: {
+      break;
+    }
+    case OPCODE_GOHOME: {
+      break;
+    }
+    case OPCODE_GOMARK: {
+      break;
+    }
+    case OPCODE_RESETPOS: {
+      break;
+    }
+    case OPCODE_SETPOS: {
+      break;
+    }
+    case OPCODE_SETMARK: {
+      break;
+    }
+    
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
       m_waitbusy(address, queue, nextid());
@@ -184,6 +228,19 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
       m_waitms(address, queue, nextid(), cmd->millis);
+      break;
+    }
+    case OPCODE_WAITSWITCH: {
+      break;
+    }
+
+    case OPCODE_EMPTYQUEUE: {
+      break;
+    }
+    case OPCODE_SAVEQUEUE: {
+      break;
+    }
+    case OPCODE_LOADQUEUE: {
       break;
     }
   }

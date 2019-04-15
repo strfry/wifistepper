@@ -43,8 +43,8 @@ uint8_t __q0[Q0_SIZE];
 uint8_t __q[QS_SIZE-1][Q_SIZE];
 
 
-typedef struct {
-  cmd_waitms_t cmd;
+typedef struct ispacked {
+  uint32_t ms;
   unsigned int started;
 } sketch_waitms_t;
 
@@ -219,7 +219,7 @@ void cmd_loop(unsigned long now) {
       case CMD_WAITMS: {
         sketch_waitms_t * sketch = (sketch_waitms_t *)Qcmd;
         if (sketch->started == 0) sketch->started = millis();
-        if (timesince(sketch->started, millis()) < sketch->cmd.millis) return;
+        if (timesince(sketch->started, millis()) < sketch->ms) return;
         consume += sizeof(sketch_waitms_t);
         break;
       }
@@ -262,19 +262,25 @@ void cmd_update(unsigned long now) {
   }
 }
 
-static void * cmd_alloc(queue_t * queue, id_t id, uint8_t opcode, size_t len) {
+static void * cmd_alloc(queue_t * queue, id_t id, size_t len) {
   if (queue == NULL) {
     seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
     return NULL;
   }
-  if ((queue->maxlen - queue->len) < (sizeof(cmd_head_t) + len)) {
+  if ((queue->maxlen - queue->len) < len) {
     seterror(ESUB_CMD, id, ETYPE_MEM);
     return NULL;
   }
-  *(cmd_head_t *)&(queue->Q[queue->len]) = { .id = id, .opcode = opcode };
-  void * p = &(queue->Q[queue->len + sizeof(cmd_head_t)]);
-  queue->len += sizeof(cmd_head_t) + len;
+  void * p = &queue->Q[queue->len];
+  queue->len += len;
   return p;
+}
+
+static void * cmd_alloc(queue_t * queue, id_t id, uint8_t opcode, size_t len) {
+  cmd_head_t * cmd = (cmd_head_t *)cmd_alloc(queue, id, sizeof(cmd_head_t) + len);
+  if (cmd == NULL) return NULL;
+  *cmd = { .id = id, .opcode = opcode };
+  return &cmd[1];
 }
 
 bool cmd_nop(queue_t * queue, id_t id) {
@@ -362,9 +368,9 @@ bool cmd_waitrunning(queue_t * queue, id_t id) {
   return cmd_alloc(queue, id, CMD_WAITRUNNING, 0) != NULL;
 }
 
-bool cmd_waitms(queue_t * queue, id_t id, uint32_t millis) {
+bool cmd_waitms(queue_t * queue, id_t id, uint32_t ms) {
   sketch_waitms_t * cmd = (sketch_waitms_t *)cmd_alloc(queue, id, CMD_WAITMS, sizeof(sketch_waitms_t));
-  if (cmd != NULL) *cmd = { .cmd = { .millis = millis }, .started = 0 };
+  if (cmd != NULL) *cmd = { .ms = ms, .started = 0 };
   return cmd != NULL;
 }
 
@@ -376,9 +382,24 @@ bool cmd_waitswitch(queue_t * queue, id_t id, bool state) {
 
 
 
-bool cmd_empty(queue_t * queue, id_t id) {
+bool cmd_emptyqueue(queue_t * queue, id_t id) {
+  if (queue == NULL) {
+    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
+    return false;
+  }
   queue->len = 0;
-  return cmd_nop(queue, id);
+  return true;
+}
+
+bool cmd_copyqueue(queue_t * queue, id_t id, queue_t * src) {
+  if (src == NULL) {
+    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
+    return false;
+  }
+  void * buf = cmd_alloc(queue, id, src->len);
+  if (buf == NULL) return false;
+  memcpy(buf, src->Q, src->len);
+  return true;
 }
 
 bool cmd_estop(id_t id, bool hiz, bool soft) {
@@ -389,10 +410,188 @@ bool cmd_estop(id_t id, bool hiz, bool soft) {
     if (soft)   ps_softstop();
     else        ps_hardstop();
   }
-  return cmd_empty(Q0, id);
+  return cmd_emptyqueue(Q0, id);
 }
 
 void cmd_clearerror() {
   state.motor.status = ps_getstatus(true);
+}
+
+void cmd_readqueue(JsonArray& arr, queue_t * queue) {
+  for (auto value : arr) {
+    JsonObject& entry = value.as<JsonObject>();
+    String type = entry["type"].as<String>();
+    id_t id = entry["id"].as<id_t>();
+    if (type == "nop") {
+      cmd_nop(queue, id);
+    } else if (type == "stop") {
+      cmd_stop(queue, id, entry["hiz"].as<bool>(), entry["soft"].as<bool>());
+    } else if (type == "run") {
+      cmd_run(queue, id, parse_direction(entry["dir"].as<String>(), FWD), entry["stepss"].as<float>());
+    } else if (type == "stepclock") {
+      cmd_stepclock(queue, id, parse_direction(entry["dir"].as<String>(), FWD));
+    } else if (type == "move") {
+      cmd_move(queue, id, parse_direction(entry["dir"].as<String>(), FWD), entry["microsteps"].as<uint32_t>());
+    } else if (type == "goto") {
+      cmd_goto(queue, id, entry["pos"].as<int32_t>(), entry["hasdir"].as<bool>(), parse_direction(entry["dir"].as<String>(), FWD));
+    } else if (type == "gountil") {
+      cmd_gountil(queue, id, parse_action(entry["action"].as<String>(), POS_RESET), parse_direction(entry["dir"].as<String>(), FWD), entry["stepss"].as<float>());
+    } else if (type == "releasesw") {
+      cmd_releasesw(queue, id, parse_action(entry["action"].as<String>(), POS_RESET), parse_direction(entry["dir"].as<String>(), FWD));
+    } else if (type == "gohome") {
+      cmd_gohome(queue, id);
+    } else if (type == "gomark") {
+      cmd_gomark(queue, id);
+    } else if (type == "resetpos") {
+      cmd_resetpos(queue, id);
+    } else if (type == "setpos") {
+      cmd_setpos(queue, id, entry["pos"].as<int32_t>());
+    } else if (type == "setmark") {
+      cmd_setmark(queue, id, entry["mark"].as<int32_t>());
+    } else if (type == "setconfig") {
+      cmd_setconfig(queue, id, entry["config"].as<char *>());
+    } else if (type == "waitbusy") {
+      cmd_waitbusy(queue, id);
+    } else if (type == "waitrunning") {
+      cmd_waitrunning(queue, id);
+    } else if (type == "waitms") {
+      cmd_waitms(queue, id, entry["ms"].as<uint32_t>());
+    } else if (type == "waitswitch") {
+      cmd_waitswitch(queue, id, entry["state"].as<bool>());
+    }
+  }
+}
+
+void cmd_writequeue(JsonArray& arr, queue_t * queue) {
+  size_t index = 0;
+  while (index < queue->len) {
+    cmd_head_t * head = (cmd_head_t *)&(queue->Q[index]);
+    void * Qcmd = (void *)&(queue->Q[index + sizeof(cmd_head_t)]);
+
+    JsonObject& entry = arr.createNestedObject();
+    entry["id"] = head->id;
+    
+    size_t consume = sizeof(cmd_head_t);
+    switch (head->opcode) {
+      case CMD_NOP: {
+        entry["type"] = "nop";
+        break;
+      }
+      case CMD_STOP: {
+        cmd_stop_t * cmd = (cmd_stop_t *)Qcmd;
+        entry["type"] = "stop";
+        entry["hiz"] = cmd->hiz;
+        entry["soft"] = cmd->soft;
+        consume += sizeof(cmd_stop_t);
+        break;
+      }
+      case CMD_RUN: {
+        cmd_run_t * cmd = (cmd_run_t *)Qcmd;
+        entry["type"] = "run";
+        entry["dir"] = json_serialize(cmd->dir);
+        entry["stepss"] = cmd->stepss;
+        consume += sizeof(cmd_run_t);
+        break;
+      }
+      case CMD_STEPCLK: {
+        cmd_stepclk_t * cmd = (cmd_stepclk_t *)Qcmd;
+        entry["type"] = "stepclock";
+        entry["dir"] = json_serialize(cmd->dir);
+        consume += sizeof(cmd_stepclk_t);
+        break;
+      }
+      case CMD_MOVE: {
+        cmd_move_t * cmd = (cmd_move_t *)Qcmd;
+        entry["type"] = "move";
+        entry["dir"] = json_serialize(cmd->dir);
+        entry["microsteps"] = cmd->microsteps;
+        consume += sizeof(cmd_move_t);
+        break;
+      }
+      case CMD_GOTO: {
+        cmd_goto_t * cmd = (cmd_goto_t *)Qcmd;
+        entry["type"] = "goto";
+        entry["pos"] = cmd->pos;
+        entry["hasdir"] = cmd->hasdir;
+        entry["dir"] = json_serialize(cmd->dir);
+        consume += sizeof(cmd_goto_t);
+        break;
+      }
+      case CMD_GOUNTIL: {
+        cmd_gountil_t * cmd = (cmd_gountil_t *)Qcmd;
+        entry["type"] = "gountil";
+        entry["action"] = json_serialize(cmd->action);
+        entry["dir"] = json_serialize(cmd->dir);
+        entry["stepss"] = cmd->stepss;
+        consume += sizeof(cmd_gountil_t);
+        break;
+      }
+      case CMD_RELEASESW: {
+        cmd_releasesw_t * cmd = (cmd_releasesw_t *)Qcmd;
+        entry["type"] = "releasesw";
+        entry["action"] = json_serialize(cmd->action);
+        entry["dir"] = json_serialize(cmd->dir);
+        consume += sizeof(cmd_releasesw_t);
+        break;
+      }
+      case CMD_GOHOME: {
+        entry["type"] = "gohome";
+        break;
+      }
+      case CMD_GOMARK: {
+        entry["type"] = "gomark";
+        break;
+      }
+      case CMD_RESETPOS: {
+        entry["type"] = "resetpos";
+        break;
+      }
+      case CMD_SETPOS: {
+        cmd_setpos_t * cmd = (cmd_setpos_t *)Qcmd;
+        entry["type"] = "setpos";
+        entry["pos"] = cmd->pos;
+        consume += sizeof(cmd_setpos_t);
+        break;
+      }
+      case CMD_SETMARK: {
+        cmd_setpos_t * cmd = (cmd_setpos_t *)Qcmd;
+        entry["type"] = "setmark";
+        entry["mark"] = cmd->pos;
+        consume += sizeof(cmd_setpos_t);
+        break;
+      }
+      case CMD_SETCONFIG: {
+        const char * data = (const char *)Qcmd;
+        size_t ldata = strlen(data);
+        entry["type"] = "setconfig";
+        entry["config"] = data;
+        consume += ldata + 1;
+        break;
+      }
+      case CMD_WAITBUSY: {
+        entry["type"] = "waitbusy";
+        break;
+      }
+      case CMD_WAITRUNNING: {
+        entry["type"] = "waitrunning";
+        break;
+      }
+      case CMD_WAITMS: {
+        sketch_waitms_t * sketch = (sketch_waitms_t *)Qcmd;
+        entry["type"] = "waitms";
+        entry["ms"] = sketch->ms;
+        consume += sizeof(sketch_waitms_t);
+        break;
+      }
+      case CMD_WAITSWITCH: {
+        cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)Qcmd;
+        entry["type"] = "waitswitch";
+        entry["state"] = cmd->state;
+        consume += sizeof(cmd_waitswitch_t);
+        break;
+      }
+    }
+    index += consume;
+  }
 }
 

@@ -1,5 +1,4 @@
 #include <FS.h>
-#include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
@@ -160,6 +159,14 @@ void clearerror() {
   memset(&state.error, 0, sizeof(error_state));
 }
 
+void resetcfg() {
+  SPIFFS.remove(FNAME_WIFICFG);
+  SPIFFS.remove(FNAME_SERVICECFG);
+  SPIFFS.remove(FNAME_DAISYCFG);
+  SPIFFS.remove(FNAME_MOTORCFG);
+  for (int i = 1; i < QS_SIZE; i++) queuecfg_reset(i);
+}
+
 void wificfg_read(wifi_config * cfg) {
   File fp = SPIFFS.open(FNAME_WIFICFG, "r");
   if (fp) {
@@ -200,7 +207,6 @@ void wificfg_write(wifi_config * const cfg) {
   root["station_forcesubnet"] = cfg->station.forcesubnet;
   root["station_forcegateway"] = cfg->station.forcegateway;
   root["station_revertap"] = cfg->station.revertap;
-  JsonVariant v = root;
   File fp = SPIFFS.open(FNAME_WIFICFG, "w");
   root.printTo(fp);
   fp.close();
@@ -331,7 +337,6 @@ void servicecfg_write(service_config * const cfg) {
   root["mqtt_state_topic"] = cfg->mqtt.state_topic;
   root["mqtt_state_publish_period"] = cfg->mqtt.state_publish_period;
   root["mqtt_command_topic"] = cfg->mqtt.command_topic;
-  JsonVariant v = root;
   File fp = SPIFFS.open(FNAME_SERVICECFG, "w");
   root.printTo(fp);
   fp.close();
@@ -356,11 +361,54 @@ void daisycfg_write(daisy_config * const cfg) {
   JsonObject& root = jsonbuf.createObject();
   root["enabled"] = cfg->enabled;
   root["master"] = cfg->master;
-  JsonVariant v = root;
   File fp = SPIFFS.open(FNAME_DAISYCFG, "w");
   root.printTo(fp);
   fp.close();
   jsonbuf.clear();
+}
+
+bool queuecfg_read(int qid, queue_t * queue) {
+  if (queue == NULL) {
+    // TODO set error
+    return false;
+  }
+  char fname[20] = {0};
+  sprintf(fname, FNAME_QUEUECFG, qid);
+  File fp = SPIFFS.open(fname, "r");
+  if (!fp) {
+    // TODO set error
+    return false;
+  }
+  size_t size = fp.size();
+  std::unique_ptr<char[]> buf(new char[size]);
+  fp.readBytes(buf.get(), size);
+  JsonArray& arr = jsonbuf.parseArray(buf.get());
+  cmd_emptyqueue(queue, nextid());
+  cmd_readqueue(arr, queue);
+  jsonbuf.clear();
+  fp.close();
+  return true;
+}
+
+bool queuecfg_write(int qid, queue_t * queue) {
+  if (queue == NULL) {
+    // TODO set error
+    return false;
+  }
+  char fname[20] = {0};
+  sprintf(fname, FNAME_QUEUECFG, qid);
+  JsonArray& arr = jsonbuf.createArray();
+  cmd_writequeue(arr, queue);
+  File fp = SPIFFS.open(fname, "w");
+  arr.printTo(fp);
+  fp.close();
+  jsonbuf.clear();
+}
+
+bool queuecfg_reset(int qid) {
+  char fname[20] = {0};
+  sprintf(fname, FNAME_QUEUECFG, qid);
+  SPIFFS.remove(fname);
 }
 
 void motorcfg_pull(motor_config * cfg) {
@@ -546,11 +594,8 @@ void setup() {
     }
     if (millis() >= RESET_TIMEOUT) {
       // Reset chosen
-      Serial.println("Configuration Reset");
-      SPIFFS.remove(FNAME_WIFICFG);
-      SPIFFS.remove(FNAME_SERVICECFG);
-      SPIFFS.remove(FNAME_DAISYCFG);
-      SPIFFS.remove(FNAME_MOTORCFG);
+      Serial.println("Factory reset");
+      resetcfg();
 
       // Wait for reset to depress
       while (!digitalRead(RESET_PIN)) {
@@ -564,6 +609,11 @@ void setup() {
     wificfg_read(&config.wifi);
     servicecfg_read(&config.service);
     daisycfg_read(&config.daisy);
+
+    // Load queues
+    for (int i = 1; i < QS_SIZE; i++) {
+      queuecfg_read(i, queue_get(i));
+    }
   }
 
   // Wifi connection
@@ -634,11 +684,14 @@ void setup() {
       cmd_setconfig(Q0, nextid(), "");
     }
   }
+
+  // Run initial queue (queue 1)
+  {
+    cmd_copyqueue(Q0, nextid(), queue_get(1));
+  }
 }
 
 #define HANDLE_LOOPS()     ({ lowtcp_loop(now); daisy_loop(now); cmd_loop(now); })
-
-//static volatile unsigned long last_statepoll = 0;
 void loop() {
   unsigned long now = millis();
 

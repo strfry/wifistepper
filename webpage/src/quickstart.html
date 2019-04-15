@@ -888,21 +888,21 @@ curl -sS "${PROTOCOL}://${HOST}/api/motor/pos/reset" | jq
 
 # Send servo command
 POSITION="{{ setpos }}"  # ANGLE / 360 * 200 * STEPSIZE; ANGLE={{ setangle }}, STEPSIZE={{ stepsize }}
-curl -sS "${PROTOCOL}://${HOST}/api/motor/command/goto?position=${POSITION}" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/goto?position=${POSITION}" | jq
 
 # Send speed command
 STEPS_PER_SEC="{{ setstepss }}"  # RPM / 60 * 200; RPM={{ setrpm }}
 DIRECTION="{{ setdirection }}"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/command/run?stepss=${STEPS_PER_SEC}&direction=${DIRECTION}" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/run?stepss=${STEPS_PER_SEC}&direction=${DIRECTION}" | jq
 
 # Send stepclock command
 DIRECTION="{{ setdirection }}"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/command/stepclock?direction=${DIRECTION}" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/stepclock?direction=${DIRECTION}" | jq
 
 # Stop
 STOP_HIZ="{{ speed.hiz }}"
 STOP_SOFT="true"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/command/stop?hiz=${STOP_HIZ}&soft=${STOP_SOFT}" | jq
+curl -sS "${PROTOCOL}://${HOST}/api/motor/stop?hiz=${STOP_HIZ}&soft=${STOP_SOFT}" | jq
 
 # Read state
 curl -sS "${PROTOCOL}://${HOST}/api/motor/state" | jq
@@ -1293,7 +1293,7 @@ state = MOTOR.getState()
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/stop", {params: {target: this.target, hiz: hiz, soft: soft}});
+                    axios.get("{{ site.apiurl }}/api/motor/stop", {params: {target: this.target, hiz: hiz, soft: soft}});
                 }
             },
             writeestop: function(hiz, soft) {
@@ -1307,7 +1307,7 @@ state = MOTOR.getState()
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/estop", {params: {target: this.target, hiz: hiz, soft: soft}});
+                    axios.get("{{ site.apiurl }}/api/motor/estop", {params: {target: this.target, hiz: hiz, soft: soft}});
                 }
             },
             writeresetpos: function() {
@@ -1336,7 +1336,7 @@ state = MOTOR.getState()
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') { 
-                    axios.get("{{ site.apiurl }}/api/motor/command/goto", {params: {target: this.target, position: app.setpos}});
+                    axios.get("{{ site.apiurl }}/api/motor/goto", {params: {target: this.target, position: app.setpos}});
                 }
             }/*, 250, 30)*/,
             writespeed: /*throttle(*/function(direction) {
@@ -1352,7 +1352,7 @@ state = MOTOR.getState()
                     v.setFloat32(4, this.setstepss, true);
                     socket.send(ba);
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/run", {params: {target: this.target, stepss: this.setstepss, direction: this.setdirection}});
+                    axios.get("{{ site.apiurl }}/api/motor/run", {params: {target: this.target, stepss: this.setstepss, direction: this.setdirection}});
                 }
             }/*, 250, 100)*/,
             writestepclock: /*throttle(*/function() {
@@ -1368,7 +1368,7 @@ state = MOTOR.getState()
                     socket.send(ba);
 
                 } else if (this.protocol == 'http') {
-                    axios.get("{{ site.apiurl }}/api/motor/command/stepclock", {params: {target: this.target, direction: this.setdirection}});
+                    axios.get("{{ site.apiurl }}/api/motor/stepclock", {params: {target: this.target, direction: this.setdirection}});
                 }
             }/*, 1000, 100)*/,
             fullrefresh: function() {

@@ -35,8 +35,11 @@
 #define CMD_WAITRUNNING (CP_MOTOR | 0x0F)
 #define CMD_WAITMS      (CP_MOTOR | 0x10)
 #define CMD_WAITSWITCH  (CP_MOTOR | 0x11)
-#define CMD_EMPTY       (CP_MOTOR | 0x12)
-#define CMD_ESTOP       (CP_MOTOR | 0x13)
+#define CMD_EMPTYQUEUE  (CP_MOTOR | 0x12)
+#define CMD_COPYQUEUE   (CP_MOTOR | 0x13)
+#define CMD_SAVEQUEUE   (CP_MOTOR | 0x14)
+#define CMD_LOADQUEUE   (CP_MOTOR | 0x15)
+#define CMD_ESTOP       (CP_MOTOR | 0x16)
 
 #define SELF            (0x00)
 
@@ -88,6 +91,8 @@ static uint8_t daisy_checksum8(daisy_head_t * head) {
 
 void daisy_init() {
   Serial.begin(D_BAUDRATE);
+  Serial.flush();
+  Serial.println();
 }
 
 static void daisy_writeoutbox() {
@@ -383,9 +388,28 @@ static void daisy_slaveconsume(uint8_t q, id_t id, uint8_t opcode, void * data, 
       daisy_ack(q, id);
       break;
     }
-    case CMD_EMPTY: {
+    case CMD_EMPTYQUEUE: {
       daisy_expectlen(0);
-      cmd_empty(queue, id);
+      cmd_emptyqueue(queue, id);
+      daisy_ack(q, id);
+      break;
+    }
+    case CMD_COPYQUEUE: {
+      daisy_expectlen(sizeof(uint8_t));
+      uint8_t * src = (uint8_t *)data;
+      cmd_copyqueue(queue, id, queue_get(src[0]));
+      daisy_ack(q, id);
+      break;
+    }
+    case CMD_SAVEQUEUE: {
+      daisy_expectlen(0);
+      queuecfg_write(q, queue);
+      daisy_ack(q, id);
+      break;
+    }
+    case CMD_LOADQUEUE: {
+      daisy_expectlen(0);
+      queuecfg_read(q, queue);
       daisy_ack(q, id);
       break;
     }
@@ -616,9 +640,9 @@ bool daisy_waitrunning(uint8_t address, uint8_t q, id_t id) {
   return daisy_pack(daisy_alloc(address, q, id, CMD_WAITRUNNING, 0)) != NULL;
 }
 
-bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t millis) {
+bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) {
   cmd_waitms_t * cmd = (cmd_waitms_t *)daisy_alloc(address, q, id, CMD_WAITMS, sizeof(cmd_waitms_t));
-  if (cmd != NULL) *cmd = { .millis = millis };
+  if (cmd != NULL) *cmd = { .millis = ms };
   return daisy_pack(cmd) != NULL;
 }
 
@@ -628,8 +652,22 @@ bool daisy_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) {
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_empty(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_EMPTY, 0)) != NULL;
+bool daisy_emptyqueue(uint8_t address, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(address, q, id, CMD_EMPTYQUEUE, 0)) != NULL;
+}
+
+bool daisy_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) {
+  uint8_t * queue = (uint8_t *)daisy_alloc(address, q, id, CMD_COPYQUEUE, sizeof(uint8_t));
+  *queue = src;
+  return daisy_pack(queue) != NULL;
+}
+
+bool daisy_savequeue(uint8_t address, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(address, q, id, CMD_SAVEQUEUE, 0)) != NULL;
+}
+
+bool daisy_loadqueue(uint8_t address, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(address, q, id, CMD_LOADQUEUE, 0)) != NULL;
 }
 
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft) {

@@ -21,6 +21,29 @@ void json_addheaders() {
   server.sendHeader("Access-Control-Allow-Headers", "Authorization, application/json");
 }
 
+#define get_target() \
+  int target = 0; \
+  if (server.hasArg("target")) { \
+    target = server.arg("target").toInt(); \
+    if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) { \
+      server.send(200, "application/json", json_error("failed to set target")); \
+      return; \
+    } \
+    if (target < 0 || target > state.daisy.slaves) { \
+      server.send(200, "application/json", json_error("invalid target")); \
+      return; \
+    } \
+  }
+
+#define get_queue() \
+  int queue = 0; \
+  if (server.hasArg("queue")) { \
+    queue = server.arg("queue").toInt(); \
+    if (queue < 0 || queue >= QS_SIZE) { \
+      server.send(200, "application/json", json_error("invalid queue")); \
+      return; \
+    } \
+  }
 
 
 void jsonwifi_init() {
@@ -191,20 +214,8 @@ void jsoncpu_init() {
 void jsonmotor_init() {
   server.on("/api/motor/get", [](){
     json_addheaders();
-    motor_config * cfg = &config.motor;
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to get target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-      if (target > 0) cfg = &sketch.daisy.slave[target - 1].config.motor;
-    }
+    get_target()
+    motor_config * cfg = target == 0? &config.motor : &sketch.daisy.slave[target - 1].config.motor;
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("target")) root["target"] = target;
     root["mode"] = json_serialize(cfg->mode);
@@ -242,27 +253,8 @@ void jsonmotor_init() {
   });
   server.on("/api/motor/set", [](){
     json_addheaders();
-    motor_config * cfg = &config.motor;
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("mode"))      root["mode"] = server.arg("mode");
     if (server.hasArg("stepsize"))  root["stepsize"] = server.arg("stepsize").toInt();
@@ -300,20 +292,8 @@ void jsonmotor_init() {
   });
   server.on("/api/motor/state", [](){
     json_addheaders();
-    motor_state * st = &state.motor;
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to get target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-      if (target > 0) st = &sketch.daisy.slave[target - 1].state.motor;
-    }
+    get_target()
+    motor_state * st = target == 0? &state.motor : &sketch.daisy.slave[target - 1].state.motor;
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("target")) root["target"] = target;
     root["stepss"] = st->stepss;
@@ -348,52 +328,16 @@ void jsonmotor_init() {
   });*/
   server.on("/api/motor/pos/reset", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     id_t id = nextid();
     m_resetpos(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/pos/set", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
@@ -405,26 +349,8 @@ void jsonmotor_init() {
   });
   server.on("/api/motor/mark/set", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
@@ -434,28 +360,10 @@ void jsonmotor_init() {
     m_setmark(target, queue, id, mark);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/command/run", [](){
+  server.on("/api/motor/run", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     if (!server.hasArg("stepss") || !server.hasArg("direction")) {
       server.send(200, "application/json", json_error("stepss, direction args must be specified."));
       return;
@@ -466,28 +374,10 @@ void jsonmotor_init() {
     m_run(target, queue, id, dir, stepss);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/command/goto", [](){
+  server.on("/api/motor/goto", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     if (!server.hasArg("position")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
@@ -498,28 +388,10 @@ void jsonmotor_init() {
     m_goto(target, queue, id, pos, server.hasArg("direction"), dir);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/command/stepclock", [](){
+  server.on("/api/motor/stepclock", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     if (!server.hasArg("direction")) {
       server.send(200, "application/json", json_error("direction arg must be specified"));
       return;
@@ -529,48 +401,106 @@ void jsonmotor_init() {
     m_stepclock(target, queue, id, dir);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/command/stop", [](){
+  server.on("/api/motor/stop", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
-    }
-    int queue = 0;
-    if (server.hasArg("queue")) {
-      queue = server.arg("queue").toInt();
-      if (queue < 0 || queue >= QS_SIZE) {
-        server.send(200, "application/json", json_error("invalid queue"));
-        return;
-      }
-    }
+    get_target()
+    get_queue()
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
     id_t id = nextid();
     m_stop(target, queue, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/command/estop", [](){
+  server.on("/api/motor/wait/busy", [](){
     json_addheaders();
-    int target = 0;
-    if (server.hasArg("target")) {
-      target = server.arg("target").toInt();
-      if (target != 0 && (!config.daisy.enabled || !config.daisy.master || !state.daisy.active)) {
-        server.send(200, "application/json", json_error("failed to set target"));
-        return;
-      }
-      if (target < 0 || target > state.daisy.slaves) {
-        server.send(200, "application/json", json_error("invalid target"));
-        return;
-      }
+    get_target()
+    get_queue()
+    id_t id = nextid();
+    m_waitbusy(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/wait/running", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    id_t id = nextid();
+    m_waitrunning(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/wait/ms", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    if (!server.hasArg("millis")) {
+      server.send(200, "application/json", json_error("millis arg must be specified"));
+      return;
     }
+    int ms = server.arg("millis").toInt();
+    if (ms < 0) {
+      server.send(200, "application/json", json_error("millis arg must be positive"));
+      return;
+    }
+    id_t id = nextid();
+    m_waitms(target, queue, id, ms);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/wait/switch", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    bool state = server.hasArg("state") && server.arg("state") == "closed";
+    id_t id = nextid();
+    m_waitswitch(target, queue, id, state);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/empty", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    id_t id = nextid();
+    m_emptyqueue(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/copy", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    if (!server.hasArg("source")) {
+      server.send(200, "application/json", json_error("source arg must be specified"));
+      return;
+    }
+    int src = server.arg("source").toInt();
+    id_t id = nextid();
+    m_copyqueue(target, queue, id, src);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/save", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    if (queue == 0) {
+      server.send(200, "application/json", json_error("cannot save queue 0"));
+      return;
+    }
+    id_t id = nextid();
+    m_savequeue(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/load", [](){
+    json_addheaders();
+    get_target()
+    get_queue()
+    if (queue == 0) {
+      server.send(200, "application/json", json_error("cannot load queue 0"));
+      return;
+    }
+    id_t id = nextid();
+    m_loadqueue(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/estop", [](){
+    json_addheaders();
+    get_target()
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
     id_t id = nextid();
@@ -628,10 +558,7 @@ void json_init() {
   });
   server.on("/api/factoryreset", [](){
     json_addheaders();
-    SPIFFS.remove(FNAME_WIFICFG);
-    SPIFFS.remove(FNAME_SERVICECFG);
-    SPIFFS.remove(FNAME_DAISYCFG);
-    SPIFFS.remove(FNAME_MOTORCFG);
+    resetcfg();
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });

@@ -1,6 +1,8 @@
 #ifndef __WIFISTEPPER_H
 #define __WIFISTEPPER_H
 
+#include <ArduinoJson.h>
+
 #include "powerstep01.h"
 
 #define PRODUCT           "Wi-Fi Stepper"
@@ -17,6 +19,7 @@
 #define FNAME_SERVICECFG  "/servicecfg.json"
 #define FNAME_DAISYCFG    "/daisycfg.json"
 #define FNAME_MOTORCFG    "/motorcfg.json"
+#define FNAME_QUEUECFG    "/queue%dcfg.json"
 
 #define PORT_HTTP         (80)
 #define PORT_HTTPWS       (81)
@@ -373,12 +376,15 @@ bool cmd_setmark(queue_t * q, id_t id, int32_t mark);
 bool cmd_setconfig(queue_t * q, id_t id, const char * data);
 bool cmd_waitbusy(queue_t * q, id_t id);
 bool cmd_waitrunning(queue_t * q, id_t id);
-bool cmd_waitms(queue_t * q, id_t id, uint32_t millis);
+bool cmd_waitms(queue_t * q, id_t id, uint32_t ms);
 bool cmd_waitswitch(queue_t * q, id_t id, bool state);
 
-bool cmd_empty(queue_t * q, id_t id);
+bool cmd_emptyqueue(queue_t * q, id_t id);
+bool cmd_copyqueue(queue_t * q, id_t id, queue_t * src);
 bool cmd_estop(id_t id, bool hiz, bool soft);
 void cmd_clearerror();
+void cmd_readqueue(JsonArray& arr, queue_t * queue);
+void cmd_writequeue(JsonArray& arr, queue_t * queue);
 
 
 void daisy_init();
@@ -408,9 +414,47 @@ bool daisy_waitrunning(uint8_t address, uint8_t q, id_t id);
 bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t millis);
 bool daisy_waitswitch(uint8_t address, uint8_t q, id_t id, bool state);
 
-bool daisy_empty(uint8_t address, uint8_t q, id_t id);
+bool daisy_emptyqueue(uint8_t address, uint8_t q, id_t id);
+bool daisy_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src);
+bool daisy_savequeue(uint8_t address, uint8_t q, id_t id);
+bool daisy_loadqueue(uint8_t address, uint8_t q, id_t id);
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
 
+
+void lowtcp_init();
+void lowtcp_loop(unsigned long now);
+void lowtcp_update(unsigned long now);
+
+void resetcfg();
+
+void wificfg_read(wifi_config * cfg);
+void wificfg_write(wifi_config * const cfg);
+bool wificfg_connect(wifi_mode mode, wifi_config * const cfg);
+void wificfg_update(unsigned long now);
+
+void servicecfg_read(service_config * cfg);
+void servicecfg_write(service_config * const cfg);
+
+void daisycfg_read(daisy_config * cfg);
+void daisycfg_write(daisy_config * const cfg);
+
+bool queuecfg_read(int qid, queue_t * queue);
+bool queuecfg_write(int qid, queue_t * queue);
+bool queuecfg_reset(int qid);
+
+void motorcfg_read(motor_config * cfg);
+void motorcfg_write(motor_config * const cfg);
+void motorcfg_pull(motor_config * cfg);
+void motorcfg_push(motor_config * const cfg);
+
+
+void json_init();
+void websocket_init();
+
+void mqtt_init();
+void mqtt_loop(unsigned long looptime);
+
+// Mux Functions
 static inline bool m_stop(uint8_t address, uint8_t q, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_stop(queue_get(q), id, hiz, soft); } else { return daisy_stop(address, q, id, hiz, soft); } }
 static inline bool m_run(uint8_t address, uint8_t q, id_t id, ps_direction dir, float stepss) { if (address == 0) { return cmd_run(queue_get(q), id, dir, stepss); } else { return daisy_run(address, q, id, dir, stepss); } }
 static inline bool m_stepclock(uint8_t address, uint8_t q, id_t id, ps_direction dir) { if (address == 0) { return cmd_stepclock(queue_get(q), id, dir); } else { return daisy_stepclock(address, q, id, dir); } }
@@ -426,39 +470,13 @@ static inline bool m_setmark(uint8_t address, uint8_t q, id_t id, int32_t mark) 
 static inline bool m_setconfig(uint8_t address, uint8_t q, id_t id, const char * data) { if (address == 0) { return cmd_setconfig(queue_get(q), id, data); } else { return daisy_setconfig(address, q, id, data); } }
 static inline bool m_waitbusy(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_waitbusy(queue_get(q), id); } else { return daisy_waitbusy(address, q, id); } }
 static inline bool m_waitrunning(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(address, q, id); } }
-static inline bool m_waitms(uint8_t address, uint8_t q, id_t id, uint32_t millis) { if (address == 0) { return cmd_waitms(queue_get(q), id, millis); } else { return daisy_waitms(address, q, id, millis); } }
+static inline bool m_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) { if (address == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(address, q, id, ms); } }
 static inline bool m_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) { if (address == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(address, q, id, state); } }
-static inline bool m_empty(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_empty(queue_get(q), id); } else { return daisy_empty(address, q, id); } }
+static inline bool m_emptyqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_emptyqueue(queue_get(q), id); } else { return daisy_emptyqueue(address, q, id); } }
+static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) { if (address == 0) { return cmd_copyqueue(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(address, q, id, src); } }
+static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q, queue_get(q)); } else { return daisy_savequeue(address, q, id); } }
+static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q, queue_get(q)); } else { return daisy_loadqueue(address, q, id); } }
 static inline bool m_estop(uint8_t address, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(address, id, hiz, soft); } }
-
-
-void lowtcp_init();
-void lowtcp_loop(unsigned long now);
-void lowtcp_update(unsigned long now);
-
-
-void wificfg_read(wifi_config * cfg);
-void wificfg_write(wifi_config * const cfg);
-bool wificfg_connect(wifi_mode mode, wifi_config * const cfg);
-void wificfg_update(unsigned long now);
-
-void servicecfg_read(service_config * cfg);
-void servicecfg_write(service_config * const cfg);
-
-void daisycfg_read(daisy_config * cfg);
-void daisycfg_write(daisy_config * const cfg);
-
-void motorcfg_read(motor_config * cfg);
-void motorcfg_write(motor_config * const cfg);
-void motorcfg_pull(motor_config * cfg);
-void motorcfg_push(motor_config * const cfg);
-
-
-void json_init();
-void websocket_init();
-
-void mqtt_init();
-void mqtt_loop(unsigned long looptime);
 
 // Utility functions
 extern config_t config;
@@ -513,6 +531,12 @@ static inline ps_direction parse_direction(const String& s, ps_direction d) {
   else                      return d;
 }
 
+static inline ps_posact parse_action(const String& s, ps_posact d) {
+  if (s == "reset")         return POS_RESET;
+  else if (s == "copymark") return POS_COPYMARK;
+  else                      return d;
+}
+
 // JSON functions
 static inline const char * json_serialize(wifi_mode m) {
   switch (m) {
@@ -550,6 +574,14 @@ static inline const char * json_serialize(ps_direction d) {
     case FWD:   return "forward";
     case REV:   return "reverse";
     default:    return "";
+  }
+}
+
+static inline const char * json_serialize(ps_posact a) {
+  switch (a) {
+    case POS_RESET:     return "reset";
+    case POS_COPYMARK:  return "copymark";
+    default:            return "";
   }
 }
 
