@@ -15,7 +15,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
 
 bool mqtt_connect() {
   if (!mqtt_client->connected()) {
-    if (mqtt_client->connect(PRODUCT " v" VERSION, config.service.mqtt.username, config.service.mqtt.key)) {
+    if (mqtt_client->connect(PRODUCT " " MODEL, config.service.mqtt.username, config.service.mqtt.key)) {
       mqtt_client->subscribe(config.service.mqtt.command_topic);
     } else {
       Serial.println("MQTT Not connected");

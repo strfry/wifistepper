@@ -46,7 +46,7 @@ void json_addheaders() {
   }
 
 
-void jsonwifi_init() {
+void api_initwifi() {
   server.on("/api/wifi/scan", [](){
     json_addheaders();
     int n = WiFi.scanNetworks();
@@ -122,7 +122,7 @@ void jsonwifi_init() {
   });
 }
 
-void jsonservice_init() {
+void api_initservice() {
   server.on("/api/service/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
@@ -157,7 +157,7 @@ void jsonservice_init() {
   });
 }
 
-void jsondaisy_init() {
+void api_initdaisy() {
   server.on("/api/daisy/get", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
@@ -199,7 +199,7 @@ void jsondaisy_init() {
   });
 }
 
-void jsoncpu_init() {
+void api_initcpu() {
   server.on("/api/cpu/adc", [](){
     json_addheaders();
     JsonObject& root = jsonbuf.createObject();
@@ -211,7 +211,7 @@ void jsoncpu_init() {
   });
 }
 
-void jsonmotor_init() {
+void api_initmotor() {
   server.on("/api/motor/get", [](){
     json_addheaders();
     get_target()
@@ -509,12 +509,12 @@ void jsonmotor_init() {
   });
 }
 
-void json_init() {
-  jsonwifi_init();
-  jsonservice_init();
-  jsondaisy_init();
-  jsoncpu_init();
-  jsonmotor_init();
+void api_init() {
+  api_initwifi();
+  api_initservice();
+  api_initdaisy();
+  api_initcpu();
+  api_initmotor();
   
   server.on("/api/ping", [](){
     json_addheaders();

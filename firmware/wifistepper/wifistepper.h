@@ -6,7 +6,8 @@
 #include "powerstep01.h"
 
 #define PRODUCT           "Wi-Fi Stepper"
-#define VERSION           "1.0"
+#define MODEL             "wsx100"
+#define VERSION           (1)
 
 #define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
@@ -286,6 +287,15 @@ typedef struct {
 } daisy_sketch;
 
 typedef struct {
+  bool iserror;
+  uint8_t ontype;
+  uint8_t preamble[76];
+  size_t preamblelen, length;
+  char imagemd5[33];
+  unsigned int files;
+} update_sketch;
+
+typedef struct {
   struct {
     unsigned int status;
     unsigned int state;
@@ -296,6 +306,7 @@ typedef struct {
   wifi_sketch wifi;
   service_sketch service;
   daisy_sketch daisy;
+  update_sketch update;
   motor_sketch motor;
 } sketch_t;
 
@@ -448,7 +459,7 @@ void motorcfg_pull(motor_config * cfg);
 void motorcfg_push(motor_config * const cfg);
 
 
-void json_init();
+void api_init();
 void websocket_init();
 
 void mqtt_init();

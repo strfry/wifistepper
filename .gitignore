@@ -2,3 +2,5 @@
 
 /webpage/build
 /firmware/wifistepper/data
+/firmware/wifistepper/wifistepper.ino.generic.bin
+/image/wifistepper.image.*.bin
