@@ -12,7 +12,7 @@ layout: default
 ---
 {% include helptext.html %}
 <h1 class="title is-1">{% mdicon logo %}Quick Start Guide</h1>
-<div id="profiles">
+<div id="app" v-cloak>
     <div class="box properties">
         <div class="level">
             <div class="level-item">
@@ -1051,7 +1051,7 @@ state = MOTOR.getState()
     }
 
     var app = new Vue({
-        el: '#profiles',
+        el: '#app',
         data: {
             profile: 'none',
             preset: {
@@ -1400,6 +1400,11 @@ state = MOTOR.getState()
             this.fullrefresh();
             pollstate();
 
+            axios.get("{{ site.apiurl }}/api/service/streamprotocol").then(function(r) {
+                if (r.data.status == 'ok') {
+                    merge(app, r.data, ['protocol']);
+                }
+            });
             axios.get("{{ site.apiurl }}/api/service/get").then(function (r) {
                 if (r.data.status == 'ok') {
                     merge(app.service, r.data, ['hostname']);

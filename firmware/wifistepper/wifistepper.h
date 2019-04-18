@@ -22,8 +22,12 @@
 #define FNAME_MOTORCFG    "/motorcfg.json"
 #define FNAME_QUEUECFG    "/queue%dcfg.json"
 
+#define PORT_DNS          (53)
 #define PORT_HTTP         (80)
 #define PORT_HTTPWS       (81)
+
+#define AP_IP             (IPAddress(192, 168, 4, 1))
+#define AP_MASK           (IPAddress(255, 255, 255, 0))
 
 #define LEN_HOSTNAME      (24)
 #define LEN_USERNAME      (64)
@@ -31,7 +35,7 @@
 #define LEN_SSID          (32)
 #define LEN_PASSWORD      (64)
 #define LEN_IP            (16)
-#define LEN_ID            (2)
+#define LEN_MESSAGE       (64)
 
 #define TIME_MQTT_RECONNECT   30000
 
@@ -52,6 +56,17 @@ id_t nextid();
 id_t currentid();
 
 unsigned long timesince(unsigned long t1, unsigned long t2);
+
+#define add_headers() \
+  server.sendHeader("Access-Control-Allow-Credentials", "true"); \
+  server.sendHeader("Access-Control-Allow-Origin", "*"); \
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST"); \
+  server.sendHeader("Access-Control-Allow-Headers", "Authorization, application/json");
+
+#define check_auth() \
+  if (config.service.auth.enabled && !server.authenticate(config.service.auth.username, config.service.auth.password)) { \
+    return server.requestAuthentication(); \
+  }
 
 
 typedef enum {
@@ -288,6 +303,7 @@ typedef struct {
 
 typedef struct {
   bool iserror;
+  char message[LEN_MESSAGE];
   uint8_t ontype;
   uint8_t preamble[76];
   size_t preamblelen, length;

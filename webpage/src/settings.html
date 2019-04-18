@@ -10,7 +10,7 @@ layout: default
 ---
 {% include helptext.html %}
 <h1 class="title is-3">{% mdicon lock %}Settings</h1>
-<div id="settings">
+<div id="app" v-cloak>
     <div class="box properties">
         {% raw %}
         <div class="level">
@@ -319,14 +319,6 @@ layout: default
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal">Send reset command to motor driver.</div>
-                    <div class="field-body">
-                        <div class="field">
-                            <span class="control"><button class="button is-primary is-medium" v-on:click="resetmotor">Reset Motor</button></span>
-                        </div>
-                    </div>
-                </div>
-                <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal">Reset all configuration to factory settings and reset device.</div>
                     <div class="field-body">
                         <div class="field">
@@ -334,18 +326,66 @@ layout: default
                         </div>
                     </div>
                 </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal">Check for official updated to the Wi-Fi Stepper project.</div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><button class="button is-primary is-medium" v-on:click="checkupdate">Check Now</button></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="notification has-text-centered" v-if="update.message">
+                    <span v-html="update.message" style="color: #000;"></span>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Upgrade Software</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <div class="file" v-bind:class="{'has-name': update.imagename}">
+                                    <label class="file-label">
+                                        <input class="file-input" type="file" id="updateimage" ref="updateimage" v-on:change="update.imagename = $refs.updateimage.files[0].name" />
+                                        <span class="file-cta">
+                                            <span class="file-icon">{% mdicon upload, #000 %}</span>
+                                            <span class="file-label">Choose image file...</span>
+                                        </span>
+                                        <span class="file-name" v-if="update.imagename">{% raw %}{{ update.imagename }}{% endraw %}</span>
+                                    </label>
+                                </div>
+                            </span>
+                        </div>
+                        <div class="field">
+                            <span class="control">
+                                <button class="button is-primary" v-on:click="uploadimage">Upload</button>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': update.changemodal}">
+                    <div class="modal-background" v-on:click="update.changemodal = false"></div>
+                        <div class="modal-content">
+                            <div class="box has-text-centered">
+                                <div class="title is-4">{% mdicon sync-alert %}Uploading Software Image</div>
+                                <div v-if="update.working">Please do not remove power from device.</div>
+                                <span v-html="update.message"></span>
+                            </div>
+                        </div>
+                    <button class="modal-close is-large" v-on:click="update.changemodal = false"></button>
+                </div>
             </div>
         </div>
     </div>
 </div>
 <script minify>
+    var product = "Wi-Fi Stepper";
+    var model = "wsx100";
     function merge(dest, src, keys) {
         for (i in keys) {
             dest[keys[i]] = src[keys[i]];
         }
     }
     var app = new Vue({
-        el: '#settings',
+        el: '#app',
         data: {
             wifi: {
                 detected: [],
@@ -381,6 +421,13 @@ layout: default
                 changemodal: false,
                 enabled: true,
                 master: false
+            },
+            update: {
+                changemodal: false,
+                working: false,
+                message: "",
+                version: 0,
+                imagename: ""
             }
         },
         watch: {
@@ -466,9 +513,53 @@ layout: default
                 });
                 this.daisy.changemodal = true;
             },
-            resetmotor: function() {
-                console.log("Reset motor");
-                axios.get("{{ site.apiurl }}/api/motor/reset");
+            checkupdate: function() {
+                console.log("Checking for updates");
+                axios.get("{{ site.apiurl }}/api/version").then(function(r) {
+                    if (r.data.status == 'ok') {
+                        app.update.version = r.data.version;
+
+                        if (r.data.product != product || r.data.model != model) {
+                            // Wrong product or model
+                            app.update.message = "The software image running on the Wi-Fi Stepper is not an official distribution. Visit <a href=\"https://www.wifistepper.com\" target=\"_blank\">wifistepper.com</a> for official images.";
+                            return;
+                        }
+
+                        axios.get("https://www.wifistepper.com/downloads/"+model+"/latest/metainfo.json").then(function (s) {
+                            if (s.data.version > r.data.version) {
+                                app.update.message = "Newer software version exists (Version "+s.data.version+"). Visit <a href=\"https://www.wifistepper.com/downloads\" target=\"_blank\">wifistepper.com/downloads</a> to download.";
+                            } else {
+                                app.update.message = "No newer version found."
+                            }
+                        }).catch(function(e) {
+                            app.update.message = "Unable to connect to server. No network detected."
+                        });
+                    }
+                });
+            },
+            uploadimage: function() {
+                var image = this.$refs.updateimage.files[0];
+                if (!image) return;
+                var data = new FormData();
+                data.append("image", this.$refs.updateimage.files[0]);
+                this.update.changemodal = true;
+                this.update.message = "Working...";
+                this.update.working = true;
+                axios.post("{{ site.apiurl }}/update/image", data, {headers: {'Content-Type': 'multipart/form-data'}}).then(function(r) {
+                    if (r.data.status == 'ok') {
+                        app.update.message = 'Update completed successfully. '+r.data.updated_files+' files updated.<br />You may need to refresh the page to see changes.';
+                    } else {
+                        app.update.message = '<span style="color: #c00;"><strong>Completed with Error:</strong> '+(r.data.message || "Unknown error!")+'</span><br />';
+                        if (r.data.possible_corruption != "no") {
+                            app.update.message += '<span style="color: #c00;"><strong>Possible Corruption!</strong> '+r.data.possible_corruption.replace("YES!", "")+'</span><br />';
+                        }
+                        app.update.message += 'Ensure you have the correct image and try again.<br />You may need to refresh the page to see changes.';
+                    }
+                    app.update.working = false;
+                }).catch(function(){
+                    app.update.message = '<span style="color: #c00;"><strong>Completed with Error:</strong> Failed to upload software image</span>';
+                    app.update.working = false;
+                });
             },
             factoryreset: function() {
                 console.log("Factory reset device");
@@ -476,19 +567,19 @@ layout: default
             }
         },
         mounted: function () {
-            axios.get("{{ site.apiurl }}/api/wifi/get").then(function (r) {
+            axios.get("{{ site.apiurl }}/api/wifi/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.wifi, r.data, ['ip', 'rssi', 'mode']);
                     merge(app.wifi, r.data, ['accesspoint_ssid', 'accesspoint_password', 'accesspoint_encryption', 'accesspoint_channel', 'accesspoint_hidden']);
                     merge(app.wifi, r.data, ['station_ssid', 'station_password', 'station_encryption', 'station_forceip', 'station_forcesubnet', 'station_forcegateway', 'station_revertap']);
                 }
             });
-            axios.get("{{ site.apiurl }}/api/service/get").then(function (r) {
+            axios.get("{{ site.apiurl }}/api/service/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.service, r.data, ['hostname', 'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password', 'ota_enabled', 'ota_password']);
                 }
             });
-            axios.get("{{ site.apiurl }}/api/daisy/get").then(function (r) {
+            axios.get("{{ site.apiurl }}/api/daisy/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.daisy, r.data, ['enabled', 'master']);
                 }

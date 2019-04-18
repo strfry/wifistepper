@@ -1,8 +1,11 @@
-#include <FS.h>
 #include <vector>
+
+#include <FS.h>
+#include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
+
 #include <ESP8266mDNS.h>
 #include <MD5Builder.h>
 #include <ArduinoOTA.h>
@@ -22,6 +25,7 @@
 queue_t queue[QS_SIZE];
 volatile id_t _id = ID_START;
 
+DNSServer dns;
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
 
@@ -220,10 +224,10 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
   switch (mode) {
     case M_ACCESSPOINT: {
       WiFi.mode(WIFI_AP);
-      WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
+      WiFi.softAPConfig(AP_IP, AP_IP, AP_MASK);
+      success = WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
       state.wifi.ip = WiFi.softAPIP();
       state.wifi.mode = M_ACCESSPOINT;
-      success = true;
       break;
     }
     case M_STATION: {
@@ -529,6 +533,7 @@ void motorcfg_write(motor_config * cfg) {
 
 
 void static_serve(String contenttype, String path) {
+  check_auth()
   File fp = SPIFFS.open(path, "r");
   if (fp) {
     server.streamFile(fp, contenttype);
@@ -540,12 +545,8 @@ void static_serve(String contenttype, String path) {
 
 void static_init() {
   server.on("/", [](){
-    String path;
-    if (config.wifi.mode == M_ACCESSPOINT && memcmp(config.wifi.accesspoint.ssid, "wsx100-", 7) == 0) {
-      path = "/settings";
-    } else {
-      path = "/quickstart";
-    }
+    check_auth()
+    String path = config.wifi.mode == M_ACCESSPOINT && memcmp(config.wifi.accesspoint.ssid, "wsx100-", 7) == 0? "/settings" : "/quickstart";
     server.sendHeader("Location", path);
     server.send(302, "text/plain", String("Redirect to ") + path);
   });
@@ -613,7 +614,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
     case UPDATE_MD5:    preamble_size = sizeof(update_md5_t);       break;
     default: {
       // Unknown preamble, break out
-      Serial.println("Bad preamble");
+      strlcpy(u->message, "Unknown preamble in image file.", LEN_MESSAGE);
       u->iserror = true;
       return 0;
     }
@@ -637,7 +638,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
         update_header_t * header = (update_header_t *)u->preamble;
         if (header->magic != UPDATE_MAGIC || strcmp(header->model, MODEL) != 0) {
           // Bad header
-          Serial.println("Bad header");
+          strlcpy(u->message, "Bad image file header.", LEN_MESSAGE);
           u->iserror = true;
           return 0;
         }
@@ -699,7 +700,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
           size_t numbytes = min(datafile->size - u->length, length - index);
           File fp = SPIFFS.open(UPDATE_TMPFNAME, "a");
           {
-            if (!fp) { Serial.println("Bad data file open"); u->iserror = true; return 0; }
+            if (!fp) { strlcpy(u->message, "Could not open data file.", LEN_MESSAGE); u->iserror = true; return 0; }
             fp.write(&data[index], numbytes);
             fp.close();
           }
@@ -713,7 +714,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
   
           File fp = SPIFFS.open(UPDATE_TMPFNAME, "r");
           {
-            if (!fp) { Serial.println("Bad data file open for md5"); u->iserror = true; return 0; }
+            if (!fp) { strlcpy(u->message, "Could not open data file for MD5 verification.", LEN_MESSAGE); u->iserror = true; return 0; }
             md5.addStream(fp, fp.size());
             fp.close();
           }
@@ -721,14 +722,14 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
           md5.calculate();
           if (strcmp(datafile->md5, md5.toString().c_str()) != 0) {
             // Bad md5
-            Serial.println("Bad data file md5");
+            strlcpy(u->message, "Bad data file MD5 verification.", LEN_MESSAGE);
             u->iserror = true;
             return 0;
           }
 
           SPIFFS.remove(datafile->filename);
           if (!SPIFFS.rename(UPDATE_TMPFNAME, datafile->filename)) {
-            Serial.println("Bad data file rename");
+            strlcpy(u->message, "Could not rename data file.", LEN_MESSAGE);
             u->iserror = true;
             return 0;
           }
@@ -757,10 +758,13 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
 
 void update_init() {
   server.on("/update/image", HTTP_POST, [](){
-    server.sendHeader("Connection", "close");
+    add_headers()
+    check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["status"] = !sketch.update.iserror? "ok" : "error";
-    root["files"] = sketch.update.files;
+    root["message"] = sketch.update.message;
+    root["updated_files"] = sketch.update.files;
+    if (sketch.update.iserror) root["possible_corruption"] = sketch.update.files > 0? "YES. Hard reset and use http://192.168.1.4/update/recovery if needed." : "no";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
@@ -769,6 +773,10 @@ void update_init() {
     for (size_t i = 0; i < 100; i++) delay(10);
     ESP.restart();
   }, []() {
+    if (config.service.auth.enabled && !server.authenticate(config.service.auth.username, config.service.auth.password)) {
+      return;
+    }
+    
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       memset(&sketch.update, 0, sizeof(update_sketch));
@@ -788,13 +796,10 @@ void update_init() {
       update_md5.calculate();
       if (strcmp(sketch.update.imagemd5, update_md5.toString().c_str()) != 0) {
         // Bad md5
-        Serial.println("Bad md5");
+        strlcpy(sketch.update.message, "Bad image file MD5 verification.", LEN_MESSAGE);
         sketch.update.iserror = true;
-        return;
-      }
-
-      // Delete orphaned files
-      {
+      } else {
+        // Delete orphaned files
         Dir root = SPIFFS.openDir("/");
         while (root.next()) {
           if (std::find(update_files.begin(), update_files.end(), root.fileName()) == update_files.end()) {
@@ -802,13 +807,16 @@ void update_init() {
             SPIFFS.remove(root.fileName());
           }
         }
+        Serial.println("Update complete.");
+        strlcpy(sketch.update.message, "Upload complete (success).", LEN_MESSAGE);
       }
-      Serial.println("Update complete.");
+      
     }
     yield();
   });
   server.on("/update/recovery", HTTP_GET, [](){
-    
+    check_auth()
+    server.send(200, "text/html", "<html><body><h1>Recovery Image Upload</h1><h3>Select image update file</h3><form method='post' action='/update/image' enctype='multipart/form-data'><input type='file' name='image'><input type='submit' value='Upload'></form></body></html>");
   });
 }
 
@@ -910,7 +918,15 @@ void setup() {
       static_init();
       update_init();
       server.begin();
-      websocket_init();
+
+      if (!config.service.auth.enabled) {
+        // Websockets aren't supported under auth, client must use http
+        websocket_init();
+      }
+
+      dns.setTTL(300);
+      dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
+      dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
     }
 
     if (config.service.mqtt.enabled) {
@@ -950,8 +966,15 @@ void loop() {
   HANDLE_LOOPS();
 
   if (config.service.http.enabled) {
-    websocket.loop();
+    if (!config.service.auth.enabled) {
+      // Websockets aren't supported under auth, client must use http
+      websocket.loop();
+    }
     server.handleClient();
+
+    if (state.wifi.mode == M_ACCESSPOINT) {
+      dns.processNextRequest();
+    }
   }
 
   HANDLE_LOOPS();

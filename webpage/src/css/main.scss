@@ -56,6 +56,9 @@ $table-cell-padding: 1em;
 
 @import 'bulma';
 
+[v-cloak] {
+    display: none;
+}
 
 .mdicon {
     display: inline-flex;

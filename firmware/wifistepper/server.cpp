@@ -14,13 +14,6 @@ extern volatile bool flag_reboot;
 #define json_okid(id)     "{\"status\":\"ok\",\"id\":" "-1" "}"
 #define json_error(msg)   "{\"status\":\"error\",\"message\":\"" msg "\"}"
 
-void json_addheaders() {
-  server.sendHeader("Access-Control-Allow-Credentials", "true");
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Access-Control-Allow-Methods", "GET, POST");
-  server.sendHeader("Access-Control-Allow-Headers", "Authorization, application/json");
-}
-
 #define get_target() \
   int target = 0; \
   if (server.hasArg("target")) { \
@@ -48,7 +41,8 @@ void json_addheaders() {
 
 void api_initwifi() {
   server.on("/api/wifi/scan", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     int n = WiFi.scanNetworks();
     JsonObject& root = jsonbuf.createObject();
     JsonArray& networks = root.createNestedArray("networks");
@@ -65,7 +59,8 @@ void api_initwifi() {
     jsonbuf.clear();
   });
   server.on("/api/wifi/get", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["ip"] = IPAddress(state.wifi.ip).toString();
     root["rssi"] = state.wifi.rssi;
@@ -88,14 +83,16 @@ void api_initwifi() {
     jsonbuf.clear();
   });
   server.on("/api/wifi/set/off", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     config.wifi.mode = M_OFF;
     wificfg_write(&config.wifi);
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/wifi/set/accesspoint", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     config.wifi.mode = M_ACCESSPOINT;
     if (server.hasArg("ssid"))      strlcpy(config.wifi.accesspoint.ssid, server.arg("ssid").c_str(), LEN_SSID);
     if (server.hasArg("password"))  strlcpy(config.wifi.accesspoint.password, server.arg("password").c_str(), LEN_PASSWORD);
@@ -107,7 +104,8 @@ void api_initwifi() {
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/wifi/set/station", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     config.wifi.mode = M_STATION;
     if (server.hasArg("ssid"))      strlcpy(config.wifi.station.ssid, server.arg("ssid").c_str(), LEN_SSID);
     if (server.hasArg("password"))  strlcpy(config.wifi.station.password, server.arg("password").c_str(), LEN_PASSWORD);
@@ -124,7 +122,8 @@ void api_initwifi() {
 
 void api_initservice() {
   server.on("/api/service/get", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["hostname"] = config.service.hostname;
     root["http_enabled"] = config.service.http.enabled;
@@ -141,7 +140,8 @@ void api_initservice() {
     jsonbuf.clear();
   });
   server.on("/api/service/set", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     if (server.hasArg("hostname"))      strlcpy(config.service.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
     if (server.hasArg("http_enabled"))  config.service.http.enabled = server.arg("http_enabled") == "true";
     if (server.hasArg("mdns_enabled"))  config.service.mdns.enabled = server.arg("mdns_enabled") == "true";
@@ -155,11 +155,22 @@ void api_initservice() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
+  server.on("/api/service/streamprotocol", [](){
+    add_headers()
+    check_auth()
+    JsonObject& root = jsonbuf.createObject();
+    root["protocol"] = config.service.auth.enabled? "http" : "ws";
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
 }
 
 void api_initdaisy() {
   server.on("/api/daisy/get", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["enabled"] = config.daisy.enabled;
     root["master"] = config.daisy.master;
@@ -173,7 +184,8 @@ void api_initdaisy() {
     jsonbuf.clear();
   });
   server.on("/api/daisy/set", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     if (server.hasArg("enabled"))       config.daisy.enabled = server.arg("enabled") == "true";
     if (server.hasArg("master"))        config.daisy.master = server.arg("master") == "true";
     if (server.hasArg("slavewifioff"))  config.daisy.slavewifioff = server.arg("slavewifioff") == "true";
@@ -182,7 +194,8 @@ void api_initdaisy() {
     server.send(200, "application/json", json_ok());
   });
   server.on("/api/daisy/wificontrol", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     if (!config.daisy.enabled || !config.daisy.master || !state.daisy.active) {
       server.send(200, "application/json", json_error("daisy not active"));
       return;
@@ -201,7 +214,8 @@ void api_initdaisy() {
 
 void api_initcpu() {
   server.on("/api/cpu/adc", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["value"] = (double)analogRead(A0) * WIFI_ADCCOEFF;
     root["status"] = "ok";
@@ -213,7 +227,8 @@ void api_initcpu() {
 
 void api_initmotor() {
   server.on("/api/motor/get", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     motor_config * cfg = target == 0? &config.motor : &sketch.daisy.slave[target - 1].config.motor;
     JsonObject& root = jsonbuf.createObject();
@@ -252,7 +267,8 @@ void api_initmotor() {
     jsonbuf.clear();
   });
   server.on("/api/motor/set", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     JsonObject& root = jsonbuf.createObject();
@@ -291,7 +307,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/state", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     motor_state * st = target == 0? &state.motor : &sketch.daisy.slave[target - 1].state.motor;
     JsonObject& root = jsonbuf.createObject();
@@ -319,15 +336,9 @@ void api_initmotor() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  /*server.on("/api/motor/reset", [](){
-    json_addheaders();
-    ps_reset();
-    ps_getstatus(true);
-    motorcfg_update();
-    server.send(200, "application/json", json_ok());
-  });*/
   server.on("/api/motor/pos/reset", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     id_t id = nextid();
@@ -335,7 +346,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/pos/set", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("position")) {
@@ -348,7 +360,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/mark/set", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("position")) {
@@ -361,7 +374,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/run", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("stepss") || !server.hasArg("direction")) {
@@ -375,7 +389,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/goto", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("position")) {
@@ -389,7 +404,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/stepclock", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("direction")) {
@@ -402,7 +418,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/stop", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
@@ -412,7 +429,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/wait/busy", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     id_t id = nextid();
@@ -420,7 +438,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/wait/running", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     id_t id = nextid();
@@ -428,7 +447,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/wait/ms", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("millis")) {
@@ -445,7 +465,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/wait/switch", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     bool state = server.hasArg("state") && server.arg("state") == "closed";
@@ -454,7 +475,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/empty", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     id_t id = nextid();
@@ -462,7 +484,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/copy", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (!server.hasArg("source")) {
@@ -475,7 +498,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/save", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (queue == 0) {
@@ -487,7 +511,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/load", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     get_queue()
     if (queue == 0) {
@@ -499,7 +524,8 @@ void api_initmotor() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/estop", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     get_target()
     bool hiz = server.hasArg("hiz") && server.arg("hiz") == "true";
     bool soft = server.hasArg("soft") && server.arg("soft") == "true";
@@ -517,7 +543,8 @@ void api_init() {
   api_initmotor();
   
   server.on("/api/ping", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& obj = jsonbuf.createObject();
     obj["status"] = "ok";
     obj["data"] = "pong";
@@ -526,7 +553,8 @@ void api_init() {
     jsonbuf.clear();
   });
   server.on("/api/error/get", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     JsonObject& obj = jsonbuf.createObject();
     obj["errored"] = state.error.errored;
     obj["now"] = millis();
@@ -543,7 +571,8 @@ void api_init() {
     jsonbuf.clear();
   });
   server.on("/api/error/clear", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     // Clear local errors
     cmd_clearerror();
     clearerror();
@@ -557,10 +586,23 @@ void api_init() {
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/factoryreset", [](){
-    json_addheaders();
+    add_headers()
+    check_auth()
     resetcfg();
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
+  });
+  server.on("/api/version", [](){
+    add_headers()
+    check_auth()
+    JsonObject& obj = jsonbuf.createObject();
+    obj["product"] = PRODUCT;
+    obj["model"] = MODEL;
+    obj["version"] = VERSION;
+    obj["status"] = "ok";
+    JsonVariant v = obj;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
   });
 }
 
