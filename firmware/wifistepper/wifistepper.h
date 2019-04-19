@@ -477,6 +477,7 @@ void motorcfg_push(motor_config * const cfg);
 
 void api_init();
 void websocket_init();
+void update_init();
 
 void mqtt_init();
 void mqtt_loop(unsigned long looptime);
@@ -504,6 +505,10 @@ static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src)
 static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q, queue_get(q)); } else { return daisy_savequeue(address, q, id); } }
 static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q, queue_get(q)); } else { return daisy_loadqueue(address, q, id); } }
 static inline bool m_estop(uint8_t address, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(address, id, hiz, soft); } }
+
+// ECC functions
+void ecc_init();
+void ecc_update(unsigned long now);
 
 // Utility functions
 extern config_t config;

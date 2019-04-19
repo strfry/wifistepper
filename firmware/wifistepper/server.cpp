@@ -1,5 +1,4 @@
 #include <ESP8266WebServer.h>
-#include <ArduinoJson.h>
 #include <FS.h>
 
 #include "wifistepper.h"
