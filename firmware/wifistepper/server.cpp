@@ -39,7 +39,7 @@ extern volatile bool flag_reboot;
 
 
 void api_initwifi() {
-  server.on("/api/wifi/scan", [](){
+  server.on("/api/wifi/scan", HTTP_GET, [](){
     add_headers()
     check_auth()
     int n = WiFi.scanNetworks();
@@ -57,7 +57,7 @@ void api_initwifi() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/wifi/get", [](){
+  server.on("/api/wifi/get", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -81,7 +81,7 @@ void api_initwifi() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/wifi/set/off", [](){
+  server.on("/api/wifi/set/off", HTTP_GET, [](){
     add_headers()
     check_auth()
     config.wifi.mode = M_OFF;
@@ -89,7 +89,7 @@ void api_initwifi() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/wifi/set/accesspoint", [](){
+  server.on("/api/wifi/set/accesspoint", HTTP_GET, [](){
     add_headers()
     check_auth()
     config.wifi.mode = M_ACCESSPOINT;
@@ -102,7 +102,7 @@ void api_initwifi() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/wifi/set/station", [](){
+  server.on("/api/wifi/set/station", HTTP_GET, [](){
     add_headers()
     check_auth()
     config.wifi.mode = M_STATION;
@@ -120,7 +120,7 @@ void api_initwifi() {
 }
 
 void api_initservice() {
-  server.on("/api/service/get", [](){
+  server.on("/api/service/get", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -138,7 +138,7 @@ void api_initservice() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/service/set", [](){
+  server.on("/api/service/set", HTTP_GET, [](){
     add_headers()
     check_auth()
     if (server.hasArg("hostname"))      strlcpy(config.service.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
@@ -154,7 +154,7 @@ void api_initservice() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/service/streamprotocol", [](){
+  server.on("/api/service/streamprotocol", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -167,7 +167,7 @@ void api_initservice() {
 }
 
 void api_initdaisy() {
-  server.on("/api/daisy/get", [](){
+  server.on("/api/daisy/get", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -182,7 +182,7 @@ void api_initdaisy() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/daisy/set", [](){
+  server.on("/api/daisy/set", HTTP_GET, [](){
     add_headers()
     check_auth()
     if (server.hasArg("enabled"))       config.daisy.enabled = server.arg("enabled") == "true";
@@ -192,7 +192,7 @@ void api_initdaisy() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/daisy/wificontrol", [](){
+  server.on("/api/daisy/wificontrol", HTTP_GET, [](){
     add_headers()
     check_auth()
     if (!config.daisy.enabled || !config.daisy.master || !state.daisy.active) {
@@ -212,7 +212,7 @@ void api_initdaisy() {
 }
 
 void api_initcpu() {
-  server.on("/api/cpu/adc", [](){
+  server.on("/api/cpu/adc", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -225,7 +225,7 @@ void api_initcpu() {
 }
 
 void api_initmotor() {
-  server.on("/api/motor/get", [](){
+  server.on("/api/motor/get", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -265,7 +265,7 @@ void api_initmotor() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/motor/set", [](){
+  server.on("/api/motor/set", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -305,7 +305,7 @@ void api_initmotor() {
     jsonbuf.clear();
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/state", [](){
+  server.on("/api/motor/state", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -313,10 +313,10 @@ void api_initmotor() {
     JsonObject& root = jsonbuf.createObject();
     if (server.hasArg("target")) root["target"] = target;
     root["stepss"] = st->stepss;
-    root["position"] = st->pos;
+    root["pos"] = st->pos;
     root["mark"] = st->mark;
     root["adc"] = st->adc;
-    root["direction"] = json_serialize(st->status.direction);
+    root["dir"] = json_serialize(st->status.direction);
     root["movement"] = json_serialize(st->status.movement);
     root["hiz"] = st->status.hiz;
     root["busy"] = st->status.busy;
@@ -335,7 +335,7 @@ void api_initmotor() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/motor/pos/reset", [](){
+  server.on("/api/motor/pos/reset", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -344,79 +344,79 @@ void api_initmotor() {
     m_resetpos(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/pos/set", [](){
+  server.on("/api/motor/pos/set", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("position")) {
+    if (!server.hasArg("pos")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    int pos = server.arg("position").toInt();
+    int pos = server.arg("pos").toInt();
     id_t id = nextid();
     m_setpos(target, queue, id, pos);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/mark/set", [](){
+  server.on("/api/motor/mark/set", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("position")) {
+    if (!server.hasArg("pos")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
-    int mark = server.arg("position").toInt();
+    int mark = server.arg("pos").toInt();
     id_t id = nextid();
     m_setmark(target, queue, id, mark);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/run", [](){
+  server.on("/api/motor/run", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("stepss") || !server.hasArg("direction")) {
+    if (!server.hasArg("stepss") || !server.hasArg("dir")) {
       server.send(200, "application/json", json_error("stepss, direction args must be specified."));
       return;
     }
-    ps_direction dir = parse_direction(server.arg("direction"), FWD);
+    ps_direction dir = parse_direction(server.arg("dir"), FWD);
     float stepss = server.arg("stepss").toFloat();
     id_t id = nextid();
     m_run(target, queue, id, dir, stepss);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/goto", [](){
+  server.on("/api/motor/goto", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("position")) {
+    if (!server.hasArg("pos")) {
       server.send(200, "application/json", json_error("position arg must be specified"));
       return;
     }
     id_t id = nextid();
-    int pos = server.arg("position").toInt();
-    ps_direction dir = parse_direction(server.arg("direction"), FWD);
-    m_goto(target, queue, id, pos, server.hasArg("direction"), dir);
+    int pos = server.arg("pos").toInt();
+    ps_direction dir = parse_direction(server.arg("dir"), FWD);
+    m_goto(target, queue, id, pos, server.hasArg("dir"), dir);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/stepclock", [](){
+  server.on("/api/motor/stepclock", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("direction")) {
+    if (!server.hasArg("dir")) {
       server.send(200, "application/json", json_error("direction arg must be specified"));
       return;
     }
-    ps_direction dir = parse_direction(server.arg("direction"), FWD);
+    ps_direction dir = parse_direction(server.arg("dir"), FWD);
     id_t id = nextid();
     m_stepclock(target, queue, id, dir);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/stop", [](){
+  server.on("/api/motor/stop", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -427,7 +427,7 @@ void api_initmotor() {
     m_stop(target, queue, id, hiz, soft);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/wait/busy", [](){
+  server.on("/api/motor/wait/busy", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -436,7 +436,7 @@ void api_initmotor() {
     m_waitbusy(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/wait/running", [](){
+  server.on("/api/motor/wait/running", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -445,16 +445,16 @@ void api_initmotor() {
     m_waitrunning(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/wait/ms", [](){
+  server.on("/api/motor/wait/ms", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
     get_queue()
-    if (!server.hasArg("millis")) {
+    if (!server.hasArg("ms")) {
       server.send(200, "application/json", json_error("millis arg must be specified"));
       return;
     }
-    int ms = server.arg("millis").toInt();
+    int ms = server.arg("ms").toInt();
     if (ms < 0) {
       server.send(200, "application/json", json_error("millis arg must be positive"));
       return;
@@ -463,7 +463,7 @@ void api_initmotor() {
     m_waitms(target, queue, id, ms);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/wait/switch", [](){
+  server.on("/api/motor/wait/switch", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -473,7 +473,7 @@ void api_initmotor() {
     m_waitswitch(target, queue, id, state);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/queue/empty", [](){
+  server.on("/api/motor/queue/empty", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -482,7 +482,32 @@ void api_initmotor() {
     m_emptyqueue(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/queue/copy", [](){
+  server.on("/api/motor/queue/get", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    get_queue()
+    if (server.hasArg("target")) {
+      server.send(200, "application/json", json_error("invalid argument. target must not be set."));
+      return;
+    }
+    JsonObject& root = jsonbuf.createObject();
+    JsonArray& arr = root.createNestedArray("queue");
+    cmdq_write(arr, queue_get(queue));
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/motor/queue/add", HTTP_POST, [](){
+    add_headers()
+    check_auth()
+    id_t id = nextid();
+    JsonArray& arr = jsonbuf.parseArray(server.arg("plain"));
+    cmdq_read(arr);
+    jsonbuf.clear();
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/copy", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -496,7 +521,16 @@ void api_initmotor() {
     m_copyqueue(target, queue, id, src);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/queue/save", [](){
+  server.on("/api/motor/queue/run", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    get_target()
+    get_queue()
+    id_t id = nextid();
+    m_copyqueue(target, 0, id, queue);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/save", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -509,7 +543,7 @@ void api_initmotor() {
     m_savequeue(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/queue/load", [](){
+  server.on("/api/motor/queue/load", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -522,7 +556,7 @@ void api_initmotor() {
     m_loadqueue(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/estop", [](){
+  server.on("/api/motor/estop", HTTP_GET, [](){
     add_headers()
     check_auth()
     get_target()
@@ -541,7 +575,7 @@ void api_init() {
   api_initcpu();
   api_initmotor();
   
-  server.on("/api/ping", [](){
+  server.on("/api/ping", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& obj = jsonbuf.createObject();
@@ -551,7 +585,7 @@ void api_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/error/get", [](){
+  server.on("/api/error/get", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& obj = jsonbuf.createObject();
@@ -569,7 +603,7 @@ void api_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
   });
-  server.on("/api/error/clear", [](){
+  server.on("/api/error/clear", HTTP_GET, [](){
     add_headers()
     check_auth()
     // Clear local errors
@@ -584,19 +618,20 @@ void api_init() {
     }
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/factoryreset", [](){
+  server.on("/api/factoryreset", HTTP_GET, [](){
     add_headers()
     check_auth()
     resetcfg();
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
-  server.on("/api/version", [](){
+  server.on("/api/version", HTTP_GET, [](){
     add_headers()
     check_auth()
     JsonObject& obj = jsonbuf.createObject();
     obj["product"] = PRODUCT;
     obj["model"] = MODEL;
+    obj["swbranch"] = SWBRANCH;
     obj["version"] = VERSION;
     obj["status"] = "ok";
     JsonVariant v = obj;

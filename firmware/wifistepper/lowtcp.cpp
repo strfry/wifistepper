@@ -7,28 +7,12 @@
 #define LTC_SIZE      (2)
 #define LTC_PORT      (1000)
 
-#define LTCB_ISIZE     (1536)
-#define LTCB_OSIZE     (LTCB_ISIZE / 2)
+#define LTCB_ISIZE     (1024)
+#define LTCB_OSIZE     (LTCB_ISIZE / 4)
 
 // PACKET LAYOUT
-// | MAGIC_1 (1) | MAGIC_2 (2) | VERSION (1) | CHECKSUM (4) | OPCODE (1) | SUBCODE (1) | ADDRESS (1) | NONCE (4) | ID (8) | LENGTH (2) | ... DATA (size = LENGTH) ... |
-//#define L_HEADER      (25)
 #define L_MAGIC_1     (0xAE)
 #define L_MAGIC_2     (0x7B11)
-//#define L_VERSION     (0x01)
-//#define LC_START      (8)
-
-/*#define LO_MAGIC_1    (0)
-#define LO_MAGIC_2    (1)
-#define LO_VERSION    (3)
-#define LO_CHECKSUM   (4)
-#define LO_OPCODE     (8)
-#define LO_SUBCODE    (9)
-#define LO_ADDRESS    (10)
-#define LO_NONCE      (11)
-#define LO_ID         (15)
-#define LO_LENGTH     (23)
-*/
 
 typedef struct ispacked {
   uint8_t magic1;
@@ -51,16 +35,12 @@ typedef struct ispacked {
   uint16_t length;
 } lc_header;
 
-//#define lt_len(len)   (L_HEADER + (len))
-//static inline uint8_t * lt_body(uint8_t * packet) { return &packet[L_HEADER]; }
-
-#define ADDR_NONE         (0xFF)
-
 #define TYPE_ERROR        (0x00)
 #define TYPE_HELLO        (0x01)
 #define TYPE_GOODBYE      (0x02)
-#define TYPE_STD          (0x03)
-#define TYPE_CRYPTO       (0x04)
+#define TYPE_PING         (0x03)
+#define TYPE_STD          (0x04)
+#define TYPE_CRYPTO       (0x05)
 #define TYPE_MAX          TYPE_CRYPTO
 
 typedef struct ispacked {
@@ -70,9 +50,9 @@ typedef struct ispacked {
   char hostname[LEN_HOSTNAME];
 } type_hello;
 
-#define OPCODE_PING         (0x00)
-#define OPCODE_ESTOP        (0x01)
-#define OPCODE_SETCONFIG    (0x02)
+#define OPCODE_ESTOP        (0x00)
+#define OPCODE_SETCONFIG    (0x01)
+#define OPCODE_GETCONFIG    (0x02)
 #define OPCODE_LASTWILL     (0x03)
 
 #define OPCODE_STOP         (0x11)
@@ -96,13 +76,91 @@ typedef struct ispacked {
 #define OPCODE_EMPTYQUEUE   (0x31)
 #define OPCODE_SAVEQUEUE    (0x32)
 #define OPCODE_LOADQUEUE    (0x33)
+#define OPCODE_ADDQUEUE     (0x34)
+#define OPCODE_COPYQUEUE    (0x35)
+#define OPCODE_RUNQUEUE     (0x36)
+#define OPCODE_GETQUEUE     (0x37)
 
 
 #define SUBCODE_NACK      (0x00)
 #define SUBCODE_ACK       (0x01)
 #define SUBCODE_CMD       (0x02)
 
-#define LTO_PING          (1000)
+#define LTO_PING          (3000)
+
+#define LOWTCP_DEBUG
+
+#ifdef LOWTCP_DEBUG
+void lowtcp_debug(String msg) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.println(msg);
+}
+void lowtcp_debug(String msg, int i1) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.print(msg);
+  Serial.print(" (");
+  Serial.print(i1);
+  Serial.println(")");
+}
+void lowtcp_debug(String msg, int i1, float f1) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.print(msg);
+  Serial.print(" (");
+  Serial.print(i1);
+  Serial.print(", ");
+  Serial.print(f1);
+  Serial.println(")");
+}
+void lowtcp_debug(String msg, int i1, int i2) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.print(msg);
+  Serial.print(" (");
+  Serial.print(i1);
+  Serial.print(", ");
+  Serial.print(i2);
+  Serial.println(")");
+}
+void lowtcp_debug(String msg, int i1, int i2, int i3) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.print(msg);
+  Serial.print(" (");
+  Serial.print(i1);
+  Serial.print(", ");
+  Serial.print(i2);
+  Serial.print(", ");
+  Serial.print(i3);
+  Serial.println(")");
+}
+void lowtcp_debug(String msg, int i1, int i2, int i3, int i4, int i5) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWTCP -> ");
+  Serial.print(msg);
+  Serial.print(" (");
+  Serial.print(i1);
+  Serial.print(", ");
+  Serial.print(i2);
+  Serial.print(", ");
+  Serial.print(i3);
+  Serial.print(", ");
+  Serial.print(i4);
+  Serial.print(", ");
+  Serial.print(i5);
+  Serial.println(")");
+}
+#else
+#define lowtcp_debug(...)
+#endif
 
 WiFiServer lowtcp_server(LTC_PORT);
 struct {
@@ -147,23 +205,30 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
 #define lc_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_LC, 0, ETYPE_MSG, client); return; } })
 
 static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
+  lowtcp_debug("CMD received", opcode, subcode, address, queue, packetid);
   switch (opcode) {
-    case OPCODE_PING: {
-      lc_expectlen(0);
-      lowtcp_client[client].last.ping = millis();
-      break;
-    }
     case OPCODE_ESTOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
+      lowtcp_debug("CMD estop", cmd->hiz, cmd->soft);
       m_estop(address, nextid(), cmd->hiz, cmd->soft);
       break;
     }
     case OPCODE_SETCONFIG: {
+      if (len == 0 || data[len-1] != 0) {
+        seterror(ESUB_LC, 0, ETYPE_MSG, client);
+        return;
+      }
+      lowtcp_debug("CMD setconfig");
+      m_setconfig(address, queue, nextid(), (const char *)data);
+      break;
+    }
+    case OPCODE_GETCONFIG: {
       break;
     }
     case OPCODE_LASTWILL: {
       lc_expectlen(sizeof(uint8_t));
+      lowtcp_debug("CMD lastwill", data[0]);
       lowtcp_client[client].lastwill = data[0];
       break;
     }
@@ -171,76 +236,147 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
     case OPCODE_STOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
+      lowtcp_debug("CMD stop", cmd->hiz, cmd->soft);
       m_stop(address, queue, nextid(), cmd->hiz, cmd->soft);
       break;
     }
     case OPCODE_RUN: {
       lc_expectlen(sizeof(cmd_run_t));
       cmd_run_t * cmd = (cmd_run_t *)data;
+      lowtcp_debug("CMD run", cmd->dir, cmd->stepss);
       m_run(address, queue, nextid(), cmd->dir, cmd->stepss);
       break;
     }
     case OPCODE_STEPCLOCK: {
+      lc_expectlen(sizeof(cmd_stepclk_t));
+      cmd_stepclk_t * cmd = (cmd_stepclk_t *)data;
+      lowtcp_debug("CMD stepclock", cmd->dir);
+      m_stepclock(address, queue, nextid(), cmd->dir);
       break;
     }
     case OPCODE_MOVE: {
+      lc_expectlen(sizeof(cmd_move_t));
+      cmd_move_t * cmd = (cmd_move_t *)data;
+      lowtcp_debug("CMD move", cmd->dir, (float)cmd->microsteps);
+      m_move(address, queue, nextid(), cmd->dir, cmd->microsteps);
       break;
     }
     case OPCODE_GOTO: {
       lc_expectlen(sizeof(cmd_goto_t));
       cmd_goto_t * cmd = (cmd_goto_t *)data;
+      lowtcp_debug("CMD goto", cmd->pos, cmd->hasdir, cmd->dir);
       m_goto(address, queue, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
       break;
     }
     case OPCODE_GOUNTIL: {
+      lc_expectlen(sizeof(cmd_gountil_t));
+      cmd_gountil_t * cmd = (cmd_gountil_t *)data;
+      lowtcp_debug("CMD gountil", cmd->action, cmd->dir, cmd->stepss);
+      m_gountil(address, queue, nextid(), cmd->action, cmd->dir, cmd->stepss);
       break;
     }
     case OPCODE_RELEASESW: {
+      lc_expectlen(sizeof(cmd_releasesw_t));
+      cmd_releasesw_t * cmd = (cmd_releasesw_t *)data;
+      lowtcp_debug("CMD releasesw", cmd->action, cmd->dir);
+      m_releasesw(address, queue, nextid(), cmd->action, cmd->dir);
       break;
     }
     case OPCODE_GOHOME: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD gohome");
+      m_gohome(address, queue, nextid());
       break;
     }
     case OPCODE_GOMARK: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD gomark");
+      m_gomark(address, queue, nextid());
       break;
     }
     case OPCODE_RESETPOS: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD resetpos");
+      m_resetpos(address, queue, nextid());
       break;
     }
     case OPCODE_SETPOS: {
+      lc_expectlen(sizeof(cmd_setpos_t));
+      cmd_setpos_t * cmd = (cmd_setpos_t *)data;
+      lowtcp_debug("CMD setpos", cmd->pos);
+      m_setpos(address, queue, nextid(), cmd->pos);
       break;
     }
     case OPCODE_SETMARK: {
+      lc_expectlen(sizeof(cmd_setpos_t));
+      cmd_setpos_t * cmd = (cmd_setpos_t *)data;
+      lowtcp_debug("CMD setpos", cmd->pos);
+      m_setmark(address, queue, nextid(), cmd->pos);
       break;
     }
     
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
+      lowtcp_debug("CMD waitbusy");
       m_waitbusy(address, queue, nextid());
       break;
     }
     case OPCODE_WAITRUNNING: {
       lc_expectlen(0);
+      lowtcp_debug("CMD waitrunning");
       m_waitrunning(address, queue, nextid());
       break;
     }
     case OPCODE_WAITMS: {
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
-      m_waitms(address, queue, nextid(), cmd->millis);
+      lowtcp_debug("CMD waitms", cmd->ms);
+      m_waitms(address, queue, nextid(), cmd->ms);
       break;
     }
     case OPCODE_WAITSWITCH: {
+      lc_expectlen(sizeof(cmd_waitsw_t));
+      cmd_waitsw_t * cmd = (cmd_waitsw_t *)data;
+      lowtcp_debug("CMD waitswitch", cmd->state);
+      m_waitswitch(address, queue, nextid(), cmd->state);
       break;
     }
 
     case OPCODE_EMPTYQUEUE: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD emptyqueue");
+      m_emptyqueue(address, queue, nextid());
       break;
     }
     case OPCODE_SAVEQUEUE: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD savequeue");
+      m_savequeue(address, queue, nextid());
       break;
     }
     case OPCODE_LOADQUEUE: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD loadqueue");
+      m_loadqueue(address, queue, nextid());
+      break;
+    }
+    case OPCODE_ADDQUEUE: {
+      break;
+    }
+    case OPCODE_COPYQUEUE: {
+      lc_expectlen(sizeof(uint8_t));
+      uint8_t * src = data;
+      lowtcp_debug("CMD copyqueue", *src);
+      m_copyqueue(address, queue, nextid(), *src);
+      break;
+    }
+    case OPCODE_RUNQUEUE: {
+      lc_expectlen(0);
+      lowtcp_debug("CMD runqueue");
+      m_copyqueue(address, 0, nextid(), queue);
+      break;
+    }
+    case OPCODE_GETQUEUE: {
       break;
     }
   }
@@ -257,6 +393,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
   
   switch (preamble->type) {
     case TYPE_HELLO: {
+      lowtcp_debug("RX hello");
       uint8_t reply[sizeof(lc_preamble) + sizeof(type_hello)] = {0};
       
       // Set preamble
@@ -278,53 +415,62 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       lc_send(client, reply, sizeof(reply));
       return sizeof(lc_preamble);
     }
-
     case TYPE_GOODBYE: {
-      lowtcp_client[client].sock.stop();
+      lowtcp_debug("RX goodbye");
+      if (lowtcp_client[client].lastwill != 0) {
+        // Execute last will
+        cmdq_copy(Q0, nextid(), queue_get(lowtcp_client[client].lastwill));
+
+        // Execute last will on slaves
+        if (config.daisy.enabled && config.daisy.master && state.daisy.active) {
+          for (uint8_t i = 1; i <= state.daisy.slaves; i++) {
+            daisy_emptyqueue(i, 0, nextid());
+            daisy_copyqueue(i, 0, nextid(), lowtcp_client[client].lastwill);
+          }
+        }
+        
+        lowtcp_client[client].lastwill = 0;
+      }
+      yield();
+      //lowtcp_client[client].sock.stop();
       lowtcp_client[client].active = false;
       return sizeof(lc_preamble);
     }
-
+    case TYPE_PING: {
+      lowtcp_debug("RX ping");
+      lowtcp_client[client].last.ping = millis();
+      return sizeof(lc_preamble);
+    }
     case TYPE_STD: {
+      lowtcp_debug("RX std");
+      
       // Ensure at lease full header in buffer
       size_t elen = sizeof(lc_preamble) + sizeof(lc_header);
       if (len < elen) return 0;
 
       // Capture header
-      lc_header * header = (lc_header *)data;
+      lc_header * header = (lc_header *)&preamble[1];
 
       // Ensure full packet in buffer
       elen += header->length;
       if (len < elen) return 0;
 
       // TODO - validate header
-      lc_handlepacket(client, header->opcode, header->subcode, header->address, header->queue, header->packetid, (uint8_t *)(&header[1]), header->length);
+      lc_handlepacket(client, header->opcode, header->subcode, header->address, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
       return elen;
     }
-
     case TYPE_CRYPTO: {
+      lowtcp_debug("RX crypto");
+      
       // TODO - not supported yet
       return 1;
     }
-
     default: {
       // Unknown type.
+      lowtcp_debug("RX unknown type", preamble->type);
       return 1;
     }
   }
-
-  /*uint8_t opcode = B[LO_OPCODE];
-  size_t length = lt_buf2uint16(&B[LO_LENGTH]);
-  switch (opcode) {
-    case OPCODE_PING: {
-      lowtcp_client[ci].last.ping = now;
-      break;
-    }
-    default: {
-      lt_handle(ci, opcode, B[LO_SUBCODE], B[LO_ADDRESS], &B[L_HEADER], length);
-      break;
-    }
-  }*/
 }
 
 void lowtcp_init() {
@@ -388,10 +534,15 @@ void lowtcp_loop(unsigned long now) {
 }
 
 void lowtcp_update(unsigned long now) {
+  // Accept new clients
   if (lowtcp_server.hasClient()) {
+    lowtcp_debug("NEW client");
+    
     size_t ci = 0;
     for (; ci < LTC_SIZE; ci++) {
       if (!lowtcp_client[ci].active) {
+        lowtcp_debug("NEW slot", ci);
+        
         memset(&lowtcp_client[ci], 0, sizeof(lowtcp_client[ci]));
         lowtcp_client[ci].sock = lowtcp_server.available();
         lowtcp_client[ci].active = true;
@@ -403,29 +554,37 @@ void lowtcp_update(unsigned long now) {
 
     if (ci == LTC_SIZE) {
       // No open slots
-      lowtcp_server.available().stop();
+      lowtcp_debug("ERR no client slots available");
+      //lowtcp_server.available().stop();
     }
   }
 
+  // Handle client socket close
   for (size_t ci = 0; ci < LTC_SIZE; ci++) {
-    if (lowtcp_client[ci].active && (timesince(lowtcp_client[ci].last.ping, now) > LTO_PING || !lowtcp_client[ci].sock.connected())) {
+    if (lowtcp_client[ci].active && (timesince(lowtcp_client[ci].last.ping, millis()) > LTO_PING || !lowtcp_client[ci].sock.connected())) {
       // Socket has timed out
-      if (lowtcp_client[ci].sock.connected()) lowtcp_client[ci].sock.stop();
-      lowtcp_client[ci].active = false;
+      lowtcp_debug("KILL client disconnect", ci);
+      lc_preamble goodbye = {0};
+      lc_packpreamble(&goodbye, TYPE_GOODBYE);
+      lc_handletype(ci, (uint8_t *)&goodbye, sizeof(lc_preamble));
     }
   }
 
+  // Ping clients
   if (timesince(sketch.service.lowtcp.last.ping, now) > LTO_PING) {
     sketch.service.lowtcp.last.ping = now;
     state.service.lowtcp.clients = 0;
 
     for (size_t i = 0; i < LTC_SIZE; i++) {
       if (lowtcp_client[i].active) {
-        /*
-        uint8_t packet[lt_len(0)] = {0};
-        size_t lpacket = sizeof(packet);
-        lt_pack(packet, lpacket, OPCODE_PING, SUBCODE_NACK, ADDR_NONE, lt_nonce(lowtcp_client[i]), lt_nextid(lowtcp_client[i]));
-        if (lowtcp_client[i].sock.availableForWrite() >= lpacket) lowtcp_client[i].sock.write(packet, lpacket);*/
+        lowtcp_debug("PING client", i);
+        
+        lc_preamble ping = {0};
+        lc_packpreamble(&ping, TYPE_PING);
+        if (lowtcp_client[i].sock.availableForWrite() >= sizeof(lc_preamble)) {
+          lowtcp_debug("PING client write", i);
+          lowtcp_client[i].sock.write((uint8_t *)&ping, sizeof(lc_preamble));
+        }
         state.service.lowtcp.clients += 1;
       }
     }

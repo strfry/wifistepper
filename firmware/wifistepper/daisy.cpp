@@ -377,39 +377,39 @@ static void daisy_slaveconsume(uint8_t q, id_t id, uint8_t opcode, void * data, 
     case CMD_WAITMS: {
       daisy_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
-      cmd_waitms(queue, id, cmd->millis);
+      cmd_waitms(queue, id, cmd->ms);
       daisy_ack(q, id);
       break;
     }
     case CMD_WAITSWITCH: {
-      daisy_expectlen(sizeof(cmd_waitswitch_t));
-      cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)data;
+      daisy_expectlen(sizeof(cmd_waitsw_t));
+      cmd_waitsw_t * cmd = (cmd_waitsw_t *)data;
       cmd_waitswitch(queue, id, cmd->state);
       daisy_ack(q, id);
       break;
     }
     case CMD_EMPTYQUEUE: {
       daisy_expectlen(0);
-      cmd_emptyqueue(queue, id);
+      cmdq_empty(queue, id);
       daisy_ack(q, id);
       break;
     }
     case CMD_COPYQUEUE: {
       daisy_expectlen(sizeof(uint8_t));
       uint8_t * src = (uint8_t *)data;
-      cmd_copyqueue(queue, id, queue_get(src[0]));
+      cmdq_copy(queue, id, queue_get(src[0]));
       daisy_ack(q, id);
       break;
     }
     case CMD_SAVEQUEUE: {
       daisy_expectlen(0);
-      queuecfg_write(q, queue);
+      queuecfg_write(q);
       daisy_ack(q, id);
       break;
     }
     case CMD_LOADQUEUE: {
       daisy_expectlen(0);
-      queuecfg_read(q, queue);
+      queuecfg_read(q);
       daisy_ack(q, id);
       break;
     }
@@ -642,12 +642,12 @@ bool daisy_waitrunning(uint8_t address, uint8_t q, id_t id) {
 
 bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) {
   cmd_waitms_t * cmd = (cmd_waitms_t *)daisy_alloc(address, q, id, CMD_WAITMS, sizeof(cmd_waitms_t));
-  if (cmd != NULL) *cmd = { .millis = ms };
+  if (cmd != NULL) *cmd = { .ms = ms };
   return daisy_pack(cmd) != NULL;
 }
 
 bool daisy_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) {
-  cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)daisy_alloc(address, q, id, CMD_WAITSWITCH, sizeof(cmd_waitswitch_t));
+  cmd_waitsw_t * cmd = (cmd_waitsw_t *)daisy_alloc(address, q, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
   if (cmd != NULL) *cmd = { .state = state };
   return daisy_pack(cmd) != NULL;
 }

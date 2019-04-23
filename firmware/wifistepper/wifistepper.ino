@@ -370,11 +370,7 @@ void daisycfg_write(daisy_config * const cfg) {
   jsonbuf.clear();
 }
 
-bool queuecfg_read(int qid, queue_t * queue) {
-  if (queue == NULL) {
-    // TODO set error
-    return false;
-  }
+bool queuecfg_read(uint8_t qid) {
   char fname[20] = {0};
   sprintf(fname, FNAME_QUEUECFG, qid);
   File fp = SPIFFS.open(fname, "r");
@@ -386,14 +382,14 @@ bool queuecfg_read(int qid, queue_t * queue) {
   std::unique_ptr<char[]> buf(new char[size]);
   fp.readBytes(buf.get(), size);
   JsonArray& arr = jsonbuf.parseArray(buf.get());
-  cmd_emptyqueue(queue, nextid());
-  cmd_readqueue(arr, queue);
+  cmdq_empty(queue_get(qid), nextid());
+  cmdq_read(arr, 0, qid);
   jsonbuf.clear();
   fp.close();
   return true;
 }
 
-bool queuecfg_write(int qid, queue_t * queue) {
+bool queuecfg_write(uint8_t qid) {
   if (queue == NULL) {
     // TODO set error
     return false;
@@ -401,14 +397,14 @@ bool queuecfg_write(int qid, queue_t * queue) {
   char fname[20] = {0};
   sprintf(fname, FNAME_QUEUECFG, qid);
   JsonArray& arr = jsonbuf.createArray();
-  cmd_writequeue(arr, queue);
+  cmdq_write(arr, queue_get(qid));
   File fp = SPIFFS.open(fname, "w");
   arr.printTo(fp);
   fp.close();
   jsonbuf.clear();
 }
 
-bool queuecfg_reset(int qid) {
+bool queuecfg_reset(uint8_t qid) {
   char fname[20] = {0};
   sprintf(fname, FNAME_QUEUECFG, qid);
   SPIFFS.remove(fname);
@@ -606,7 +602,7 @@ void setup() {
 
     // Load queues
     for (int i = 1; i < QS_SIZE; i++) {
-      queuecfg_read(i, queue_get(i));
+      queuecfg_read(i);
     }
   }
 
@@ -686,7 +682,7 @@ void setup() {
 
   // Run initial queue (queue 1)
   {
-    cmd_copyqueue(Q0, nextid(), queue_get(1));
+    cmdq_copy(Q0, nextid(), queue_get(1));
   }
 }
 

@@ -1,52 +1,28 @@
 #include <Arduino.h>
-#include <ArduinoJson.h>
 
+#include "command.h"
 #include "powerstep01.h"
 #include "wifistepper.h"
 
 //#define CMD_DEBUG
-
-#define QPRE_NONE       (0x00)
-#define QPRE_STATUS     (0x20)
-#define QPRE_NOTBUSY    (0x40)
-#define QPRE_STOPPED    (0x80)
-
-#define CMD_NOP         (QPRE_NONE | 0x00)
-#define CMD_STOP        (QPRE_NONE | 0x01)
-#define CMD_RUN         (QPRE_NONE | 0x02)
-#define CMD_STEPCLK     (QPRE_STOPPED | 0x03)
-#define CMD_MOVE        (QPRE_STOPPED | 0x04)
-#define CMD_GOTO        (QPRE_NOTBUSY | 0x05)
-#define CMD_GOUNTIL     (QPRE_NONE | 0x06)
-#define CMD_RELEASESW   (QPRE_NOTBUSY | 0x07)
-#define CMD_GOHOME      (QPRE_NOTBUSY | 0x08)
-#define CMD_GOMARK      (QPRE_NOTBUSY | 0x09)
-#define CMD_RESETPOS    (QPRE_STOPPED | 0x0A)
-#define CMD_SETPOS      (QPRE_NONE | 0x0B)
-#define CMD_SETMARK     (QPRE_NONE | 0x0C)
-#define CMD_SETCONFIG   (QPRE_STOPPED | 0x0D)
-#define CMD_WAITBUSY    (QPRE_NOTBUSY | 0x0E)
-#define CMD_WAITRUNNING (QPRE_STOPPED | 0x0F)
-#define CMD_WAITMS      (QPRE_NONE | 0x10)
-#define CMD_WAITSWITCH  (QPRE_STATUS | 0x11)
-
 
 #define CTO_UPDATE      (10)
 
 
 extern StaticJsonBuffer<2048> jsonbuf;
 
-#define Q0_SIZE       (2048)
-#define Q_SIZE        (512)
+#define Q0_SIZE       (1024)
+#define Q1_SIZE       (128)
+#define Q2_SIZE       (32)
 
-uint8_t __q0[Q0_SIZE];
-uint8_t __q[QS_SIZE-1][Q_SIZE];
+#define Q0_NUM        (1)
+#define Q1_NUM        (5)
+#define Q2_NUM        (QS_SIZE - Q0_NUM - Q1_NUM)
 
+uint8_t __q0[Q0_NUM][Q0_SIZE];
+uint8_t __q1[Q1_NUM][Q1_SIZE];
+uint8_t __q2[Q2_NUM][Q2_SIZE];
 
-typedef struct ispacked {
-  uint32_t ms;
-  unsigned int started;
-} sketch_waitms_t;
 
 #ifdef CMD_DEBUG
 void cmd_debug(id_t id, uint8_t opcode, const char * msg) {
@@ -65,10 +41,10 @@ void cmd_debug(id_t id, uint8_t opcode, const char * msg) {
 
 void cmd_init() {
   // Initialize queues
-  queue[0] = { .len = 0, .maxlen = Q0_SIZE, .Q = __q0 };
-  for (size_t i = 1; i < QS_SIZE; i++) {
-    queue[i] = { .len = 0, .maxlen = Q_SIZE, .Q = __q[i-1] };
-  }
+  size_t i = 0;
+  for (size_t a = 0; a < Q0_NUM; a++) queue[i++] = { .len = 0, .maxlen = Q0_SIZE, .Q = __q0[a] };
+  for (size_t a = 0; a < Q1_NUM; a++) queue[i++] = { .len = 0, .maxlen = Q1_SIZE, .Q = __q1[a] };
+  for (size_t a = 0; a < Q2_NUM; a++) queue[i++] = { .len = 0, .maxlen = Q2_SIZE, .Q = __q2[a] };
 }
 
 void cmd_loop(unsigned long now) {
@@ -224,9 +200,9 @@ void cmd_loop(unsigned long now) {
         break;
       }
       case CMD_WAITSWITCH: {
-        cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)Qcmd;
+        cmd_waitsw_t * cmd = (cmd_waitsw_t *)Qcmd;
         if (cmd->state != state.motor.status.user_switch) return;
-        consume += sizeof(cmd_waitswitch_t);
+        consume += sizeof(cmd_waitsw_t);
         break;
       }
     }
@@ -375,31 +351,9 @@ bool cmd_waitms(queue_t * queue, id_t id, uint32_t ms) {
 }
 
 bool cmd_waitswitch(queue_t * queue, id_t id, bool state) {
-  cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)cmd_alloc(queue, id, CMD_WAITSWITCH, sizeof(cmd_waitswitch_t));
+  cmd_waitsw_t * cmd = (cmd_waitsw_t *)cmd_alloc(queue, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
   if (cmd != NULL) *cmd = { .state = state };
   return cmd != NULL;
-}
-
-
-
-bool cmd_emptyqueue(queue_t * queue, id_t id) {
-  if (queue == NULL) {
-    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
-    return false;
-  }
-  queue->len = 0;
-  return true;
-}
-
-bool cmd_copyqueue(queue_t * queue, id_t id, queue_t * src) {
-  if (src == NULL) {
-    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
-    return false;
-  }
-  void * buf = cmd_alloc(queue, id, src->len);
-  if (buf == NULL) return false;
-  memcpy(buf, src->Q, src->len);
-  return true;
 }
 
 bool cmd_estop(id_t id, bool hiz, bool soft) {
@@ -410,188 +364,22 @@ bool cmd_estop(id_t id, bool hiz, bool soft) {
     if (soft)   ps_softstop();
     else        ps_hardstop();
   }
-  return cmd_emptyqueue(Q0, id);
+  return cmdq_empty(Q0, id);
 }
 
 void cmd_clearerror() {
   state.motor.status = ps_getstatus(true);
 }
 
-void cmd_readqueue(JsonArray& arr, queue_t * queue) {
-  for (auto value : arr) {
-    JsonObject& entry = value.as<JsonObject>();
-    String type = entry["type"].as<String>();
-    id_t id = entry["id"].as<id_t>();
-    if (type == "nop") {
-      cmd_nop(queue, id);
-    } else if (type == "stop") {
-      cmd_stop(queue, id, entry["hiz"].as<bool>(), entry["soft"].as<bool>());
-    } else if (type == "run") {
-      cmd_run(queue, id, parse_direction(entry["dir"].as<String>(), FWD), entry["stepss"].as<float>());
-    } else if (type == "stepclock") {
-      cmd_stepclock(queue, id, parse_direction(entry["dir"].as<String>(), FWD));
-    } else if (type == "move") {
-      cmd_move(queue, id, parse_direction(entry["dir"].as<String>(), FWD), entry["microsteps"].as<uint32_t>());
-    } else if (type == "goto") {
-      cmd_goto(queue, id, entry["pos"].as<int32_t>(), entry["hasdir"].as<bool>(), parse_direction(entry["dir"].as<String>(), FWD));
-    } else if (type == "gountil") {
-      cmd_gountil(queue, id, parse_action(entry["action"].as<String>(), POS_RESET), parse_direction(entry["dir"].as<String>(), FWD), entry["stepss"].as<float>());
-    } else if (type == "releasesw") {
-      cmd_releasesw(queue, id, parse_action(entry["action"].as<String>(), POS_RESET), parse_direction(entry["dir"].as<String>(), FWD));
-    } else if (type == "gohome") {
-      cmd_gohome(queue, id);
-    } else if (type == "gomark") {
-      cmd_gomark(queue, id);
-    } else if (type == "resetpos") {
-      cmd_resetpos(queue, id);
-    } else if (type == "setpos") {
-      cmd_setpos(queue, id, entry["pos"].as<int32_t>());
-    } else if (type == "setmark") {
-      cmd_setmark(queue, id, entry["mark"].as<int32_t>());
-    } else if (type == "setconfig") {
-      cmd_setconfig(queue, id, entry["config"].as<char *>());
-    } else if (type == "waitbusy") {
-      cmd_waitbusy(queue, id);
-    } else if (type == "waitrunning") {
-      cmd_waitrunning(queue, id);
-    } else if (type == "waitms") {
-      cmd_waitms(queue, id, entry["ms"].as<uint32_t>());
-    } else if (type == "waitswitch") {
-      cmd_waitswitch(queue, id, entry["state"].as<bool>());
-    }
+bool cmdq_copy(queue_t * queue, id_t id, queue_t * src) {
+  if (src == NULL) {
+    seterror(ESUB_CMD, id, ETYPE_NOQUEUE);
+    return false;
   }
+  void * buf = cmd_alloc(queue, id, src->len);
+  if (buf == NULL) return false;
+  memcpy(buf, src->Q, src->len);
+  return true;
 }
 
-void cmd_writequeue(JsonArray& arr, queue_t * queue) {
-  size_t index = 0;
-  while (index < queue->len) {
-    cmd_head_t * head = (cmd_head_t *)&(queue->Q[index]);
-    void * Qcmd = (void *)&(queue->Q[index + sizeof(cmd_head_t)]);
-
-    JsonObject& entry = arr.createNestedObject();
-    entry["id"] = head->id;
-    
-    size_t consume = sizeof(cmd_head_t);
-    switch (head->opcode) {
-      case CMD_NOP: {
-        entry["type"] = "nop";
-        break;
-      }
-      case CMD_STOP: {
-        cmd_stop_t * cmd = (cmd_stop_t *)Qcmd;
-        entry["type"] = "stop";
-        entry["hiz"] = cmd->hiz;
-        entry["soft"] = cmd->soft;
-        consume += sizeof(cmd_stop_t);
-        break;
-      }
-      case CMD_RUN: {
-        cmd_run_t * cmd = (cmd_run_t *)Qcmd;
-        entry["type"] = "run";
-        entry["dir"] = json_serialize(cmd->dir);
-        entry["stepss"] = cmd->stepss;
-        consume += sizeof(cmd_run_t);
-        break;
-      }
-      case CMD_STEPCLK: {
-        cmd_stepclk_t * cmd = (cmd_stepclk_t *)Qcmd;
-        entry["type"] = "stepclock";
-        entry["dir"] = json_serialize(cmd->dir);
-        consume += sizeof(cmd_stepclk_t);
-        break;
-      }
-      case CMD_MOVE: {
-        cmd_move_t * cmd = (cmd_move_t *)Qcmd;
-        entry["type"] = "move";
-        entry["dir"] = json_serialize(cmd->dir);
-        entry["microsteps"] = cmd->microsteps;
-        consume += sizeof(cmd_move_t);
-        break;
-      }
-      case CMD_GOTO: {
-        cmd_goto_t * cmd = (cmd_goto_t *)Qcmd;
-        entry["type"] = "goto";
-        entry["pos"] = cmd->pos;
-        entry["hasdir"] = cmd->hasdir;
-        entry["dir"] = json_serialize(cmd->dir);
-        consume += sizeof(cmd_goto_t);
-        break;
-      }
-      case CMD_GOUNTIL: {
-        cmd_gountil_t * cmd = (cmd_gountil_t *)Qcmd;
-        entry["type"] = "gountil";
-        entry["action"] = json_serialize(cmd->action);
-        entry["dir"] = json_serialize(cmd->dir);
-        entry["stepss"] = cmd->stepss;
-        consume += sizeof(cmd_gountil_t);
-        break;
-      }
-      case CMD_RELEASESW: {
-        cmd_releasesw_t * cmd = (cmd_releasesw_t *)Qcmd;
-        entry["type"] = "releasesw";
-        entry["action"] = json_serialize(cmd->action);
-        entry["dir"] = json_serialize(cmd->dir);
-        consume += sizeof(cmd_releasesw_t);
-        break;
-      }
-      case CMD_GOHOME: {
-        entry["type"] = "gohome";
-        break;
-      }
-      case CMD_GOMARK: {
-        entry["type"] = "gomark";
-        break;
-      }
-      case CMD_RESETPOS: {
-        entry["type"] = "resetpos";
-        break;
-      }
-      case CMD_SETPOS: {
-        cmd_setpos_t * cmd = (cmd_setpos_t *)Qcmd;
-        entry["type"] = "setpos";
-        entry["pos"] = cmd->pos;
-        consume += sizeof(cmd_setpos_t);
-        break;
-      }
-      case CMD_SETMARK: {
-        cmd_setpos_t * cmd = (cmd_setpos_t *)Qcmd;
-        entry["type"] = "setmark";
-        entry["mark"] = cmd->pos;
-        consume += sizeof(cmd_setpos_t);
-        break;
-      }
-      case CMD_SETCONFIG: {
-        const char * data = (const char *)Qcmd;
-        size_t ldata = strlen(data);
-        entry["type"] = "setconfig";
-        entry["config"] = data;
-        consume += ldata + 1;
-        break;
-      }
-      case CMD_WAITBUSY: {
-        entry["type"] = "waitbusy";
-        break;
-      }
-      case CMD_WAITRUNNING: {
-        entry["type"] = "waitrunning";
-        break;
-      }
-      case CMD_WAITMS: {
-        sketch_waitms_t * sketch = (sketch_waitms_t *)Qcmd;
-        entry["type"] = "waitms";
-        entry["ms"] = sketch->ms;
-        consume += sizeof(sketch_waitms_t);
-        break;
-      }
-      case CMD_WAITSWITCH: {
-        cmd_waitswitch_t * cmd = (cmd_waitswitch_t *)Qcmd;
-        entry["type"] = "waitswitch";
-        entry["state"] = cmd->state;
-        consume += sizeof(cmd_waitswitch_t);
-        break;
-      }
-    }
-    index += consume;
-  }
-}
 

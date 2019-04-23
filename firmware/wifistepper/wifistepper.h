@@ -7,6 +7,7 @@
 
 #define PRODUCT           "Wi-Fi Stepper"
 #define MODEL             "wsx100"
+#define SWBRANCH          "stable"
 #define VERSION           (1)
 
 #define RESET_PIN         (5)
@@ -44,7 +45,7 @@ typedef struct {
   uint8_t * Q;
 } queue_t;
 
-#define QS_SIZE       (6)
+#define QS_SIZE       (16)
 #define Q0            (&queue[0])
 
 extern queue_t queue[QS_SIZE];
@@ -374,12 +375,12 @@ typedef struct ispacked {
 } cmd_setpos_t;
 
 typedef struct ispacked {
-  uint32_t millis;
+  uint32_t ms;
 } cmd_waitms_t;
 
 typedef struct ispacked {
   bool state;
-} cmd_waitswitch_t;
+} cmd_waitsw_t;
 
 
 void cmd_init();
@@ -406,12 +407,15 @@ bool cmd_waitrunning(queue_t * q, id_t id);
 bool cmd_waitms(queue_t * q, id_t id, uint32_t ms);
 bool cmd_waitswitch(queue_t * q, id_t id, bool state);
 
-bool cmd_emptyqueue(queue_t * q, id_t id);
-bool cmd_copyqueue(queue_t * q, id_t id, queue_t * src);
 bool cmd_estop(id_t id, bool hiz, bool soft);
 void cmd_clearerror();
-void cmd_readqueue(JsonArray& arr, queue_t * queue);
-void cmd_writequeue(JsonArray& arr, queue_t * queue);
+
+void cmdq_read(JsonArray& arr, uint8_t target, uint8_t queue);
+void cmdq_read(JsonArray& arr, uint8_t queue);
+void cmdq_read(JsonArray& arr);
+void cmdq_write(JsonArray& arr, queue_t * queue);
+bool cmdq_empty(queue_t * q, id_t id);
+bool cmdq_copy(queue_t * q, id_t id, queue_t * src);
 
 
 void daisy_init();
@@ -465,9 +469,9 @@ void servicecfg_write(service_config * const cfg);
 void daisycfg_read(daisy_config * cfg);
 void daisycfg_write(daisy_config * const cfg);
 
-bool queuecfg_read(int qid, queue_t * queue);
-bool queuecfg_write(int qid, queue_t * queue);
-bool queuecfg_reset(int qid);
+bool queuecfg_read(uint8_t qid);
+bool queuecfg_write(uint8_t qid);
+bool queuecfg_reset(uint8_t qid);
 
 void motorcfg_read(motor_config * cfg);
 void motorcfg_write(motor_config * const cfg);
@@ -500,10 +504,10 @@ static inline bool m_waitbusy(uint8_t address, uint8_t q, id_t id) { if (address
 static inline bool m_waitrunning(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(address, q, id); } }
 static inline bool m_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) { if (address == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(address, q, id, ms); } }
 static inline bool m_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) { if (address == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(address, q, id, state); } }
-static inline bool m_emptyqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_emptyqueue(queue_get(q), id); } else { return daisy_emptyqueue(address, q, id); } }
-static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) { if (address == 0) { return cmd_copyqueue(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(address, q, id, src); } }
-static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q, queue_get(q)); } else { return daisy_savequeue(address, q, id); } }
-static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q, queue_get(q)); } else { return daisy_loadqueue(address, q, id); } }
+static inline bool m_emptyqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmdq_empty(queue_get(q), id); } else { return daisy_emptyqueue(address, q, id); } }
+static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) { if (address == 0) { return cmdq_copy(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(address, q, id, src); } }
+static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q); } else { return daisy_savequeue(address, q, id); } }
+static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q); } else { return daisy_loadqueue(address, q, id); } }
 static inline bool m_estop(uint8_t address, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(address, id, hiz, soft); } }
 
 // ECC functions
