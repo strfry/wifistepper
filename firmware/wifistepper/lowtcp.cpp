@@ -44,10 +44,14 @@ typedef struct ispacked {
 #define TYPE_MAX          TYPE_CRYPTO
 
 typedef struct ispacked {
+  char product[LEN_PRODUCT];
+  char model[LEN_INFO];
+  char swbranch[LEN_INFO];
+  uint16_t version;
+  char hostname[LEN_HOSTNAME];
+  uint32_t chipid;
   bool std_enabled;
   bool crypto_enabled;
-  uint32_t chipid;
-  char hostname[LEN_HOSTNAME];
 } type_hello;
 
 #define OPCODE_ESTOP        (0x00)
@@ -202,16 +206,39 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
   }
 }
 
+static void lc_replyack(size_t client, uint8_t opcode, uint8_t address, uint8_t queue, uint16_t packetid, id_t id) {
+  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + sizeof(id_t)] = {0};
+  lc_preamble * preamble = (lc_preamble *)&packet[0];
+  lc_header * header = (lc_header *)&preamble[1];
+  id_t * ackid = (id_t *)&header[1];
+  lc_packpreamble(preamble, TYPE_STD);
+  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .address = address, .queue = queue, .packetid = packetid, .length = sizeof(id_t)};
+  *ackid = id;
+  lc_send(client, packet, sizeof(packet));
+}
+
 #define lc_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_LC, 0, ETYPE_MSG, client); return; } })
 
 static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   lowtcp_debug("CMD received", opcode, subcode, address, queue, packetid);
+
+  // TODO check if subcode == CMD
+
+  // Check if client initialized
+  if (!lowtcp_client[client].initialized) {
+    lowtcp_debug("ERR client not initialized");
+    seterror(ESUB_LC, 0, ETYPE_MSG, client);
+    return;
+  }
+
+  id_t id = nextid();
   switch (opcode) {
     case OPCODE_ESTOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       lowtcp_debug("CMD estop", cmd->hiz, cmd->soft);
-      m_estop(address, nextid(), cmd->hiz, cmd->soft);
+      m_estop(address, id, cmd->hiz, cmd->soft);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_SETCONFIG: {
@@ -220,16 +247,18 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
         return;
       }
       lowtcp_debug("CMD setconfig");
-      m_setconfig(address, queue, nextid(), (const char *)data);
+      m_setconfig(address, queue, id, (const char *)data);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GETCONFIG: {
       break;
     }
     case OPCODE_LASTWILL: {
-      lc_expectlen(sizeof(uint8_t));
-      lowtcp_debug("CMD lastwill", data[0]);
-      lowtcp_client[client].lastwill = data[0];
+      lc_expectlen(0);
+      lowtcp_debug("CMD lastwill", queue);
+      lowtcp_client[client].lastwill = queue;
+      lc_replyack(client, opcode, 0, queue, packetid, id);
       break;
     }
     
@@ -237,127 +266,146 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       lowtcp_debug("CMD stop", cmd->hiz, cmd->soft);
-      m_stop(address, queue, nextid(), cmd->hiz, cmd->soft);
+      m_stop(address, queue, id, cmd->hiz, cmd->soft);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_RUN: {
       lc_expectlen(sizeof(cmd_run_t));
       cmd_run_t * cmd = (cmd_run_t *)data;
       lowtcp_debug("CMD run", cmd->dir, cmd->stepss);
-      m_run(address, queue, nextid(), cmd->dir, cmd->stepss);
+      m_run(address, queue, id, cmd->dir, cmd->stepss);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_STEPCLOCK: {
       lc_expectlen(sizeof(cmd_stepclk_t));
       cmd_stepclk_t * cmd = (cmd_stepclk_t *)data;
       lowtcp_debug("CMD stepclock", cmd->dir);
-      m_stepclock(address, queue, nextid(), cmd->dir);
+      m_stepclock(address, queue, id, cmd->dir);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_MOVE: {
       lc_expectlen(sizeof(cmd_move_t));
       cmd_move_t * cmd = (cmd_move_t *)data;
       lowtcp_debug("CMD move", cmd->dir, (float)cmd->microsteps);
-      m_move(address, queue, nextid(), cmd->dir, cmd->microsteps);
+      m_move(address, queue, id, cmd->dir, cmd->microsteps);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GOTO: {
       lc_expectlen(sizeof(cmd_goto_t));
       cmd_goto_t * cmd = (cmd_goto_t *)data;
       lowtcp_debug("CMD goto", cmd->pos, cmd->hasdir, cmd->dir);
-      m_goto(address, queue, nextid(), cmd->pos, cmd->hasdir, cmd->dir);
+      m_goto(address, queue, id, cmd->pos, cmd->hasdir, cmd->dir);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GOUNTIL: {
       lc_expectlen(sizeof(cmd_gountil_t));
       cmd_gountil_t * cmd = (cmd_gountil_t *)data;
       lowtcp_debug("CMD gountil", cmd->action, cmd->dir, cmd->stepss);
-      m_gountil(address, queue, nextid(), cmd->action, cmd->dir, cmd->stepss);
+      m_gountil(address, queue, id, cmd->action, cmd->dir, cmd->stepss);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_RELEASESW: {
       lc_expectlen(sizeof(cmd_releasesw_t));
       cmd_releasesw_t * cmd = (cmd_releasesw_t *)data;
       lowtcp_debug("CMD releasesw", cmd->action, cmd->dir);
-      m_releasesw(address, queue, nextid(), cmd->action, cmd->dir);
+      m_releasesw(address, queue, id, cmd->action, cmd->dir);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GOHOME: {
       lc_expectlen(0);
       lowtcp_debug("CMD gohome");
-      m_gohome(address, queue, nextid());
+      m_gohome(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GOMARK: {
       lc_expectlen(0);
       lowtcp_debug("CMD gomark");
-      m_gomark(address, queue, nextid());
+      m_gomark(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_RESETPOS: {
       lc_expectlen(0);
       lowtcp_debug("CMD resetpos");
-      m_resetpos(address, queue, nextid());
+      m_resetpos(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_SETPOS: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
       lowtcp_debug("CMD setpos", cmd->pos);
-      m_setpos(address, queue, nextid(), cmd->pos);
+      m_setpos(address, queue, id, cmd->pos);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_SETMARK: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
       lowtcp_debug("CMD setpos", cmd->pos);
-      m_setmark(address, queue, nextid(), cmd->pos);
+      m_setmark(address, queue, id, cmd->pos);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
       lowtcp_debug("CMD waitbusy");
-      m_waitbusy(address, queue, nextid());
+      m_waitbusy(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_WAITRUNNING: {
       lc_expectlen(0);
       lowtcp_debug("CMD waitrunning");
-      m_waitrunning(address, queue, nextid());
+      m_waitrunning(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_WAITMS: {
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
       lowtcp_debug("CMD waitms", cmd->ms);
-      m_waitms(address, queue, nextid(), cmd->ms);
+      m_waitms(address, queue, id, cmd->ms);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_WAITSWITCH: {
       lc_expectlen(sizeof(cmd_waitsw_t));
       cmd_waitsw_t * cmd = (cmd_waitsw_t *)data;
       lowtcp_debug("CMD waitswitch", cmd->state);
-      m_waitswitch(address, queue, nextid(), cmd->state);
+      m_waitswitch(address, queue, id, cmd->state);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
 
     case OPCODE_EMPTYQUEUE: {
       lc_expectlen(0);
       lowtcp_debug("CMD emptyqueue");
-      m_emptyqueue(address, queue, nextid());
+      m_emptyqueue(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_SAVEQUEUE: {
       lc_expectlen(0);
       lowtcp_debug("CMD savequeue");
-      m_savequeue(address, queue, nextid());
+      m_savequeue(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_LOADQUEUE: {
       lc_expectlen(0);
       lowtcp_debug("CMD loadqueue");
-      m_loadqueue(address, queue, nextid());
+      m_loadqueue(address, queue, id);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_ADDQUEUE: {
@@ -365,15 +413,16 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
     }
     case OPCODE_COPYQUEUE: {
       lc_expectlen(sizeof(uint8_t));
-      uint8_t * src = data;
-      lowtcp_debug("CMD copyqueue", *src);
-      m_copyqueue(address, queue, nextid(), *src);
+      lowtcp_debug("CMD copyqueue", data[0]);
+      m_copyqueue(address, queue, id, data[0]);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_RUNQUEUE: {
       lc_expectlen(0);
       lowtcp_debug("CMD runqueue");
-      m_copyqueue(address, 0, nextid(), queue);
+      m_copyqueue(address, 0, id, queue);
+      lc_replyack(client, opcode, address, queue, packetid, id);
       break;
     }
     case OPCODE_GETQUEUE: {
@@ -405,10 +454,14 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       // Set reply payload
       {
         type_hello * payload = (type_hello *)(&reply[sizeof(lc_preamble)]);
+        strncpy(payload->product, PRODUCT, LEN_PRODUCT-1);
+        strncpy(payload->model, MODEL, LEN_INFO-1);
+        strncpy(payload->swbranch, SWBRANCH, LEN_INFO-1);
+        payload->version = VERSION;
+        strncpy(payload->hostname, config.service.hostname, LEN_HOSTNAME-1);
+        payload->chipid = state.wifi.chipid;
         payload->std_enabled = true;    // TODO - set to correct value
         payload->crypto_enabled = true; // TODO - set to correct value
-        payload->chipid = state.wifi.chipid;
-        strncpy(payload->hostname, config.service.hostname, LEN_HOSTNAME-1);
       }
       
       lowtcp_client[client].initialized = true;
@@ -431,6 +484,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
         
         lowtcp_client[client].lastwill = 0;
       }
+      lc_send(client, data, len);
       yield();
       //lowtcp_client[client].sock.stop();
       lowtcp_client[client].active = false;

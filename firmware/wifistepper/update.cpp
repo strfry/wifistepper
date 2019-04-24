@@ -24,7 +24,9 @@ std::vector<String> update_files;
 
 typedef struct ispacked {
   uint16_t magic;
-  char model[36];
+  char product[LEN_PRODUCT];
+  char model[LEN_INFO];
+  char swbranch[LEN_INFO];
   uint16_t version;
   char builddate[11];
 } update_header_t;

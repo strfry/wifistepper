@@ -30,6 +30,8 @@
 #define AP_IP             (IPAddress(192, 168, 4, 1))
 #define AP_MASK           (IPAddress(255, 255, 255, 0))
 
+#define LEN_PRODUCT       (36)
+#define LEN_INFO          LEN_PRODUCT
 #define LEN_HOSTNAME      (24)
 #define LEN_USERNAME      (64)
 #define LEN_URL           (256)
@@ -276,6 +278,10 @@ typedef struct {
 } service_sketch;
 
 typedef struct ispacked {
+  char product[LEN_PRODUCT];
+  char model[LEN_INFO];
+  char swbranch[LEN_INFO];
+  uint16_t version;
   io_config io;
   motor_config motor;
 } daisy_slaveconfig;
