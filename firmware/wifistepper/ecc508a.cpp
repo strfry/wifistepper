@@ -1,20 +1,23 @@
 #include <Arduino.h>
 #include <Wire.h>
-//#include <climits>
 
 #include "wifistepper.h"
 #include "ecc508a.h"
 #include "sha256.h"
 
-#define ECC_ADDR        (0x60)
-#define ECC_PIN_SDA     (2)
-#define ECC_PIN_SCL     (5)
-#define ECC_QMAX        (1024)
+#define ECC_DEBUG
 
-#define ECMD_READCFG          (0x01)
-#define ECMD_CHECKCFG         (0x02)
-#define ECMD_RAND             (0x03)
+#define ECC_ADDR              (0x60)
+#define ECC_PIN_SDA           (2)
+#define ECC_PIN_SCL           (5)
+#define ECC_QMAX              (1024)
+#define ECC_SIZE_RANDPOOL     (4)
 
+#define ECMD_WAKE             (0x01)
+#define ECMD_READCFG          (0x02)
+#define ECMD_CHECKCFG         (0x03)
+#define ECMD_READVERSION      (0x04)
+#define ECMD_RAND             (0x05)
 #define ECMD_HMAC_START       (0x11)
 #define ECMD_HMAC_UPDATE      (0x12)
 #define ECMD_HMAC_ENDCMD      (0x13)
@@ -25,12 +28,17 @@
 #define ECMD_PROV_LOCK        (0x41)
 #define ECMD_PROV_WRITECFG    (0x42)
 #define ECMD_PROV_WRITEDATA   (0x43)
+#define ECMD_MARK_PROV_SUCCESS  (0x51)
+#define ECMD_MARK_SET_SUCCESS   (0x52)
 
 #define RXLEN_OK              (0x04)
+#define RXLEN_WAKE            (0x04)
 #define RXLEN_READCFG         (0x23)
+#define RXLEN_READVERSION     (0x23)
 #define RXLEN_RAND            (0x23)
 #define RXLEN_HMAC            (0x23)
 
+#define WAIT_WAKE             (1), (2)
 #define WAIT_CHECK            (0), (0)
 #define WAIT_READ             (1), (2)
 #define WAIT_WRITE            (7), (26)
@@ -41,14 +49,18 @@
 #define WAIT_GENDIG           (5), (11)
 #define WAIT_HMAC             (7), (9)
 
-
 uint8_t ecc_Q[ECC_QMAX] = {0};
 size_t ecc_Qlen = 0;
+uint32_t ecc_randpool[ECC_SIZE_RANDPOOL] = {0};
+bool ecc_versionok = false;
 
-uint8_t ecc_configzone[128] = {0};
-uint8_t ecc_configzone_read = 0;
+union {
+  uint8_t bytes[128];
+  ecc_configzone_t bits;
+} ecc_config;
+uint8_t ecc_config_read = 0;
 
-
+#ifdef ECC_DEBUG
 void print_config(ecc_configzone_t * cfg) {
   Serial.println("ECC Config zone:");
   Serial.print("SN 0: 0x"); Serial.println(cfg->sn_0, HEX);
@@ -128,12 +140,12 @@ void print_packet(const char * name, uint8_t * p, size_t len) {
   }
 }
 
-bool _ecc_check(uint8_t * data, size_t len);
+bool ecc_check(uint8_t * data, size_t len);
 void print_check(uint8_t * p, size_t len) {
   Serial.print("LENGTH=");
   Serial.println(len);
   Serial.print("CRC=");
-  Serial.println(_ecc_check(p, len));
+  Serial.println(ecc_check(p, len));
 }
 
 void print_sha(const char * name, uint8_t * sha) {
@@ -142,7 +154,18 @@ void print_sha(const char * name, uint8_t * sha) {
   Serial.println();
 }
 
-uint16_t _ecc_crc16(uint8_t * data, uint8_t len, uint8_t * crc) {
+void print_error(const char * msg) {
+  Serial.print("ERROR: "); Serial.println(msg);
+}
+#else
+#define print_config(...)
+#define print_packet(...)
+#define print_check(...)
+#define print_sha(...)
+#define print_error(...)
+#endif
+
+uint16_t ecc_crc16(uint8_t * data, uint8_t len, uint8_t * crc) {
   uint8_t counter;
   uint16_t crc_register = 0;
   uint16_t polynom = 0x8005;
@@ -161,24 +184,24 @@ uint16_t _ecc_crc16(uint8_t * data, uint8_t len, uint8_t * crc) {
   crc[1] = (uint8_t) (crc_register >> 8);
 }
 
-void _ecc_pack(uint8_t * data, size_t len) {
+void ecc_pack(uint8_t * data, size_t len) {
   if (len == 0 || data == NULL) return;
   data[0] = (uint8_t)len;
-  _ecc_crc16(data, len-2, &data[len-2]);
+  ecc_crc16(data, len-2, &data[len-2]);
 }
 
-bool _ecc_check(uint8_t * data, size_t len) {
+bool ecc_check(uint8_t * data, size_t len) {
   if (len == 0 || data == NULL) return false;
   uint8_t crc[2] = {0, 0};
-  _ecc_crc16(data, len-2, crc);
+  ecc_crc16(data, len-2, crc);
   return data[len-2] == crc[0] && data[len-1] == crc[1];
 }
 
-bool _ecc_checkok(uint8_t * data, size_t len) {
-  return len == 4 && _ecc_check(data, len) && data[1] == 0x0;
+bool ecc_checkok(uint8_t * data, size_t len) {
+  return len == 4 && ecc_check(data, len) && data[1] == 0x0;
 }
 
-void * _ecc_alloc(uint8_t cmd, uint8_t wait_typ, uint8_t wait_max, uint8_t rxlen, uint8_t datalen) {
+void * ecc_alloc(uint8_t cmd, uint8_t wait_typ, uint8_t wait_max, uint8_t rxlen, uint8_t datalen) {
   if ((ECC_QMAX - ecc_Qlen) < datalen) {
     // Not enough memory in queue
     // TODO - set error
@@ -192,26 +215,14 @@ void * _ecc_alloc(uint8_t cmd, uint8_t wait_typ, uint8_t wait_max, uint8_t rxlen
   return &C[1];
 }
 
-size_t _ecc_read(uint8_t * data, size_t len) {
+size_t ecc_read(uint8_t * data, size_t len) {
   size_t r = 0;
   Wire.requestFrom(ECC_ADDR, len);
   while(Wire.available()) data[r++] = Wire.read();
   return r;
 }
 
-/*
-size_t _ecc_waitread(uint8_t * data, size_t len, unsigned int typ_us, unsigned long max_ms) {
-  unsigned long start = millis();
-  delayMicroseconds(typ_us);
-  size_t rlen = 0;
-  do {
-    rlen = _ecc_read(data, len);
-  } while (rlen == 0 && (millis() - start) < max_ms);
-  return rlen;
-}
-*/
-
-void _ecc_write(uint8_t mode, uint8_t * data, size_t len) {
+void ecc_write(uint8_t mode, uint8_t * data, size_t len) {
   Wire.beginTransmission(ECC_ADDR);
   Wire.write(mode);
   if (len > 0)
@@ -219,19 +230,37 @@ void _ecc_write(uint8_t mode, uint8_t * data, size_t len) {
   Wire.endTransmission();
 }
 
-void _ecc_writepacket(uint8_t * data, size_t len) {
-  _ecc_pack(data, len);
-  _ecc_write(0x0, NULL, 0);
-  _ecc_write(0x3, data, len);
+void ecc_writepacket(uint8_t * data, size_t len) {
+  ecc_pack(data, len);
+  ecc_write(0x0, NULL, 0);
+  ecc_write(0x3, data, len);
 }
 
 void ecc_init() {
   Wire.begin(ECC_PIN_SDA, ECC_PIN_SCL);
+
+  // Wake up
+  ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+
+  // Read config
+  memset(&ecc_config, 0, sizeof(ecc_config));
+  uint8_t * r1 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r2 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r3 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r4 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  *r1 = 0; *r2 = 1; *r3 = 2; *r4 = 3;
+  ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
+
+  // Read version
+  ecc_alloc(ECMD_READVERSION, WAIT_READ, RXLEN_READVERSION, 0);
+
+  // Read random
+  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
 }
 
 void ecc_loop(unsigned long now) {
   // Check if queue has commands
-  if (ecc_Qlen == 0) return;
+  if (ecc_Qlen == 0 || state.service.crypto.fault) return;
 
   ecc_cmd_t * C = (ecc_cmd_t *)&ecc_Q[0];
   uint8_t * data = (uint8_t *)&C[1];
@@ -242,15 +271,15 @@ void ecc_loop(unsigned long now) {
     size_t consume = sizeof(ecc_cmd_t) + C->datalen;
 
     uint8_t reply[C->rxlen];
-    size_t bytes = _ecc_read(reply, C->rxlen);
+    size_t bytes = ecc_read(reply, C->rxlen);
     
     if (bytes == 0) {
       // No bytes read, check if expired
       if (timesince(C->started, now) > C->wait_max) {
         // Timeout waiting for reply
-        // TODO - error
         // TODO - reset i2c bus
-        Serial.println("ERROR: timeout waiting for reply");
+        print_error("Timeout waiting for reply");
+        state.service.crypto.fault = true;
         
       } else {
         // More time to wait for reply
@@ -259,11 +288,11 @@ void ecc_loop(unsigned long now) {
       
     } else if (bytes == C->rxlen) {
       // All reply bytes received
-      if (_ecc_check(reply, bytes)) {
+      if (ecc_check(reply, bytes)) {
         // Checksum passed
         switch (C->cmd) {
-          case ECMD_RAND: {
-            print_packet("Random REPLY", reply, C->rxlen);
+          case ECMD_WAKE: {
+            print_packet("Wake REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
             break;
           }
@@ -271,8 +300,24 @@ void ecc_loop(unsigned long now) {
             print_packet("ReadConfig REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
             size_t off = data[0] * 0x20;
-            memcpy(&ecc_configzone[off], &reply[1], 32);
-            ecc_configzone_read += 1;
+            memcpy(&ecc_config.bytes[off], &reply[1], 32);
+            ecc_config_read += 1;
+            break;
+          }
+          case ECMD_READVERSION: {
+            print_packet("ReadVersion REPLY", reply, C->rxlen);
+            print_check(reply, C->rxlen);
+            if (strcmp((char *)&reply[1], ECC_VERSION) == 0) {
+              // Version written in slot 0 matches
+              ecc_versionok = true;
+              state.service.crypto.available = true;
+            }
+            break;
+          }
+          case ECMD_RAND: {
+            print_packet("Random REPLY", reply, C->rxlen);
+            print_check(reply, C->rxlen);
+            memcpy(ecc_randpool, &reply[1], sizeof(ecc_randpool));
             break;
           }
 
@@ -280,9 +325,8 @@ void ecc_loop(unsigned long now) {
           case ECMD_HMAC_UPDATE: {
             print_packet("Hmac Start/Update REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
-            if (!_ecc_checkok(reply, C->rxlen)) {
-              // TODO - error
-              Serial.println("ERROR: Bad reply packet");
+            if (!ecc_checkok(reply, C->rxlen)) {
+              print_error("Bad reply packet");
             }
             break;
           }
@@ -290,28 +334,19 @@ void ecc_loop(unsigned long now) {
             print_packet("Hmac End REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
             print_sha("Hmac Result", &reply[1]);
+            // TODO - check if passed
             break;
           }
 
           case ECMD_SET_NONCE:
-          case ECMD_SET_GENDIG: {
-            print_packet("Set Nonce/GenDig REPLY", reply, C->rxlen);
-            print_check(reply, C->rxlen);
-            if (!_ecc_checkok(reply, C->rxlen)) {
-              // TODO - error
-              Serial.println("ERROR: Bad reply packet");
-            }
-            break;
-          }
-
+          case ECMD_SET_GENDIG:
           case ECMD_SET_WRITEENC: {
             print_packet("Set WriteEnc REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
-            if (!_ecc_checkok(reply, C->rxlen)) {
-              // TODO - error
-              Serial.println("ERROR: Bad reply packet");
+            if (!ecc_checkok(reply, C->rxlen)) {
+              print_error("Bad reply packet");
+              sketch.service.crypto.status.setpassword = ECC_FAILURE;
             }
-            // TODO set global flag and restart
             break;
           }
 
@@ -320,25 +355,25 @@ void ecc_loop(unsigned long now) {
           case ECMD_PROV_WRITEDATA: {
             print_packet("Provision Lock/WriteConfig/WriteData REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
-            if (!_ecc_checkok(reply, C->rxlen)) {
-              // TODO - error
-              Serial.println("ERROR: Bad reply packet");
+            if (!ecc_checkok(reply, C->rxlen)) {
+              print_error("Bad reply packet");
+              sketch.service.crypto.status.provision = ECC_FAILURE;
             }
             break;
           }
         }
 
       } else {
-        // Bad checksum
-        // TODO - error (retransmit?)
-        print_packet("ERROR: bad checksum for REPLY", reply, C->rxlen);
+        // Bad checksum, attempt retransmit
+        print_error("Bad checksum for REPLY");
+        print_packet("REPLY packet with bad checksum", reply, C->rxlen);
+        C->started = 0;
       }
       
     } else {
       // Bad number of bytes received, error condition!
-      // TODO - error
       // TODO - reset i2c bus
-      Serial.println("ERROR: bad number of bytes received.");
+      state.service.crypto.fault = true;
     }
 
     if (consume > 0) {
@@ -352,31 +387,43 @@ void ecc_loop(unsigned long now) {
     size_t consume = 0;
     
     switch (C->cmd) {
-      case ECMD_RAND: {
-        uint8_t rnd[] = {0, 0x1B, 0x0, 0x0, 0x0, 0, 0};
-        _ecc_writepacket(rnd, sizeof(rnd));
+      case ECMD_WAKE: {
+        ecc_write(0x0, NULL, 0);
         break;
       }
       case ECMD_READCFG: {
         uint8_t readcfg[] = {0, 0x02, 0x80, data[0] << 3, 0x0, 0, 0};
-        _ecc_writepacket(readcfg, sizeof(readcfg));
+        ecc_writepacket(readcfg, sizeof(readcfg));
         break;
       }
       case ECMD_CHECKCFG: {
-        for (size_t i = 0; i < 0x7F; i++) {
-          Serial.print("CONFIG (0x");
-          Serial.print(i, HEX);
-          Serial.print("): 0x");
-          Serial.println(ecc_configzone[i], HEX);
-        }
-        print_config((ecc_configzone_t *)ecc_configzone);
+        print_config(&ecc_config.bits);
+        state.service.crypto.probed = ecc_ok();
+        state.service.crypto.available = !ecc_locked();
+        state.service.crypto.provisioned = ecc_locked();
         consume = sizeof(ecc_cmd_t);
+        break;
+      }
+      case ECMD_READVERSION: {
+        // Attempt to read version only if locked
+        if (ecc_locked()) {
+          uint8_t readversion[] = {0, 0x02, 0x82, 0x00, 0x00, 0, 0};
+          ecc_writepacket(readversion, sizeof(readversion));
+        } else {
+          // Skip this command
+          consume = sizeof(ecc_cmd_t);
+        }
+        break;
+      }
+      case ECMD_RAND: {
+        uint8_t rnd[] = {0, 0x1B, 0x0, 0x0, 0x0, 0, 0};
+        ecc_writepacket(rnd, sizeof(rnd));
         break;
       }
 
       case ECMD_HMAC_START: {
         uint8_t start[] = {0, 0x47, 0x04, 0x02, 0x00, 0, 0};
-        _ecc_writepacket(start, sizeof(start));
+        ecc_writepacket(start, sizeof(start));
         break;
       }
       case ECMD_HMAC_UPDATE: {
@@ -387,7 +434,7 @@ void ecc_loop(unsigned long now) {
         update[4] = 0x00;
         memcpy(&update[5], data, 64);
         print_packet("Hmac Update SEND", update, sizeof(update));
-        _ecc_writepacket(update, sizeof(update));
+        ecc_writepacket(update, sizeof(update));
         break;
       }
       case ECMD_HMAC_ENDCMD: {
@@ -398,7 +445,7 @@ void ecc_loop(unsigned long now) {
         end[4] = 0x0;
         memcpy(&end[5], data, C->datalen);
         print_packet("Hmac End SEND", end, 7 + C->datalen);
-        _ecc_writepacket(end, 7 + C->datalen);
+        ecc_writepacket(end, 7 + C->datalen);
         break;
       }
 
@@ -410,13 +457,13 @@ void ecc_loop(unsigned long now) {
         nonce[4] = 0x00;
         memset(&nonce[5], 0, 32);
         print_packet("Set Nonce SEND", nonce, sizeof(nonce));
-        _ecc_writepacket(nonce, sizeof(nonce));
+        ecc_writepacket(nonce, sizeof(nonce));
         break;
       }
       case ECMD_SET_GENDIG: {
         uint8_t gendig[] = {0, 0x15, 0x02, 0x01, 0x00, 0, 0};
         print_packet("Set GenDig SEND", gendig, sizeof(gendig));
-        _ecc_writepacket(gendig, sizeof(gendig));
+        ecc_writepacket(gendig, sizeof(gendig));
         break;
       }
       case ECMD_SET_WRITEENC: {
@@ -427,19 +474,19 @@ void ecc_loop(unsigned long now) {
         writeenc[4] = 0x00;
         memcpy(&writeenc[5], &data[0], 64);
         print_packet("Set WriteEnc SEND", writeenc, sizeof(writeenc));
-        _ecc_writepacket(writeenc, sizeof(writeenc));
+        ecc_writepacket(writeenc, sizeof(writeenc));
         break;
       }
 
       case ECMD_PROV_LOCK: {
         uint8_t lock[] = {0, 0x17, 0x80 | data[0], 0x0, 0x0, 0, 0};
-        _ecc_writepacket(lock, sizeof(lock));
+        ecc_writepacket(lock, sizeof(lock));
         break;
       }
       case ECMD_PROV_WRITECFG: {
         uint8_t writecfg[] = {0, 0x12, 0x00, data[0], 0x0, data[1], data[2], data[3], data[4], 0, 0};
         print_packet("Provision WriteConfig SEND", writecfg, sizeof(writecfg));
-        _ecc_writepacket(writecfg, sizeof(writecfg));
+        ecc_writepacket(writecfg, sizeof(writecfg));
         break;
       }
       case ECMD_PROV_WRITEDATA: {
@@ -450,7 +497,21 @@ void ecc_loop(unsigned long now) {
         writedata[4] = 0x0;
         memcpy(&writedata[5], &data[1], 32);
         print_packet("Provision WriteData SEND", writedata, sizeof(writedata));
-        _ecc_writepacket(writedata, sizeof(writedata));
+        ecc_writepacket(writedata, sizeof(writedata));
+        break;
+      }
+
+      case ECMD_MARK_PROV_SUCCESS: {
+        int * t = &sketch.service.crypto.status.provision;
+        if (*t == 0) *t = ECC_SUCCESS;
+        consume = sizeof(ecc_cmd_t);
+        break;
+      }
+
+      case ECMD_MARK_SET_SUCCESS: {
+        int * t = &sketch.service.crypto.status.setpassword;
+        if (*t == 0) *t = ECC_SUCCESS;
+        consume = sizeof(ecc_cmd_t);
         break;
       }
     }
@@ -463,9 +524,6 @@ void ecc_loop(unsigned long now) {
   }
 }
 
-void ecc_update(unsigned long now) {
-  
-}
 
 #if 0
 void setup() {
@@ -476,55 +534,55 @@ void setup() {
 
   /*
   // Write cfg (slotconfig + keyconfig)
-  uint8_t * wc1 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+  uint8_t * wc1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
   wc1[0] = 0x05; wc1[1] = 0x00; wc1[2] = 0x00; wc1[3] = 0x82; wc1[4] = 0x20;
-  uint8_t * wc2 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+  uint8_t * wc2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
   wc2[0] = 0x06; wc2[1] = 0x83; wc2[2] = 0x61; wc2[3] = 0x00; wc2[4] = 0x00;
-  uint8_t * wc3 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+  uint8_t * wc3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
   wc3[0] = 0x18; wc3[1] = 0x1c; wc3[2] = 0x00; wc3[3] = 0x1c; wc3[4] = 0x00;
-  uint8_t * wc4 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+  uint8_t * wc4 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
   wc4[0] = 0x19; wc4[1] = 0x1c; wc4[2] = 0x00; wc4[3] = 0x1c; wc4[4] = 0x00;
 
   // Lock cfg zone
-  uint8_t * l1 = (uint8_t *)_ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+  uint8_t * l1 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
   l1[0] = 0;
   */
 
   /*
   // Write data slots
-  uint8_t * wd1 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+  uint8_t * wd1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
   wd1[0] = 0; memset(&wd1[1], 0, 32); memcpy(&wd1[1], "WSX100 1", 8);
   
   Sha256.init();
   Sha256.write("master", 6);
   uint8_t * master = Sha256.result();
-  uint8_t * wd2 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+  uint8_t * wd2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
   wd2[0] = 1; memcpy(&wd2[1], master, 32);
 
   Sha256.init();
   Sha256.write("password", 8);
   uint8_t * password = Sha256.result();
-  uint8_t * wd3 = (uint8_t *)_ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+  uint8_t * wd3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
   wd3[0] = 2; memcpy(&wd3[1], password, 32);
 
   // Lock data zone
-  uint8_t * l2 = (uint8_t *)_ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+  uint8_t * l2 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
   l2[0] = 1;
   */
 
-  
+  /*
   // Read config
-  uint8_t * r1 = (uint8_t *)_ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r2 = (uint8_t *)_ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r3 = (uint8_t *)_ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r4 = (uint8_t *)_ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r1 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r2 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r3 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+  uint8_t * r4 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
   *r1 = 0; *r2 = 1; *r3 = 2; *r4 = 3;
-  _ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
-  
+  ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
+  */
 
   /*
   // Get Random number
-  _ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
+  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
   */
 
   /*
@@ -537,8 +595,8 @@ void setup() {
   cfg->sn_8 = 0xee;
   {
     // Set up tempkey register
-    _ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
-    _ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
+    ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
+    ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
 
     // Hash master password and new password
     uint8_t master_sha[32];
@@ -567,29 +625,31 @@ void setup() {
     Sha256.write(newpass_sha, 32);
 
     // Create command and write data contents
-    uint8_t * sm = (uint8_t *)_ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
+    uint8_t * sm = (uint8_t *)ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
     for (size_t i = 0; i < 32; i++) sm[i] = newpass_sha[i] ^ tempkey[i];
     memcpy(&sm[32], Sha256.result(), 32);
     print_sha("Mac", &sm[32]);
   }
   */
 
+  /*
   // HMAC
   uint8_t data[] = {
     0xeb,0x77,0xdf,0x4f,0x56,0xec,0xc4,0x25,0x82,0x8c,0x2b,0x79,0xce,0x6c,0x39,0xca,0x50,0x37,0xe0,0x9d,0xd4,0xb3,0xd3,0xfe,0x80,0xa8,0x46,0x2e,0xfe,0x0f,0xb3,0xe9,
     0xeb,0x77,0xdf,0x4f,0x56,0xec,0xc4,0x25,0x82,0x8c,0x2b,0x79,0xce,0x6c,0x39,0xca,0x50,0x37,0xe0,0x9d,0xd4,0xb3,0xd3,0xfe,0x80,0xa8,0x46,0x2e,0xfe,0x0f,0xb3,0xe9
   };
   {
-    _ecc_alloc(ECMD_HMAC_START, WAIT_HMAC, RXLEN_OK, 0);
+    ecc_alloc(ECMD_HMAC_START, WAIT_HMAC, RXLEN_OK, 0);
 
-    uint8_t * hu1 = (uint8_t *)_ecc_alloc(ECMD_HMAC_UPDATE, WAIT_HMAC, RXLEN_OK, 64);
+    uint8_t * hu1 = (uint8_t *)ecc_alloc(ECMD_HMAC_UPDATE, WAIT_HMAC, RXLEN_OK, 64);
     memcpy(&hu1[0], data, 64);
 
-    //uint8_t * he = (uint8_t *)_ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 3);
+    //uint8_t * he = (uint8_t *)ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 3);
     //he[0] = 0x01; he[1] = 0x02; he[2] = 0x03;
 
-    _ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 0);
+    ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 0);
   }
+  */
 }
 
 void loop() {
@@ -597,10 +657,144 @@ void loop() {
 
   delay(1);
   ecc_loop(now);
-  delay(3);
-  ecc_update(now);
 
   //Serial.print(".");
 }
 #endif
+
+bool ecc_ok() {
+  return ecc_config_read == 4 && (ecc_config.bits.sn_0 != 0 || ecc_config.bits.sn_1 != 0 || ecc_config.bits.sn_8 != 0);
+}
+
+bool ecc_locked() {
+  return ecc_ok() && ecc_config.bits.lockconfig != 0x55 && ecc_config.bits.lockvalue != 0x55;
+}
+
+uint32_t ecc_random() {
+  if (!ecc_locked()) return 0;
+  
+  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
+  for (size_t i = 0; i < ECC_SIZE_RANDPOOL; i++) {
+    if (ecc_randpool[i] != 0) return ecc_randpool[i];
+  }
+  return 0;
+}
+
+bool ecc_provision(const char * master, const char * newpass) {
+  if (!ecc_ok() || ecc_locked()) {
+    // TODO - error, ecc not okay or already locked
+    return false;
+  }
+
+  // Handle config
+  if (ecc_config.bits.lockconfig == 0x55) {
+    // Write cfg (slotconfig + keyconfig)
+    uint8_t * wc1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+    wc1[0] = 0x05; wc1[1] = 0x00; wc1[2] = 0x00; wc1[3] = 0x82; wc1[4] = 0x20;
+    uint8_t * wc2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+    wc2[0] = 0x06; wc2[1] = 0x83; wc2[2] = 0x61; wc2[3] = 0x00; wc2[4] = 0x00;
+    uint8_t * wc3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+    wc3[0] = 0x18; wc3[1] = 0x1c; wc3[2] = 0x00; wc3[3] = 0x1c; wc3[4] = 0x00;
+    uint8_t * wc4 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+    wc4[0] = 0x19; wc4[1] = 0x1c; wc4[2] = 0x00; wc4[3] = 0x1c; wc4[4] = 0x00;
+  
+    // Lock cfg zone
+    uint8_t * l1 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+    l1[0] = 0;
+    
+  } else {
+    // Config already locked, make sure it's configured correctly
+    uint8_t want[] = {0x00, 0x00, 0x82, 0x20, 0x83, 0x61, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x1c, 0x00, 0x1c, 0x00};
+    uint8_t have[] = {
+      ecc_config.bits.slotconfig[0].bytes[0], ecc_config.bits.slotconfig[0].bytes[1],
+      ecc_config.bits.slotconfig[1].bytes[0], ecc_config.bits.slotconfig[1].bytes[1],
+      ecc_config.bits.slotconfig[2].bytes[0], ecc_config.bits.slotconfig[2].bytes[1],
+      ecc_config.bits.slotconfig[3].bytes[0], ecc_config.bits.slotconfig[3].bytes[1],
+      ecc_config.bits.keyconfig[0].bytes[0], ecc_config.bits.keyconfig[0].bytes[1],
+      ecc_config.bits.keyconfig[1].bytes[0], ecc_config.bits.keyconfig[1].bytes[1],
+      ecc_config.bits.keyconfig[2].bytes[0], ecc_config.bits.keyconfig[2].bytes[1],
+      ecc_config.bits.keyconfig[3].bytes[0], ecc_config.bits.keyconfig[3].bytes[1]
+    };
+
+    if (memcmp(want, have, sizeof(want)) != 0) {
+      // TODO - error, locked incorrectly!
+      state.service.crypto.fault = true;
+      return false;
+    }
+  }
+
+  // Handle data
+  if (ecc_config.bits.lockvalue == 0x55) {
+    // Write data slots
+    uint8_t * wd1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+    wd1[0] = 0; memset(&wd1[1], 0, 32); memcpy(&wd1[1], ECC_VERSION, strlen(ECC_VERSION));
+    
+    Sha256.init();
+    Sha256.write(master, strlen(master));
+    uint8_t * wd2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+    wd2[0] = 1; memcpy(&wd2[1], Sha256.result(), 32);
+  
+    Sha256.init();
+    Sha256.write(newpass, strlen(newpass));
+    uint8_t * wd3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+    wd3[0] = 2; memcpy(&wd3[1], Sha256.result(), 32);
+  
+    // Lock data zone
+    uint8_t * l2 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+    l2[0] = 1;
+    
+  } else {
+    state.service.crypto.fault = true;
+    return false;
+  }
+
+  ecc_alloc(ECMD_MARK_PROV_SUCCESS, WAIT_CHECK, 0, 0);
+  return true;
+}
+
+bool ecc_setpassword(const char * master, const char * newpass) {
+  if (!ecc_ok() || !ecc_locked()) {
+    // TODO - set error
+    return false;
+  }
+
+  // Set up tempkey register
+  ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
+  ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
+
+  // Hash master password and new password
+  uint8_t master_sha[32];
+  uint8_t newpass_sha[32];
+  Sha256.init(); Sha256.write(master, strlen(master)); memcpy(master_sha, Sha256.result(), 32);
+  Sha256.init(); Sha256.write(newpass, strlen(newpass)); memcpy(newpass_sha, Sha256.result(), 32);
+  print_sha("Master", master_sha);
+  print_sha("New Password", newpass_sha);
+
+  // Compute the value of tempkey register locally
+  uint8_t tempkey[32];
+  Sha256.init();
+  Sha256.write(master_sha, 32);
+  Sha256.write((uint8_t)0x15); Sha256.write((uint8_t)0x02); Sha256.write((uint8_t)0x01); Sha256.write((uint8_t)0x00);
+  Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
+  for (size_t i = 0; i < (25 + 32); i++) Sha256.write((uint8_t)0x00);
+  memcpy(tempkey, Sha256.result(), 32);
+  print_sha("TempKey", tempkey);
+
+  // Compute mac
+  Sha256.init();
+  Sha256.write(tempkey, 32);
+  Sha256.write((uint8_t)0x12); Sha256.write((uint8_t)0x82); Sha256.write((uint8_t)0x10); Sha256.write((uint8_t)0x00);
+  Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
+  for (size_t i = 0; i < 25; i++) Sha256.write((uint8_t)0x00);
+  Sha256.write(newpass_sha, 32);
+
+  // Create command and write data contents
+  uint8_t * sm = (uint8_t *)ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
+  for (size_t i = 0; i < 32; i++) sm[i] = newpass_sha[i] ^ tempkey[i];
+  memcpy(&sm[32], Sha256.result(), 32);
+  print_sha("Mac", &sm[32]);
+
+  ecc_alloc(ECMD_MARK_SET_SUCCESS, WAIT_CHECK, 0, 0);
+  return true;
+}
 

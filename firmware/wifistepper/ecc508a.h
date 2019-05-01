@@ -91,4 +91,16 @@ typedef struct __ecc_packed {
   } keyconfig[16];
 } ecc_configzone_t;
 
+#define ECC_VERSION       ("WSX100 1")
+#define ECC_FAILURE       (1)
+#define ECC_SUCCESS       (2)
+
+void ecc_init();
+void ecc_loop(unsigned long now);
+bool ecc_ok();
+bool ecc_locked();
+uint32_t ecc_random();
+bool ecc_provision(const char * master, const char * newpass);
+bool ecc_setpassword(const char * master, const char * newpass);
+
 #endif

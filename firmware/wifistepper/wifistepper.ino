@@ -9,6 +9,7 @@
 
 #include "powerstep01.h"
 #include "wifistepper.h"
+#include "ecc508a.h"
 
 #define TYPE_HTML     "text/html"
 #define TYPE_CSS      "text/css"
@@ -71,8 +72,9 @@ config_t config = {
       .username = {0},
       .password = {0}
     },
-    .lowtcp = {
-      .enabled = true
+    .lowcom = {
+      .std_enabled = true,
+      .crypto_enabled = true
     },
     .mqtt = {
       .enabled = false,
@@ -630,7 +632,7 @@ void setup() {
 
   // Initialize web services
   {
-    lowtcp_init();
+    lowcom_init();
     
     if (config.service.mdns.enabled) {
       MDNS.begin(config.service.hostname);
@@ -686,7 +688,7 @@ void setup() {
   }
 }
 
-#define HANDLE_LOOPS()     ({ yield(); lowtcp_loop(now); daisy_loop(now); cmd_loop(now); yield(); })
+#define HANDLE_LOOPS()     ({ yield(); lowcom_loop(now); daisy_loop(now); ecc_loop(now); cmd_loop(now); yield(); })
 void loop() {
   unsigned long now = millis();
 
@@ -728,8 +730,7 @@ void loop() {
 
   cmd_update(now);
   daisy_update(now);
-  lowtcp_update(now);
-  ecc_update(now);
+  lowcom_update(now);
   wificfg_update(now);
   yield();
 

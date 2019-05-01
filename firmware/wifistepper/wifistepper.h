@@ -114,8 +114,9 @@ typedef struct {
     char password[LEN_PASSWORD];
   } auth;
   struct {
-    bool enabled;
-  } lowtcp;
+    bool std_enabled;
+    bool crypto_enabled;
+  } lowcom;
   struct {
     bool enabled;
     char server[LEN_URL];
@@ -232,11 +233,17 @@ typedef struct ispacked {
 typedef struct {
   struct {
     int clients;
-  } lowtcp;
+  } lowcom;
   struct {
     int connected;
     int status;
   } mqtt;
+  struct {
+    bool fault;
+    bool probed;
+    bool available;
+    bool provisioned;
+  } crypto;
 } service_state;
 
 typedef struct {
@@ -274,7 +281,13 @@ typedef struct {
     struct {
       unsigned long ping;
     } last;
-  } lowtcp;
+  } lowcom;
+  struct {
+    struct {
+      int provision;
+      int setpassword;
+    } status;
+  } crypto;
 } service_sketch;
 
 typedef struct ispacked {
@@ -458,9 +471,9 @@ bool daisy_loadqueue(uint8_t address, uint8_t q, id_t id);
 bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
 
 
-void lowtcp_init();
-void lowtcp_loop(unsigned long now);
-void lowtcp_update(unsigned long now);
+void lowcom_init();
+void lowcom_loop(unsigned long now);
+void lowcom_update(unsigned long now);
 
 void resetcfg();
 
@@ -515,10 +528,6 @@ static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src)
 static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q); } else { return daisy_savequeue(address, q, id); } }
 static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q); } else { return daisy_loadqueue(address, q, id); } }
 static inline bool m_estop(uint8_t address, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(address, id, hiz, soft); } }
-
-// ECC functions
-void ecc_init();
-void ecc_update(unsigned long now);
 
 // Utility functions
 extern config_t config;

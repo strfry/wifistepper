@@ -618,6 +618,24 @@ void api_init() {
     }
     server.send(200, "application/json", json_okid(id));
   });
+  server.on("/api/crypto/get", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    JsonObject& obj = jsonbuf.createObject();
+    obj["fault"] = state.service.crypto.fault;
+    obj["probed"] = state.service.crypto.probed;
+    obj["available"] = state.service.crypto.available;
+    obj["provisioned"] = state.service.crypto.provisioned;
+    obj["status"] = "ok";
+    JsonVariant v = obj;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
+  server.on("/api/crypto/set", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    // TODO
+  });
   server.on("/api/factoryreset", HTTP_GET, [](){
     add_headers()
     check_auth()
