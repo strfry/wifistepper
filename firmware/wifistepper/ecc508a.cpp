@@ -5,7 +5,7 @@
 #include "ecc508a.h"
 #include "sha256.h"
 
-#define ECC_DEBUG
+//#define ECC_DEBUG
 
 #define ECC_ADDR              (0x60)
 #define ECC_PIN_SDA           (2)
@@ -14,22 +14,21 @@
 #define ECC_SIZE_RANDPOOL     (4)
 
 #define ECMD_WAKE             (0x01)
-#define ECMD_READCFG          (0x02)
-#define ECMD_CHECKCFG         (0x03)
-#define ECMD_READVERSION      (0x04)
-#define ECMD_RAND             (0x05)
+#define ECMD_SLEEP            (0x02)
+#define ECMD_READCFG          (0x03)
+#define ECMD_CHECKCFG         (0x04)
+#define ECMD_READVERSION      (0x05)
+#define ECMD_RAND             (0x06)
 #define ECMD_HMAC_START       (0x11)
 #define ECMD_HMAC_UPDATE      (0x12)
-#define ECMD_HMAC_ENDCMD      (0x13)
-//#define ECMD_HMAC_ENDREPLY    (0x14)
+#define ECMD_HMAC_END         (0x13)
 #define ECMD_SET_NONCE        (0x31)
 #define ECMD_SET_GENDIG       (0x32)
 #define ECMD_SET_WRITEENC     (0x33)
 #define ECMD_PROV_LOCK        (0x41)
 #define ECMD_PROV_WRITECFG    (0x42)
 #define ECMD_PROV_WRITEDATA   (0x43)
-#define ECMD_MARK_PROV_SUCCESS  (0x51)
-#define ECMD_MARK_SET_SUCCESS   (0x52)
+#define ECMD_MARK_SUCCESS     (0x51)
 
 #define RXLEN_OK              (0x04)
 #define RXLEN_WAKE            (0x04)
@@ -47,7 +46,7 @@
 #define WAIT_RAND             (1), (23)
 #define WAIT_NONCE            (1), (7)
 #define WAIT_GENDIG           (5), (11)
-#define WAIT_HMAC             (7), (9)
+#define WAIT_HMAC             (3), (12)
 
 uint8_t ecc_Q[ECC_QMAX] = {0};
 size_t ecc_Qlen = 0;
@@ -184,28 +183,31 @@ uint16_t ecc_crc16(uint8_t * data, uint8_t len, uint8_t * crc) {
   crc[1] = (uint8_t) (crc_register >> 8);
 }
 
-void ecc_pack(uint8_t * data, size_t len) {
+inline void ecc_pack(uint8_t * data, size_t len) {
   if (len == 0 || data == NULL) return;
   data[0] = (uint8_t)len;
   ecc_crc16(data, len-2, &data[len-2]);
 }
 
-bool ecc_check(uint8_t * data, size_t len) {
+inline bool ecc_check(uint8_t * data, size_t len) {
   if (len == 0 || data == NULL) return false;
   uint8_t crc[2] = {0, 0};
   ecc_crc16(data, len-2, crc);
   return data[len-2] == crc[0] && data[len-1] == crc[1];
 }
 
-bool ecc_checkok(uint8_t * data, size_t len) {
-  return len == 4 && ecc_check(data, len) && data[1] == 0x0;
+inline bool ecc_checkok(uint8_t * data, size_t len) {
+  return len == 4 && data[0] == 4 && ecc_check(data, len) && data[1] == 0x0;
+}
+
+inline bool ecc_checksize(size_t s) {
+  return (ECC_QMAX - ecc_Qlen) >= s;
 }
 
 void * ecc_alloc(uint8_t cmd, uint8_t wait_typ, uint8_t wait_max, uint8_t rxlen, uint8_t datalen) {
-  if ((ECC_QMAX - ecc_Qlen) < datalen) {
+  if (!ecc_checksize(sizeof(ecc_cmd_t) + datalen)) {
     // Not enough memory in queue
     // TODO - set error
-    Serial.println("ERROR: Not enough alloc mem");
     return NULL;
   }
 
@@ -230,9 +232,8 @@ void ecc_write(uint8_t mode, uint8_t * data, size_t len) {
   Wire.endTransmission();
 }
 
-void ecc_writepacket(uint8_t * data, size_t len) {
+inline void ecc_writepacket(uint8_t * data, size_t len) {
   ecc_pack(data, len);
-  ecc_write(0x0, NULL, 0);
   ecc_write(0x3, data, len);
 }
 
@@ -240,22 +241,35 @@ void ecc_init() {
   Wire.begin(ECC_PIN_SDA, ECC_PIN_SCL);
 
   // Wake up
-  ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+  {
+    ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+  }
 
   // Read config
-  memset(&ecc_config, 0, sizeof(ecc_config));
-  uint8_t * r1 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r2 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r3 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r4 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  *r1 = 0; *r2 = 1; *r3 = 2; *r4 = 3;
-  ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
+  {
+    memset(&ecc_config, 0, sizeof(ecc_config));
+    uint8_t * r1 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+    uint8_t * r2 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+    uint8_t * r3 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+    uint8_t * r4 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
+    *r1 = 0; *r2 = 1; *r3 = 2; *r4 = 3;
+    ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
+  }
 
   // Read version
-  ecc_alloc(ECMD_READVERSION, WAIT_READ, RXLEN_READVERSION, 0);
+  {
+    ecc_alloc(ECMD_READVERSION, WAIT_READ, RXLEN_READVERSION, 0);
+  }
 
   // Read random
-  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
+  {
+    ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
+  }
+
+  // Sleep
+  {
+    ecc_alloc(ECMD_SLEEP, WAIT_CHECK, 0, 0);
+  }
 }
 
 void ecc_loop(unsigned long now) {
@@ -330,11 +344,12 @@ void ecc_loop(unsigned long now) {
             }
             break;
           }
-          case ECMD_HMAC_ENDCMD: {
+          case ECMD_HMAC_END: {
             print_packet("Hmac End REPLY", reply, C->rxlen);
             print_check(reply, C->rxlen);
             print_sha("Hmac Result", &reply[1]);
-            // TODO - check if passed
+            size_t off = 1 + data[0];
+            lowcom_ecc_hmacend(&reply[1], &data[off], C->datalen - off);
             break;
           }
 
@@ -345,7 +360,7 @@ void ecc_loop(unsigned long now) {
             print_check(reply, C->rxlen);
             if (!ecc_checkok(reply, C->rxlen)) {
               print_error("Bad reply packet");
-              sketch.service.crypto.status.setpassword = ECC_FAILURE;
+              sketch.service.crypto.mark = ECC_FAILURE;
             }
             break;
           }
@@ -357,7 +372,7 @@ void ecc_loop(unsigned long now) {
             print_check(reply, C->rxlen);
             if (!ecc_checkok(reply, C->rxlen)) {
               print_error("Bad reply packet");
-              sketch.service.crypto.status.provision = ECC_FAILURE;
+              sketch.service.crypto.mark = ECC_FAILURE;
             }
             break;
           }
@@ -391,6 +406,11 @@ void ecc_loop(unsigned long now) {
         ecc_write(0x0, NULL, 0);
         break;
       }
+      case ECMD_SLEEP: {
+        ecc_write(0x1, NULL, 0);
+        consume = sizeof(ecc_cmd_t);
+        break;
+      }
       case ECMD_READCFG: {
         uint8_t readcfg[] = {0, 0x02, 0x80, data[0] << 3, 0x0, 0, 0};
         ecc_writepacket(readcfg, sizeof(readcfg));
@@ -399,7 +419,7 @@ void ecc_loop(unsigned long now) {
       case ECMD_CHECKCFG: {
         print_config(&ecc_config.bits);
         state.service.crypto.probed = ecc_ok();
-        state.service.crypto.available = !ecc_locked();
+        state.service.crypto.available = ecc_ok() && !ecc_locked();
         state.service.crypto.provisioned = ecc_locked();
         consume = sizeof(ecc_cmd_t);
         break;
@@ -437,15 +457,16 @@ void ecc_loop(unsigned long now) {
         ecc_writepacket(update, sizeof(update));
         break;
       }
-      case ECMD_HMAC_ENDCMD: {
-        uint8_t end[64+7] = {0};
+      case ECMD_HMAC_END: {
+        uint8_t end[7 + data[0]];
+        end[0] = end[5 + data[0]] = end[6 + data[0]] = 0;
         end[1] = 0x47;
         end[2] = 0x05;
-        end[3] = C->datalen;
+        end[3] = data[0];
         end[4] = 0x0;
-        memcpy(&end[5], data, C->datalen);
-        print_packet("Hmac End SEND", end, 7 + C->datalen);
-        ecc_writepacket(end, 7 + C->datalen);
+        memcpy(&end[5], &data[1], data[0]);
+        print_packet("Hmac End SEND", end, 7 + data[0]);
+        ecc_writepacket(end, 7 + data[0]);
         break;
       }
 
@@ -501,15 +522,8 @@ void ecc_loop(unsigned long now) {
         break;
       }
 
-      case ECMD_MARK_PROV_SUCCESS: {
-        int * t = &sketch.service.crypto.status.provision;
-        if (*t == 0) *t = ECC_SUCCESS;
-        consume = sizeof(ecc_cmd_t);
-        break;
-      }
-
-      case ECMD_MARK_SET_SUCCESS: {
-        int * t = &sketch.service.crypto.status.setpassword;
+      case ECMD_MARK_SUCCESS: {
+        int * t = &sketch.service.crypto.mark;
         if (*t == 0) *t = ECC_SUCCESS;
         consume = sizeof(ecc_cmd_t);
         break;
@@ -524,144 +538,6 @@ void ecc_loop(unsigned long now) {
   }
 }
 
-
-#if 0
-void setup() {
-  Serial.begin(115200);
-  Serial.println();
-  
-  ecc_init();
-
-  /*
-  // Write cfg (slotconfig + keyconfig)
-  uint8_t * wc1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-  wc1[0] = 0x05; wc1[1] = 0x00; wc1[2] = 0x00; wc1[3] = 0x82; wc1[4] = 0x20;
-  uint8_t * wc2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-  wc2[0] = 0x06; wc2[1] = 0x83; wc2[2] = 0x61; wc2[3] = 0x00; wc2[4] = 0x00;
-  uint8_t * wc3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-  wc3[0] = 0x18; wc3[1] = 0x1c; wc3[2] = 0x00; wc3[3] = 0x1c; wc3[4] = 0x00;
-  uint8_t * wc4 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-  wc4[0] = 0x19; wc4[1] = 0x1c; wc4[2] = 0x00; wc4[3] = 0x1c; wc4[4] = 0x00;
-
-  // Lock cfg zone
-  uint8_t * l1 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
-  l1[0] = 0;
-  */
-
-  /*
-  // Write data slots
-  uint8_t * wd1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-  wd1[0] = 0; memset(&wd1[1], 0, 32); memcpy(&wd1[1], "WSX100 1", 8);
-  
-  Sha256.init();
-  Sha256.write("master", 6);
-  uint8_t * master = Sha256.result();
-  uint8_t * wd2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-  wd2[0] = 1; memcpy(&wd2[1], master, 32);
-
-  Sha256.init();
-  Sha256.write("password", 8);
-  uint8_t * password = Sha256.result();
-  uint8_t * wd3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-  wd3[0] = 2; memcpy(&wd3[1], password, 32);
-
-  // Lock data zone
-  uint8_t * l2 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
-  l2[0] = 1;
-  */
-
-  /*
-  // Read config
-  uint8_t * r1 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r2 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r3 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  uint8_t * r4 = (uint8_t *)ecc_alloc(ECMD_READCFG, WAIT_READ, RXLEN_READCFG, 1);
-  *r1 = 0; *r2 = 1; *r3 = 2; *r4 = 3;
-  ecc_alloc(ECMD_CHECKCFG, WAIT_CHECK, 0, 0);
-  */
-
-  /*
-  // Get Random number
-  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
-  */
-
-  /*
-  // Reset password
-  char * master = "master";
-  char * newpass = "newpass1";
-  ecc_configzone_t * cfg = (ecc_configzone_t *)ecc_configzone;
-  cfg->sn_0 = 0x01;
-  cfg->sn_1 = 0x23;
-  cfg->sn_8 = 0xee;
-  {
-    // Set up tempkey register
-    ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
-    ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
-
-    // Hash master password and new password
-    uint8_t master_sha[32];
-    uint8_t newpass_sha[32];
-    Sha256.init(); Sha256.write(master, strlen(master)); memcpy(master_sha, Sha256.result(), 32);
-    Sha256.init(); Sha256.write(newpass, strlen(newpass)); memcpy(newpass_sha, Sha256.result(), 32);
-    print_sha("Master", master_sha);
-    print_sha("New Password", newpass_sha);
-
-    // Compute the value of tempkey register locally
-    uint8_t tempkey[32];
-    Sha256.init();
-    Sha256.write(master_sha, 32);
-    Sha256.write((uint8_t)0x15); Sha256.write((uint8_t)0x02); Sha256.write((uint8_t)0x01); Sha256.write((uint8_t)0x00);
-    Sha256.write((uint8_t)cfg->sn_8); Sha256.write((uint8_t)cfg->sn_0); Sha256.write((uint8_t)cfg->sn_1);
-    for (size_t i = 0; i < (25 + 32); i++) Sha256.write((uint8_t)0x00);
-    memcpy(tempkey, Sha256.result(), 32);
-    print_sha("TempKey", tempkey);
-
-    // Compute mac
-    Sha256.init();
-    Sha256.write(tempkey, 32);
-    Sha256.write((uint8_t)0x12); Sha256.write((uint8_t)0x82); Sha256.write((uint8_t)0x10); Sha256.write((uint8_t)0x00);
-    Sha256.write((uint8_t)cfg->sn_8); Sha256.write((uint8_t)cfg->sn_0); Sha256.write((uint8_t)cfg->sn_1);
-    for (size_t i = 0; i < 25; i++) Sha256.write((uint8_t)0x00);
-    Sha256.write(newpass_sha, 32);
-
-    // Create command and write data contents
-    uint8_t * sm = (uint8_t *)ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
-    for (size_t i = 0; i < 32; i++) sm[i] = newpass_sha[i] ^ tempkey[i];
-    memcpy(&sm[32], Sha256.result(), 32);
-    print_sha("Mac", &sm[32]);
-  }
-  */
-
-  /*
-  // HMAC
-  uint8_t data[] = {
-    0xeb,0x77,0xdf,0x4f,0x56,0xec,0xc4,0x25,0x82,0x8c,0x2b,0x79,0xce,0x6c,0x39,0xca,0x50,0x37,0xe0,0x9d,0xd4,0xb3,0xd3,0xfe,0x80,0xa8,0x46,0x2e,0xfe,0x0f,0xb3,0xe9,
-    0xeb,0x77,0xdf,0x4f,0x56,0xec,0xc4,0x25,0x82,0x8c,0x2b,0x79,0xce,0x6c,0x39,0xca,0x50,0x37,0xe0,0x9d,0xd4,0xb3,0xd3,0xfe,0x80,0xa8,0x46,0x2e,0xfe,0x0f,0xb3,0xe9
-  };
-  {
-    ecc_alloc(ECMD_HMAC_START, WAIT_HMAC, RXLEN_OK, 0);
-
-    uint8_t * hu1 = (uint8_t *)ecc_alloc(ECMD_HMAC_UPDATE, WAIT_HMAC, RXLEN_OK, 64);
-    memcpy(&hu1[0], data, 64);
-
-    //uint8_t * he = (uint8_t *)ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 3);
-    //he[0] = 0x01; he[1] = 0x02; he[2] = 0x03;
-
-    ecc_alloc(ECMD_HMAC_ENDCMD, WAIT_HMAC, RXLEN_HMAC, 0);
-  }
-  */
-}
-
-void loop() {
-  unsigned long now = millis();
-
-  delay(1);
-  ecc_loop(now);
-
-  //Serial.print(".");
-}
-#endif
-
 bool ecc_ok() {
   return ecc_config_read == 4 && (ecc_config.bits.sn_0 != 0 || ecc_config.bits.sn_1 != 0 || ecc_config.bits.sn_8 != 0);
 }
@@ -672,8 +548,14 @@ bool ecc_locked() {
 
 uint32_t ecc_random() {
   if (!ecc_locked()) return 0;
+
+  // Wake up device and send random command
+  if (ecc_checksize(sizeof(ecc_cmd_t) * 3)) {
+    ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+    ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
+    ecc_alloc(ECMD_SLEEP, WAIT_CHECK, 0, 0);
+  }
   
-  ecc_alloc(ECMD_RAND, WAIT_RAND, RXLEN_RAND, 0);
   for (size_t i = 0; i < ECC_SIZE_RANDPOOL; i++) {
     if (ecc_randpool[i] != 0) return ecc_randpool[i];
   }
@@ -686,69 +568,97 @@ bool ecc_provision(const char * master, const char * newpass) {
     return false;
   }
 
-  // Handle config
-  if (ecc_config.bits.lockconfig == 0x55) {
-    // Write cfg (slotconfig + keyconfig)
-    uint8_t * wc1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-    wc1[0] = 0x05; wc1[1] = 0x00; wc1[2] = 0x00; wc1[3] = 0x82; wc1[4] = 0x20;
-    uint8_t * wc2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-    wc2[0] = 0x06; wc2[1] = 0x83; wc2[2] = 0x61; wc2[3] = 0x00; wc2[4] = 0x00;
-    uint8_t * wc3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-    wc3[0] = 0x18; wc3[1] = 0x1c; wc3[2] = 0x00; wc3[3] = 0x1c; wc3[4] = 0x00;
-    uint8_t * wc4 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
-    wc4[0] = 0x19; wc4[1] = 0x1c; wc4[2] = 0x00; wc4[3] = 0x1c; wc4[4] = 0x00;
-  
-    // Lock cfg zone
-    uint8_t * l1 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
-    l1[0] = 0;
-    
-  } else {
-    // Config already locked, make sure it's configured correctly
-    uint8_t want[] = {0x00, 0x00, 0x82, 0x20, 0x83, 0x61, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x1c, 0x00, 0x1c, 0x00};
-    uint8_t have[] = {
-      ecc_config.bits.slotconfig[0].bytes[0], ecc_config.bits.slotconfig[0].bytes[1],
-      ecc_config.bits.slotconfig[1].bytes[0], ecc_config.bits.slotconfig[1].bytes[1],
-      ecc_config.bits.slotconfig[2].bytes[0], ecc_config.bits.slotconfig[2].bytes[1],
-      ecc_config.bits.slotconfig[3].bytes[0], ecc_config.bits.slotconfig[3].bytes[1],
-      ecc_config.bits.keyconfig[0].bytes[0], ecc_config.bits.keyconfig[0].bytes[1],
-      ecc_config.bits.keyconfig[1].bytes[0], ecc_config.bits.keyconfig[1].bytes[1],
-      ecc_config.bits.keyconfig[2].bytes[0], ecc_config.bits.keyconfig[2].bytes[1],
-      ecc_config.bits.keyconfig[3].bytes[0], ecc_config.bits.keyconfig[3].bytes[1]
-    };
+  // Check overall size
+  {
+    size_t total = (sizeof(ecc_cmd_t) * 2) + (sizeof(ecc_cmd_t) + 5) * 4 + (sizeof(ecc_cmd_t) + 1) + (sizeof(ecc_cmd_t) + 33) * 3 + (sizeof(ecc_cmd_t) + 1) + sizeof(ecc_cmd_t);
+    if (!ecc_checksize(total)) {
+      // Error, not enough memory in queue
+      // TODO - set error
+      return false;
+    }
+  }
 
-    if (memcmp(want, have, sizeof(want)) != 0) {
-      // TODO - error, locked incorrectly!
+  // Wake up device
+  {
+    ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+  }
+
+  // Handle config
+  {
+    if (ecc_config.bits.lockconfig == 0x55) {
+      // Write cfg (slotconfig + keyconfig)
+      uint8_t * wc1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+      wc1[0] = 0x05; wc1[1] = 0x00; wc1[2] = 0x00; wc1[3] = 0x82; wc1[4] = 0x20;
+      uint8_t * wc2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+      wc2[0] = 0x06; wc2[1] = 0x83; wc2[2] = 0x61; wc2[3] = 0x00; wc2[4] = 0x00;
+      uint8_t * wc3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+      wc3[0] = 0x18; wc3[1] = 0x1c; wc3[2] = 0x00; wc3[3] = 0x1c; wc3[4] = 0x00;
+      uint8_t * wc4 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITECFG, WAIT_WRITE, RXLEN_OK, 5);
+      wc4[0] = 0x19; wc4[1] = 0x1c; wc4[2] = 0x00; wc4[3] = 0x1c; wc4[4] = 0x00;
+    
+      // Lock cfg zone
+      uint8_t * l1 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+      l1[0] = 0;
+      
+    } else {
+      // Config already locked, make sure it's configured correctly
+      uint8_t want[] = {0x00, 0x00, 0x82, 0x20, 0x83, 0x61, 0x1c, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x1c, 0x00, 0x1c, 0x00};
+      uint8_t have[] = {
+        ecc_config.bits.slotconfig[0].bytes[0], ecc_config.bits.slotconfig[0].bytes[1],
+        ecc_config.bits.slotconfig[1].bytes[0], ecc_config.bits.slotconfig[1].bytes[1],
+        ecc_config.bits.slotconfig[2].bytes[0], ecc_config.bits.slotconfig[2].bytes[1],
+        ecc_config.bits.slotconfig[3].bytes[0], ecc_config.bits.slotconfig[3].bytes[1],
+        ecc_config.bits.keyconfig[0].bytes[0], ecc_config.bits.keyconfig[0].bytes[1],
+        ecc_config.bits.keyconfig[1].bytes[0], ecc_config.bits.keyconfig[1].bytes[1],
+        ecc_config.bits.keyconfig[2].bytes[0], ecc_config.bits.keyconfig[2].bytes[1],
+        ecc_config.bits.keyconfig[3].bytes[0], ecc_config.bits.keyconfig[3].bytes[1]
+      };
+  
+      if (memcmp(want, have, sizeof(want)) != 0) {
+        // TODO - error, locked incorrectly!
+        state.service.crypto.fault = true;
+        return false;
+      }
+    }
+  }
+
+  // Handle data
+  {
+    if (ecc_config.bits.lockvalue == 0x55) {
+      // Write data slots
+      uint8_t * wd1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+      wd1[0] = 0; memset(&wd1[1], 0, 32); memcpy(&wd1[1], ECC_VERSION, strlen(ECC_VERSION));
+      
+      Sha256.init();
+      Sha256.write(master, strlen(master));
+      uint8_t * wd2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+      wd2[0] = 1; memcpy(&wd2[1], Sha256.result(), 32);
+    
+      Sha256.init();
+      Sha256.write(newpass, strlen(newpass));
+      uint8_t * wd3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
+      wd3[0] = 2; memcpy(&wd3[1], Sha256.result(), 32);
+    
+      // Lock data zone
+      uint8_t * l2 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
+      l2[0] = 1;
+      
+    } else {
       state.service.crypto.fault = true;
       return false;
     }
   }
 
-  // Handle data
-  if (ecc_config.bits.lockvalue == 0x55) {
-    // Write data slots
-    uint8_t * wd1 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-    wd1[0] = 0; memset(&wd1[1], 0, 32); memcpy(&wd1[1], ECC_VERSION, strlen(ECC_VERSION));
-    
-    Sha256.init();
-    Sha256.write(master, strlen(master));
-    uint8_t * wd2 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-    wd2[0] = 1; memcpy(&wd2[1], Sha256.result(), 32);
-  
-    Sha256.init();
-    Sha256.write(newpass, strlen(newpass));
-    uint8_t * wd3 = (uint8_t *)ecc_alloc(ECMD_PROV_WRITEDATA, WAIT_WRITE, RXLEN_OK, 33);
-    wd3[0] = 2; memcpy(&wd3[1], Sha256.result(), 32);
-  
-    // Lock data zone
-    uint8_t * l2 = (uint8_t *)ecc_alloc(ECMD_PROV_LOCK, WAIT_LOCK, RXLEN_OK, 1);
-    l2[0] = 1;
-    
-  } else {
-    state.service.crypto.fault = true;
-    return false;
+  // Sleep
+  {
+    ecc_alloc(ECMD_SLEEP, WAIT_CHECK, 0, 0);
   }
 
-  ecc_alloc(ECMD_MARK_PROV_SUCCESS, WAIT_CHECK, 0, 0);
+  // Handle success notify
+  {
+    ecc_alloc(ECMD_MARK_SUCCESS, WAIT_CHECK, 0, 0);
+  }
+  
   return true;
 }
 
@@ -758,43 +668,142 @@ bool ecc_setpassword(const char * master, const char * newpass) {
     return false;
   }
 
-  // Set up tempkey register
-  ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
-  ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
+  // Check overall size
+  {
+    size_t total = (sizeof(ecc_cmd_t) * 2) + sizeof(ecc_cmd_t) * 2 + sizeof(ecc_cmd_t) + 64 + sizeof(ecc_cmd_t);
+    if (!ecc_checksize(total)) {
+      // Error, not enough memory in queue
+      // TODO - set error
+      return false;
+    }
+  }
 
-  // Hash master password and new password
-  uint8_t master_sha[32];
-  uint8_t newpass_sha[32];
-  Sha256.init(); Sha256.write(master, strlen(master)); memcpy(master_sha, Sha256.result(), 32);
-  Sha256.init(); Sha256.write(newpass, strlen(newpass)); memcpy(newpass_sha, Sha256.result(), 32);
-  print_sha("Master", master_sha);
-  print_sha("New Password", newpass_sha);
+  // Wake up device
+  {
+    ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+  }
 
-  // Compute the value of tempkey register locally
-  uint8_t tempkey[32];
-  Sha256.init();
-  Sha256.write(master_sha, 32);
-  Sha256.write((uint8_t)0x15); Sha256.write((uint8_t)0x02); Sha256.write((uint8_t)0x01); Sha256.write((uint8_t)0x00);
-  Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
-  for (size_t i = 0; i < (25 + 32); i++) Sha256.write((uint8_t)0x00);
-  memcpy(tempkey, Sha256.result(), 32);
-  print_sha("TempKey", tempkey);
+  // Handle initial setup commands
+  {
+    // Set up tempkey register
+    ecc_alloc(ECMD_SET_NONCE, WAIT_NONCE, RXLEN_OK, 0);
+    ecc_alloc(ECMD_SET_GENDIG, WAIT_GENDIG, RXLEN_OK, 0);
+  }
 
-  // Compute mac
-  Sha256.init();
-  Sha256.write(tempkey, 32);
-  Sha256.write((uint8_t)0x12); Sha256.write((uint8_t)0x82); Sha256.write((uint8_t)0x10); Sha256.write((uint8_t)0x00);
-  Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
-  for (size_t i = 0; i < 25; i++) Sha256.write((uint8_t)0x00);
-  Sha256.write(newpass_sha, 32);
+  // Handle encrypted write
+  {
+    // Hash master password and new password
+    uint8_t master_sha[32];
+    uint8_t newpass_sha[32];
+    Sha256.init(); Sha256.write(master, strlen(master)); memcpy(master_sha, Sha256.result(), 32);
+    Sha256.init(); Sha256.write(newpass, strlen(newpass)); memcpy(newpass_sha, Sha256.result(), 32);
+    print_sha("Master", master_sha);
+    print_sha("New Password", newpass_sha);
+  
+    // Compute the value of tempkey register locally
+    uint8_t tempkey[32];
+    Sha256.init();
+    Sha256.write(master_sha, 32);
+    Sha256.write((uint8_t)0x15); Sha256.write((uint8_t)0x02); Sha256.write((uint8_t)0x01); Sha256.write((uint8_t)0x00);
+    Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
+    for (size_t i = 0; i < (25 + 32); i++) Sha256.write((uint8_t)0x00);
+    memcpy(tempkey, Sha256.result(), 32);
+    print_sha("TempKey", tempkey);
+  
+    // Compute mac
+    Sha256.init();
+    Sha256.write(tempkey, 32);
+    Sha256.write((uint8_t)0x12); Sha256.write((uint8_t)0x82); Sha256.write((uint8_t)0x10); Sha256.write((uint8_t)0x00);
+    Sha256.write((uint8_t)ecc_config.bits.sn_8); Sha256.write((uint8_t)ecc_config.bits.sn_0); Sha256.write((uint8_t)ecc_config.bits.sn_1);
+    for (size_t i = 0; i < 25; i++) Sha256.write((uint8_t)0x00);
+    Sha256.write(newpass_sha, 32);
+  
+    // Create command and write data contents
+    uint8_t * sm = (uint8_t *)ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
+    for (size_t i = 0; i < 32; i++) sm[i] = newpass_sha[i] ^ tempkey[i];
+    memcpy(&sm[32], Sha256.result(), 32);
+    print_sha("Mac", &sm[32]);
+  }
 
-  // Create command and write data contents
-  uint8_t * sm = (uint8_t *)ecc_alloc(ECMD_SET_WRITEENC, WAIT_WRITE, RXLEN_OK, 64);
-  for (size_t i = 0; i < 32; i++) sm[i] = newpass_sha[i] ^ tempkey[i];
-  memcpy(&sm[32], Sha256.result(), 32);
-  print_sha("Mac", &sm[32]);
+  // Sleep
+  {
+    ecc_alloc(ECMD_SLEEP, WAIT_CHECK, 0, 0);
+  }
 
-  ecc_alloc(ECMD_MARK_SET_SUCCESS, WAIT_CHECK, 0, 0);
+  // Handle success notify
+  {
+    ecc_alloc(ECMD_MARK_SUCCESS, WAIT_CHECK, 0, 0);
+  }
+  
   return true;
+}
+
+bool ecc_lowcom_hmac(uint32_t nonce, uint8_t * meta, size_t metalen, uint8_t * data, size_t dataoff, size_t datalen) {
+  if (!ecc_ok() || !ecc_locked() || nonce == 0) {
+    // TODO - set error
+    return false;
+  }
+
+  // Check overall size
+  {
+    size_t total = sizeof(ecc_cmd_t) * 3;
+    size_t remaining = datalen - dataoff;
+    while (remaining >= 64) {
+      total += sizeof(ecc_cmd_t) + 64;
+      remaining -= 64;
+    }
+    total += sizeof(ecc_cmd_t) + 1 + remaining + metalen + datalen;
+
+    if (!ecc_checksize(total)) {
+      // Error, not enough memory in queue
+      // TODO - set error
+      return false;
+    }
+  }
+
+  // Wake up device
+  {
+    ecc_alloc(ECMD_WAKE, WAIT_WAKE, RXLEN_WAKE, 0);
+  }
+
+  // Load commands in buffer
+  {
+    // Send start command
+    ecc_alloc(ECMD_HMAC_START, WAIT_HMAC, RXLEN_OK, 0);
+  
+    // Update with 64 byte chunks
+    size_t remaining = sizeof(uint32_t) + datalen - dataoff;
+    bool nonce_wrote = false;
+    while (remaining >= 64) {
+      uint8_t * p = (uint8_t *)ecc_alloc(ECMD_HMAC_UPDATE, WAIT_HMAC, RXLEN_OK, 64);
+      if (!nonce_wrote) {
+        memcpy(&p[0], &nonce, sizeof(uint32_t));
+        memcpy(&p[sizeof(uint32_t)], &data[dataoff], 64 - sizeof(uint32_t));
+        dataoff += 64 - sizeof(uint32_t);
+        nonce_wrote = true;
+      } else {
+        memcpy(&p[0], &data[dataoff], 64);
+        dataoff += 64;
+      }
+      remaining -= 64;
+    }
+  
+    // End with remaining + all data again
+    uint8_t * e = (uint8_t *)ecc_alloc(ECMD_HMAC_END, WAIT_HMAC, RXLEN_HMAC, 1 + remaining + metalen + datalen);
+    e[0] = remaining;
+    if (!nonce_wrote) {
+      memcpy(&e[1], &nonce, sizeof(uint32_t));
+      memcpy(&e[1 + sizeof(uint32_t)], &data[dataoff], remaining - sizeof(uint32_t));
+    } else {
+      memcpy(&e[1], &data[dataoff], remaining);
+    }
+    memcpy(&e[1 + remaining], meta, metalen);
+    memcpy(&e[1 + remaining + metalen], data, datalen);
+  }
+
+  // Sleep
+  {
+    ecc_alloc(ECMD_SLEEP, WAIT_CHECK, 0, 0);
+  }
 }
 

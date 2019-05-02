@@ -51,7 +51,7 @@ typedef struct __attribute__((packed)) {
   uint8_t magic;
   uint8_t head_checksum;
   uint8_t body_checksum;
-  uint8_t address;
+  uint8_t target;
   uint8_t queue;
   id_t id;
   uint8_t opcode;
@@ -108,7 +108,7 @@ static void daisy_writeoutbox() {
   }
 }
 
-static void * daisy_alloc(uint8_t address, uint8_t queue, id_t id, uint8_t opcode, size_t len) {
+static void * daisy_alloc(uint8_t target, uint8_t queue, id_t id, uint8_t opcode, size_t len) {
   // Check if we have enough memory in buffers
   if (len > 0xFFFF || (B_SIZE - Olen) < (sizeof(daisy_head_t) + len) || Alen >= A_SIZE) {
     if (id != 0) seterror(ESUB_DAISY, id);
@@ -123,7 +123,7 @@ static void * daisy_alloc(uint8_t address, uint8_t queue, id_t id, uint8_t opcod
   // Allocate and initialize packet
   daisy_head_t * packet = (daisy_head_t *)(&O[Olen]);
   packet->magic = B_MAGIC;
-  packet->address = address;
+  packet->target = target;
   packet->queue = queue;
   packet->id = id;
   packet->opcode = opcode;
@@ -151,7 +151,7 @@ static void * daisy_pack(void * data) {
   return packet;
 }
 
-static void daisy_masterconsume(int8_t address, uint8_t q, id_t id, uint8_t opcode, void * data, uint16_t len) {
+static void daisy_masterconsume(int8_t target, uint8_t q, id_t id, uint8_t opcode, void * data, uint16_t len) {
   if (id != 0) {
     if (A[0] != id) {
       // Handle Ack error
@@ -172,20 +172,20 @@ static void daisy_masterconsume(int8_t address, uint8_t q, id_t id, uint8_t opco
     }
   }
 
-  // Check for bad address;
-  if (address > 0) {
+  // Check for bad target;
+  if (target > 0) {
     seterror(ESUB_DAISY, id);
     return;
   }
 
   // Handle pings
   if (opcode == CMD_PING) {
-    if (address == 0) {
+    if (target == 0) {
       // Master shorted with itself
       return;
     }
     
-    uint8_t slaves = abs(address);
+    uint8_t slaves = abs(target);
     if (state.daisy.slaves != slaves) {
       // New number of slaves present, reallocate states and sync
       sketch.daisy.slave = (sketch.daisy.slave == NULL)? (daisy_slave_t *)malloc(sizeof(daisy_slave_t) * slaves) : (daisy_slave_t *)realloc(sketch.daisy.slave, sizeof(daisy_slave_t) * slaves);
@@ -204,7 +204,7 @@ static void daisy_masterconsume(int8_t address, uint8_t q, id_t id, uint8_t opco
   }
 
   // Get slave array index
-  int i = state.daisy.slaves + address - 1;
+  int i = state.daisy.slaves + target - 1;
   if (i < 0 || i >= state.daisy.slaves) {
     // Bad slave index
     seterror(ESUB_DAISY, id);
@@ -471,9 +471,9 @@ void daisy_loop(unsigned long now) {
     }
 
     // Check if it's for us
-    if (isvalid && !config.daisy.master && head->address != 0x01) {
+    if (isvalid && !config.daisy.master && head->target != 0x01) {
       // We're not master and the packet is not for us, skip it
-      head->address -= 1;
+      head->target -= 1;
       head->head_checksum = daisy_checksum8(head);
       Bskip = sizeof(daisy_head_t) + head->length;
       continue;
@@ -498,7 +498,7 @@ void daisy_loop(unsigned long now) {
 
     // Consume packet
     {
-      if (config.daisy.master)  daisy_masterconsume(head->address, head->queue, head->id, head->opcode, &head[1], head->length);
+      if (config.daisy.master)  daisy_masterconsume(head->target, head->queue, head->id, head->opcode, &head[1], head->length);
       else                      daisy_slaveconsume(head->queue, head->id, head->opcode, &head[1], head->length);
     }
 
@@ -549,129 +549,129 @@ void daisy_update(unsigned long now) {
   }
 }
 
-bool daisy_clearerror(uint8_t address, id_t id) {
-  return daisy_pack(daisy_alloc(address, 0, id, CMD_CLEARERROR, 0)) != NULL;
+bool daisy_clearerror(uint8_t target, id_t id) {
+  return daisy_pack(daisy_alloc(target, 0, id, CMD_CLEARERROR, 0)) != NULL;
 }
 
-bool daisy_wificontrol(uint8_t address, id_t id, bool enabled) {
-  uint8_t * en = (uint8_t *)daisy_alloc(address, 0, id, CMD_WIFI, sizeof(uint8_t));
+bool daisy_wificontrol(uint8_t target, id_t id, bool enabled) {
+  uint8_t * en = (uint8_t *)daisy_alloc(target, 0, id, CMD_WIFI, sizeof(uint8_t));
   en[0] = enabled;
   return daisy_pack(en) != NULL;
 }
 
-bool daisy_stop(uint8_t address, uint8_t q, id_t id, bool hiz, bool soft) {
-  cmd_stop_t * cmd = (cmd_stop_t *)daisy_alloc(address, q, id, CMD_STOP, sizeof(cmd_stop_t));
+bool daisy_stop(uint8_t target, uint8_t q, id_t id, bool hiz, bool soft) {
+  cmd_stop_t * cmd = (cmd_stop_t *)daisy_alloc(target, q, id, CMD_STOP, sizeof(cmd_stop_t));
   if (cmd != NULL) *cmd = { .hiz = hiz, .soft = soft };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_run(uint8_t address, uint8_t q, id_t id, ps_direction dir, float stepss) {
-  cmd_run_t * cmd = (cmd_run_t *)daisy_alloc(address, q, id, CMD_RUN, sizeof(cmd_run_t));
+bool daisy_run(uint8_t target, uint8_t q, id_t id, ps_direction dir, float stepss) {
+  cmd_run_t * cmd = (cmd_run_t *)daisy_alloc(target, q, id, CMD_RUN, sizeof(cmd_run_t));
   if (cmd != NULL) *cmd = { .dir = dir, .stepss = stepss };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_stepclock(uint8_t address, uint8_t q, id_t id, ps_direction dir) {
-  cmd_stepclk_t * cmd = (cmd_stepclk_t *)daisy_alloc(address, q, id, CMD_STEPCLK, sizeof(cmd_stepclk_t));
+bool daisy_stepclock(uint8_t target, uint8_t q, id_t id, ps_direction dir) {
+  cmd_stepclk_t * cmd = (cmd_stepclk_t *)daisy_alloc(target, q, id, CMD_STEPCLK, sizeof(cmd_stepclk_t));
   if (cmd != NULL) *cmd = { .dir = dir };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_move(uint8_t address, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps) {
-  cmd_move_t * cmd = (cmd_move_t *)daisy_alloc(address, q, id, CMD_MOVE, sizeof(cmd_move_t));
+bool daisy_move(uint8_t target, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps) {
+  cmd_move_t * cmd = (cmd_move_t *)daisy_alloc(target, q, id, CMD_MOVE, sizeof(cmd_move_t));
   if (cmd != NULL) *cmd = { .dir = dir, .microsteps = microsteps };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_goto(uint8_t address, uint8_t q, id_t id, int32_t pos, bool hasdir, ps_direction dir) {
-  cmd_goto_t * cmd = (cmd_goto_t *)daisy_alloc(address, q, id, CMD_GOTO, sizeof(cmd_goto_t));
+bool daisy_goto(uint8_t target, uint8_t q, id_t id, int32_t pos, bool hasdir, ps_direction dir) {
+  cmd_goto_t * cmd = (cmd_goto_t *)daisy_alloc(target, q, id, CMD_GOTO, sizeof(cmd_goto_t));
   if (cmd != NULL) *cmd = { .hasdir = hasdir, .dir = dir, .pos = pos };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_gountil(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss) {
-  cmd_gountil_t * cmd = (cmd_gountil_t *)daisy_alloc(address, q, id, CMD_GOUNTIL, sizeof(cmd_gountil_t));
+bool daisy_gountil(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss) {
+  cmd_gountil_t * cmd = (cmd_gountil_t *)daisy_alloc(target, q, id, CMD_GOUNTIL, sizeof(cmd_gountil_t));
   if (cmd != NULL) *cmd = { .action = action, .dir = dir, .stepss = stepss };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_releasesw(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir) {
-  cmd_releasesw_t * cmd = (cmd_releasesw_t *)daisy_alloc(address, q, id, CMD_RELEASESW, sizeof(cmd_releasesw_t));
+bool daisy_releasesw(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir) {
+  cmd_releasesw_t * cmd = (cmd_releasesw_t *)daisy_alloc(target, q, id, CMD_RELEASESW, sizeof(cmd_releasesw_t));
   if (cmd != NULL) *cmd = { .action = action, .dir = dir };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_gohome(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_GOHOME, 0)) != NULL;
+bool daisy_gohome(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_GOHOME, 0)) != NULL;
 }
 
-bool daisy_gomark(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_GOMARK, 0)) != NULL;
+bool daisy_gomark(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_GOMARK, 0)) != NULL;
 }
 
-bool daisy_resetpos(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_RESETPOS, 0)) != NULL;
+bool daisy_resetpos(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_RESETPOS, 0)) != NULL;
 }
 
-bool daisy_setpos(uint8_t address, uint8_t q, id_t id, int32_t pos) {
-  cmd_setpos_t * cmd = (cmd_setpos_t *)daisy_alloc(address, q, id, CMD_SETPOS, sizeof(cmd_setpos_t));
+bool daisy_setpos(uint8_t target, uint8_t q, id_t id, int32_t pos) {
+  cmd_setpos_t * cmd = (cmd_setpos_t *)daisy_alloc(target, q, id, CMD_SETPOS, sizeof(cmd_setpos_t));
   if (cmd != NULL) *cmd = { .pos = pos };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_setmark(uint8_t address, uint8_t q, id_t id, int32_t mark) {
-  cmd_setpos_t * cmd = (cmd_setpos_t *)daisy_alloc(address, q, id, CMD_SETMARK, sizeof(cmd_setpos_t));
+bool daisy_setmark(uint8_t target, uint8_t q, id_t id, int32_t mark) {
+  cmd_setpos_t * cmd = (cmd_setpos_t *)daisy_alloc(target, q, id, CMD_SETMARK, sizeof(cmd_setpos_t));
   if (cmd != NULL) *cmd = { .pos = mark };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_setconfig(uint8_t address, uint8_t q, id_t id, const char * data) {
+bool daisy_setconfig(uint8_t target, uint8_t q, id_t id, const char * data) {
   size_t ldata = strlen(data) + 1;
-  void * buf = daisy_alloc(address, q, id, CMD_SETCONFIG, ldata);
+  void * buf = daisy_alloc(target, q, id, CMD_SETCONFIG, ldata);
   if (buf != NULL) memcpy(buf, data, ldata);
   return daisy_pack(buf) != NULL;
 }
 
-bool daisy_waitbusy(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_WAITBUSY, 0)) != NULL;
+bool daisy_waitbusy(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_WAITBUSY, 0)) != NULL;
 }
 
-bool daisy_waitrunning(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_WAITRUNNING, 0)) != NULL;
+bool daisy_waitrunning(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_WAITRUNNING, 0)) != NULL;
 }
 
-bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) {
-  cmd_waitms_t * cmd = (cmd_waitms_t *)daisy_alloc(address, q, id, CMD_WAITMS, sizeof(cmd_waitms_t));
+bool daisy_waitms(uint8_t target, uint8_t q, id_t id, uint32_t ms) {
+  cmd_waitms_t * cmd = (cmd_waitms_t *)daisy_alloc(target, q, id, CMD_WAITMS, sizeof(cmd_waitms_t));
   if (cmd != NULL) *cmd = { .ms = ms };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) {
-  cmd_waitsw_t * cmd = (cmd_waitsw_t *)daisy_alloc(address, q, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
+bool daisy_waitswitch(uint8_t target, uint8_t q, id_t id, bool state) {
+  cmd_waitsw_t * cmd = (cmd_waitsw_t *)daisy_alloc(target, q, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
   if (cmd != NULL) *cmd = { .state = state };
   return daisy_pack(cmd) != NULL;
 }
 
-bool daisy_emptyqueue(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_EMPTYQUEUE, 0)) != NULL;
+bool daisy_emptyqueue(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_EMPTYQUEUE, 0)) != NULL;
 }
 
-bool daisy_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) {
-  uint8_t * queue = (uint8_t *)daisy_alloc(address, q, id, CMD_COPYQUEUE, sizeof(uint8_t));
+bool daisy_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src) {
+  uint8_t * queue = (uint8_t *)daisy_alloc(target, q, id, CMD_COPYQUEUE, sizeof(uint8_t));
   *queue = src;
   return daisy_pack(queue) != NULL;
 }
 
-bool daisy_savequeue(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_SAVEQUEUE, 0)) != NULL;
+bool daisy_savequeue(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_SAVEQUEUE, 0)) != NULL;
 }
 
-bool daisy_loadqueue(uint8_t address, uint8_t q, id_t id) {
-  return daisy_pack(daisy_alloc(address, q, id, CMD_LOADQUEUE, 0)) != NULL;
+bool daisy_loadqueue(uint8_t target, uint8_t q, id_t id) {
+  return daisy_pack(daisy_alloc(target, q, id, CMD_LOADQUEUE, 0)) != NULL;
 }
 
-bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft) {
-  cmd_stop_t * cmd = (cmd_stop_t *)daisy_alloc(address, 0, id, CMD_ESTOP, sizeof(cmd_stop_t));
+bool daisy_estop(uint8_t target, id_t id, bool hiz, bool soft) {
+  cmd_stop_t * cmd = (cmd_stop_t *)daisy_alloc(target, 0, id, CMD_ESTOP, sizeof(cmd_stop_t));
   if (cmd != NULL) *cmd = { .hiz = hiz, .soft = soft };
   return daisy_pack(cmd) != NULL;
 }

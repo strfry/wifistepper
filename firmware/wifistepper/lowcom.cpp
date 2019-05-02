@@ -3,12 +3,15 @@
 #include <ESP8266WiFi.h>
 
 #include "wifistepper.h"
+#include "ecc508a.h"
+
+#define LOWCOM_DEBUG
 
 #define LTC_SIZE      (2)
 #define LTC_PORT      (1000)
 
-#define LTCB_ISIZE     (1024)
-#define LTCB_OSIZE     (LTCB_ISIZE / 4)
+#define LTCB_ISIZE    (1024)
+#define LTCB_OSIZE    (LTCB_ISIZE / 4)
 
 // PACKET LAYOUT
 #define L_MAGIC_1     (0xAE)
@@ -21,15 +24,13 @@ typedef struct ispacked {
 } lc_preamble;
 
 typedef struct ispacked {
-  uint8_t signature[8];
-  uint32_t nonce[4];
-  uint64_t challenge;
+  uint8_t hmac[32];
 } lc_crypto;
 
 typedef struct ispacked {
   uint8_t opcode;
   uint8_t subcode;
-  uint8_t address;
+  uint8_t target;
   uint8_t queue;
   uint16_t packetid;
   uint16_t length;
@@ -52,12 +53,25 @@ typedef struct ispacked {
   uint32_t chipid;
   bool std_enabled;
   bool crypto_enabled;
+  uint32_t nonce;
 } type_hello;
 
+#define MODE_STD            (0x00)
+#define MODE_CRYPTO         (0x01)
+
+#define TARGET_CLIENT       (0x00)
+#define TARGET_COMMAND      (0x01)
+
+typedef struct ispacked {
+  uint8_t client;
+  uint8_t target;
+} lc_cryptometa_t;
+
 #define OPCODE_ESTOP        (0x00)
-#define OPCODE_SETCONFIG    (0x01)
-#define OPCODE_GETCONFIG    (0x02)
-#define OPCODE_LASTWILL     (0x03)
+#define OPCODE_PING         (0x01)
+#define OPCODE_SETCONFIG    (0x02)
+#define OPCODE_GETCONFIG    (0x03)
+#define OPCODE_LASTWILL     (0x04)
 
 #define OPCODE_STOP         (0x11)
 #define OPCODE_RUN          (0x12)
@@ -91,8 +105,6 @@ typedef struct ispacked {
 #define SUBCODE_CMD       (0x02)
 
 #define LTO_PING          (3000)
-
-#define LOWCOM_DEBUG
 
 #ifdef LOWCOM_DEBUG
 void lowcom_debug(String msg) {
@@ -162,6 +174,14 @@ void lowcom_debug(String msg, int i1, int i2, int i3, int i4, int i5) {
   Serial.print(i5);
   Serial.println(")");
 }
+void lowcom_debug(const char * name, uint8_t * sha) {
+  Serial.print("(");
+  Serial.print(millis());
+  Serial.print(") LOWCOM -> ");
+  Serial.print(name); Serial.print(": (sha256) ");
+  for (size_t i = 0; i < 32; i++) Serial.printf("%02x", sha[i]);
+  Serial.println();
+}
 #else
 #define lowcom_debug(...)
 #endif
@@ -206,28 +226,98 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
   }
 }
 
-static void lc_replyack(size_t client, uint8_t opcode, uint8_t address, uint8_t queue, uint16_t packetid, id_t id) {
-  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + sizeof(id_t)] = {0};
+static void lc_replynack_std(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
+  size_t len = strlen(message) + 1;
+  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + len];
+  
+  lc_preamble * preamble = (lc_preamble *)&packet[0];
+  lc_header * header = (lc_header *)&preamble[1];
+  char * msg = (char *)&header[1];
+  
+  lc_packpreamble(preamble, TYPE_STD);
+  *header = {.opcode = opcode, .subcode = SUBCODE_NACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
+  memcpy(msg, message, len);
+  
+  lc_send(client, packet, sizeof(lc_preamble) + sizeof(lc_header) + len);
+}
+
+static void lc_replynack_crypto(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
+  size_t len = strlen(message) + 1;
+  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len];
+  
+  lc_preamble * preamble = (lc_preamble *)&packet[0];
+  lc_crypto * crypto = (lc_crypto *)&preamble[1];
+  lc_header * header = (lc_header *)&crypto[1];
+  char * msg = (char *)&header[1];
+  
+  lc_packpreamble(preamble, TYPE_CRYPTO);
+  *header = {.opcode = opcode, .subcode = SUBCODE_NACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
+  memcpy(msg, message, len);
+
+  lc_cryptometa_t meta = {.client = client, .target = TARGET_CLIENT};
+  ecc_lowcom_hmac(lowcom_client[client].crypto.nonce, (uint8_t *)&meta, sizeof(lc_cryptometa_t), (uint8_t *)preamble, sizeof(lc_preamble) + sizeof(lc_crypto), sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len);
+}
+
+static void lc_replynack(size_t client, uint8_t mode, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
+  switch (mode) {
+    case MODE_STD:    lc_replynack_std(client, opcode, target, queue, packetid, message);    break;
+    case MODE_CRYPTO: lc_replynack_crypto(client, opcode, target, queue, packetid, message); break;
+  }
+}
+
+static void lc_replyack_std(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
+  size_t len = sizeof(id_t);
+  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + len];
+  
   lc_preamble * preamble = (lc_preamble *)&packet[0];
   lc_header * header = (lc_header *)&preamble[1];
   id_t * ackid = (id_t *)&header[1];
+  
   lc_packpreamble(preamble, TYPE_STD);
-  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .address = address, .queue = queue, .packetid = packetid, .length = sizeof(id_t)};
+  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
   *ackid = id;
-  lc_send(client, packet, sizeof(packet));
+  
+  lc_send(client, packet, sizeof(lc_preamble) + sizeof(lc_header) + len);
 }
 
-#define lc_expectlen(elen)  ({ if (len != (elen)) { seterror(ESUB_LC, 0, ETYPE_MSG, client); return; } })
+static void lc_replyack_crypto(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
+  size_t len = sizeof(id_t);
+  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len];
+  
+  lc_preamble * preamble = (lc_preamble *)&packet[0];
+  lc_crypto * crypto = (lc_crypto *)&preamble[1];
+  lc_header * header = (lc_header *)&crypto[1];
+  id_t * ackid = (id_t *)&header[1];
+  
+  lc_packpreamble(preamble, TYPE_CRYPTO);
+  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
+  *ackid = id;
 
-static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint8_t address, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
-  lowcom_debug("CMD received", opcode, subcode, address, queue, packetid);
+  lc_cryptometa_t meta = {.client = client, .target = TARGET_CLIENT};
+  ecc_lowcom_hmac(lowcom_client[client].crypto.nonce, (uint8_t *)&meta, sizeof(lc_cryptometa_t), (uint8_t *)preamble, sizeof(lc_preamble) + sizeof(lc_crypto), sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len);
+}
 
-  // TODO check if subcode == CMD
+static void lc_replyack(size_t client, uint8_t mode, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
+  switch (mode) {
+    case MODE_STD:    lc_replyack_std(client, opcode, target, queue, packetid, id);    break;
+    case MODE_CRYPTO: lc_replyack_crypto(client, opcode, target, queue, packetid, id); break;
+  }
+}
+
+#define lc_expectlen(elen)  ({ if (len != (elen)) { lc_replynack(client, mode, opcode, target, queue, packetid, "Bad message length"); return; } })
+static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t subcode, uint8_t target, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
+  lowcom_debug("CMD received", opcode, subcode, target, queue, packetid);
+
+  if (subcode != SUBCODE_CMD) {
+    lowcom_debug("ERR bad subcode (expect CMD)");
+    lc_replynack(client, mode, opcode, target, queue, packetid, "Bad subcode");
+    return;
+  }
 
   // Check if client initialized
   if (!lowcom_client[client].initialized) {
     lowcom_debug("ERR client not initialized");
-    seterror(ESUB_LC, 0, ETYPE_MSG, client);
+    lc_replynack(client, mode, opcode, target, queue, packetid, "Client not initialized (must send HELLO)");
     return;
   }
 
@@ -237,18 +327,18 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       lowcom_debug("CMD estop", cmd->hiz, cmd->soft);
-      m_estop(address, id, cmd->hiz, cmd->soft);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_estop(target, id, cmd->hiz, cmd->soft);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_SETCONFIG: {
       if (len == 0 || data[len-1] != 0) {
-        seterror(ESUB_LC, 0, ETYPE_MSG, client);
+        lc_replynack(client, mode, opcode, target, queue, packetid, "Bad config data");
         return;
       }
       lowcom_debug("CMD setconfig");
-      m_setconfig(address, queue, id, (const char *)data);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_setconfig(target, queue, id, (const char *)data);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GETCONFIG: {
@@ -258,7 +348,7 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       lc_expectlen(0);
       lowcom_debug("CMD lastwill", queue);
       lowcom_client[client].lastwill = queue;
-      lc_replyack(client, opcode, 0, queue, packetid, id);
+      lc_replyack(client, mode, opcode, 0, queue, packetid, id);
       break;
     }
     
@@ -266,146 +356,146 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
       lowcom_debug("CMD stop", cmd->hiz, cmd->soft);
-      m_stop(address, queue, id, cmd->hiz, cmd->soft);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_stop(target, queue, id, cmd->hiz, cmd->soft);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RUN: {
       lc_expectlen(sizeof(cmd_run_t));
       cmd_run_t * cmd = (cmd_run_t *)data;
       lowcom_debug("CMD run", cmd->dir, cmd->stepss);
-      m_run(address, queue, id, cmd->dir, cmd->stepss);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_run(target, queue, id, cmd->dir, cmd->stepss);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_STEPCLOCK: {
       lc_expectlen(sizeof(cmd_stepclk_t));
       cmd_stepclk_t * cmd = (cmd_stepclk_t *)data;
       lowcom_debug("CMD stepclock", cmd->dir);
-      m_stepclock(address, queue, id, cmd->dir);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_stepclock(target, queue, id, cmd->dir);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_MOVE: {
       lc_expectlen(sizeof(cmd_move_t));
       cmd_move_t * cmd = (cmd_move_t *)data;
       lowcom_debug("CMD move", cmd->dir, (float)cmd->microsteps);
-      m_move(address, queue, id, cmd->dir, cmd->microsteps);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_move(target, queue, id, cmd->dir, cmd->microsteps);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOTO: {
       lc_expectlen(sizeof(cmd_goto_t));
       cmd_goto_t * cmd = (cmd_goto_t *)data;
       lowcom_debug("CMD goto", cmd->pos, cmd->hasdir, cmd->dir);
-      m_goto(address, queue, id, cmd->pos, cmd->hasdir, cmd->dir);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_goto(target, queue, id, cmd->pos, cmd->hasdir, cmd->dir);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOUNTIL: {
       lc_expectlen(sizeof(cmd_gountil_t));
       cmd_gountil_t * cmd = (cmd_gountil_t *)data;
       lowcom_debug("CMD gountil", cmd->action, cmd->dir, cmd->stepss);
-      m_gountil(address, queue, id, cmd->action, cmd->dir, cmd->stepss);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_gountil(target, queue, id, cmd->action, cmd->dir, cmd->stepss);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RELEASESW: {
       lc_expectlen(sizeof(cmd_releasesw_t));
       cmd_releasesw_t * cmd = (cmd_releasesw_t *)data;
       lowcom_debug("CMD releasesw", cmd->action, cmd->dir);
-      m_releasesw(address, queue, id, cmd->action, cmd->dir);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_releasesw(target, queue, id, cmd->action, cmd->dir);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOHOME: {
       lc_expectlen(0);
       lowcom_debug("CMD gohome");
-      m_gohome(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_gohome(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOMARK: {
       lc_expectlen(0);
       lowcom_debug("CMD gomark");
-      m_gomark(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_gomark(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RESETPOS: {
       lc_expectlen(0);
       lowcom_debug("CMD resetpos");
-      m_resetpos(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_resetpos(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_SETPOS: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
       lowcom_debug("CMD setpos", cmd->pos);
-      m_setpos(address, queue, id, cmd->pos);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_setpos(target, queue, id, cmd->pos);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_SETMARK: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
       lowcom_debug("CMD setpos", cmd->pos);
-      m_setmark(address, queue, id, cmd->pos);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_setmark(target, queue, id, cmd->pos);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
       lowcom_debug("CMD waitbusy");
-      m_waitbusy(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_waitbusy(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_WAITRUNNING: {
       lc_expectlen(0);
       lowcom_debug("CMD waitrunning");
-      m_waitrunning(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_waitrunning(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_WAITMS: {
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
       lowcom_debug("CMD waitms", cmd->ms);
-      m_waitms(address, queue, id, cmd->ms);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_waitms(target, queue, id, cmd->ms);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_WAITSWITCH: {
       lc_expectlen(sizeof(cmd_waitsw_t));
       cmd_waitsw_t * cmd = (cmd_waitsw_t *)data;
       lowcom_debug("CMD waitswitch", cmd->state);
-      m_waitswitch(address, queue, id, cmd->state);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_waitswitch(target, queue, id, cmd->state);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
 
     case OPCODE_EMPTYQUEUE: {
       lc_expectlen(0);
       lowcom_debug("CMD emptyqueue");
-      m_emptyqueue(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_emptyqueue(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_SAVEQUEUE: {
       lc_expectlen(0);
       lowcom_debug("CMD savequeue");
-      m_savequeue(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_savequeue(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_LOADQUEUE: {
       lc_expectlen(0);
       lowcom_debug("CMD loadqueue");
-      m_loadqueue(address, queue, id);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_loadqueue(target, queue, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_ADDQUEUE: {
@@ -414,20 +504,51 @@ static void lc_handlepacket(size_t client, uint8_t opcode, uint8_t subcode, uint
     case OPCODE_COPYQUEUE: {
       lc_expectlen(sizeof(uint8_t));
       lowcom_debug("CMD copyqueue", data[0]);
-      m_copyqueue(address, queue, id, data[0]);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_copyqueue(target, queue, id, data[0]);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RUNQUEUE: {
       lc_expectlen(0);
       lowcom_debug("CMD runqueue");
-      m_copyqueue(address, 0, id, queue);
-      lc_replyack(client, opcode, address, queue, packetid, id);
+      m_copyqueue(target, 0, id, queue);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GETQUEUE: {
       break;
     }
+  }
+}
+
+void lowcom_ecc_hmacend(uint8_t * sha, uint8_t * data, size_t datalen) {
+  lc_cryptometa_t * meta = (lc_cryptometa_t *)&data[0];
+  
+
+  if (meta->target == TARGET_COMMAND) {
+    lc_crypto * crypto = (lc_crypto *)&meta[1];
+    lc_header * header = (lc_header *)&crypto[1];
+
+    lowcom_debug("Calculated", sha);
+    lowcom_debug("Given", crypto->hmac);
+    if (memcmp(sha, crypto->hmac, 32) != 0) {
+      lowcom_debug("HMAC bad signature");
+      lc_replynack(meta->client, MODE_CRYPTO, header->opcode, header->target, header->queue, header->packetid, "Bad hmac signature (Key error)");
+      return;
+    }
+
+    lowcom_debug("HMAC valid signature");
+    lowcom_debug("Crypto packet length", datalen);
+    lowcom_debug("Crypto packet received", header->opcode, header->subcode, header->target, header->queue, header->packetid);
+    lc_handlepacket(meta->client, MODE_CRYPTO, header->opcode, header->subcode, header->target, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
+
+  } else if (meta->target == TARGET_CLIENT) {
+    lc_preamble * preamble = (lc_preamble *)&meta[1];
+    lc_crypto * crypto = (lc_crypto *)&preamble[1];
+    lc_header * header = (lc_header *)&crypto[1];
+    
+    memcpy(crypto->hmac, sha, 32);
+    lc_send(meta->client, (uint8_t *)preamble, datalen - sizeof(lc_cryptometa_t));
   }
 }
 
@@ -444,6 +565,12 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
     case TYPE_HELLO: {
       lowcom_debug("RX hello");
       uint8_t reply[sizeof(lc_preamble) + sizeof(type_hello)] = {0};
+
+      // Reset client data
+      {
+        lowcom_client[client].crypto.nonce = ecc_random();
+        lowcom_client[client].crypto.packetid = 0;
+      }
       
       // Set preamble
       {
@@ -460,8 +587,9 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
         payload->version = VERSION;
         strncpy(payload->hostname, config.service.hostname, LEN_HOSTNAME-1);
         payload->chipid = state.wifi.chipid;
-        payload->std_enabled = true;    // TODO - set to correct value
-        payload->crypto_enabled = true; // TODO - set to correct value
+        payload->std_enabled = config.service.lowcom.std_enabled;
+        payload->crypto_enabled = ecc_locked() && config.service.lowcom.crypto_enabled;
+        payload->nonce = lowcom_client[client].crypto.nonce;
       }
       
       lowcom_client[client].initialized = true;
@@ -499,25 +627,66 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       lowcom_debug("RX std");
       
       // Ensure at lease full header in buffer
-      size_t elen = sizeof(lc_preamble) + sizeof(lc_header);
-      if (len < elen) return 0;
+      size_t expectlen = sizeof(lc_preamble) + sizeof(lc_header);
+      if (len < expectlen) return 0;
 
       // Capture header
       lc_header * header = (lc_header *)&preamble[1];
 
       // Ensure full packet in buffer
-      elen += header->length;
-      if (len < elen) return 0;
+      expectlen += header->length;
+      if (len < expectlen) return 0;
 
       // TODO - validate header
-      lc_handlepacket(client, header->opcode, header->subcode, header->address, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
-      return elen;
+      // TODO - make sure packetid is increasing
+      
+      lc_handlepacket(client, MODE_STD, header->opcode, header->subcode, header->target, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
+      return expectlen;
     }
     case TYPE_CRYPTO: {
       lowcom_debug("RX crypto");
+
+      // Ensure at lease full header in buffer
+      size_t expectlen = sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header);
+      if (len < expectlen) return 0;
+
+      // Capture crypto + header
+      lc_crypto * crypto = (lc_crypto *)&preamble[1];
+      lc_header * header = (lc_header *)&crypto[1];
+
+      // Ensure full packet in buffer
+      expectlen += header->length;
+      if (len < expectlen) return 0;
+
+      // TODO - validate header
+
+      // Make sure crypto is provisioned
+      if (!ecc_locked()) {
+        lc_replynack(client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "Crypto not provisioned (Set key)");
+        return expectlen;
+      }
+
+      // Make sure crypto chip not faulted
+      if (state.service.crypto.fault) {
+        lc_replynack(client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "Crypto fault");
+        return expectlen;
+      }
+
+      // Make sure packetid is increasing
+      if (header->packetid <= lowcom_client[client].crypto.packetid) {
+        lc_replynack(client, MODE_CRYPTO, header->opcode, header->target, header->queue, header->packetid, "Bad packetid (Must be increasing)");
+        return expectlen;
+      }
+      lowcom_client[client].crypto.packetid = header->packetid;
       
-      // TODO - not supported yet
-      return 1;
+      lc_cryptometa_t meta = {.client = client, .target = TARGET_COMMAND};
+      if (!ecc_lowcom_hmac(lowcom_client[client].crypto.nonce, (uint8_t *)&meta, sizeof(lc_cryptometa_t), (uint8_t *)crypto, sizeof(lc_crypto), sizeof(lc_crypto) + sizeof(lc_header) + header->length)) {
+        lc_replynack(client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "Out of crypto memory");
+        seterror(ESUB_LC, 0, ETYPE_MEM, client);
+        return expectlen;
+      }
+      
+      return expectlen;
     }
     default: {
       // Unknown type.
@@ -600,7 +769,8 @@ void lowcom_update(unsigned long now) {
         memset(&lowcom_client[ci], 0, sizeof(lowcom_client[ci]));
         lowcom_client[ci].sock = lowcom_server.available();
         lowcom_client[ci].active = true;
-        //lowcom_client[i].nonce = ?  // TODO
+        lowcom_client[ci].crypto.nonce = 0;
+        lowcom_client[ci].crypto.packetid = 0;
         lowcom_client[ci].last.ping = now;
         break;
       }

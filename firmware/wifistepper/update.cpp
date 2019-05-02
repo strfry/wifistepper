@@ -217,10 +217,7 @@ void update_init() {
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
-
-    // Delay for a second before restarting
-    for (size_t i = 0; i < 100; i++) delay(10);
-    ESP.restart();
+    flag_reboot = true;
   }, []() {
     if (config.service.auth.enabled && !server.authenticate(config.service.auth.username, config.service.auth.password)) {
       return;

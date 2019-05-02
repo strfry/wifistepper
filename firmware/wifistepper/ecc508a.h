@@ -102,5 +102,6 @@ bool ecc_locked();
 uint32_t ecc_random();
 bool ecc_provision(const char * master, const char * newpass);
 bool ecc_setpassword(const char * master, const char * newpass);
+bool ecc_lowcom_hmac(uint32_t nonce, uint8_t * meta, size_t metalen, uint8_t * data, size_t dataoff, size_t datalen);
 
 #endif

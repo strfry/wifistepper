@@ -283,10 +283,7 @@ typedef struct {
     } last;
   } lowcom;
   struct {
-    struct {
-      int provision;
-      int setpassword;
-    } status;
+    int mark;
   } crypto;
 } service_sketch;
 
@@ -442,38 +439,39 @@ void daisy_loop(unsigned long now);
 void daisy_update(unsigned long now);
 
 // Remote management commands
-bool daisy_clearerror(uint8_t address, id_t id);
-bool daisy_wificontrol(uint8_t address, id_t id, bool enabled);
+bool daisy_clearerror(uint8_t target, id_t id);
+bool daisy_wificontrol(uint8_t target, id_t id, bool enabled);
 
 // Remote queue commands
-bool daisy_stop(uint8_t address, uint8_t q, id_t id, bool hiz, bool soft);
-bool daisy_run(uint8_t address, uint8_t q, id_t id, ps_direction dir, float stepss);
-bool daisy_stepclock(uint8_t address, uint8_t q, id_t id, ps_direction dir);
-bool daisy_move(uint8_t address, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps);
-bool daisy_goto(uint8_t address, uint8_t q, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD);
-bool daisy_gountil(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss);
-bool daisy_releasesw(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir);
-bool daisy_gohome(uint8_t address, uint8_t q, id_t id);
-bool daisy_gomark(uint8_t address, uint8_t q, id_t id);
-bool daisy_resetpos(uint8_t address, uint8_t q, id_t id);
-bool daisy_setpos(uint8_t address, uint8_t q, id_t id, int32_t pos);
-bool daisy_setmark(uint8_t address, uint8_t q, id_t id, int32_t mark);
-bool daisy_setconfig(uint8_t address, uint8_t q, id_t id, const char * data);
-bool daisy_waitbusy(uint8_t address, uint8_t q, id_t id);
-bool daisy_waitrunning(uint8_t address, uint8_t q, id_t id);
-bool daisy_waitms(uint8_t address, uint8_t q, id_t id, uint32_t millis);
-bool daisy_waitswitch(uint8_t address, uint8_t q, id_t id, bool state);
+bool daisy_stop(uint8_t target, uint8_t q, id_t id, bool hiz, bool soft);
+bool daisy_run(uint8_t target, uint8_t q, id_t id, ps_direction dir, float stepss);
+bool daisy_stepclock(uint8_t target, uint8_t q, id_t id, ps_direction dir);
+bool daisy_move(uint8_t target, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps);
+bool daisy_goto(uint8_t target, uint8_t q, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD);
+bool daisy_gountil(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss);
+bool daisy_releasesw(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir);
+bool daisy_gohome(uint8_t target, uint8_t q, id_t id);
+bool daisy_gomark(uint8_t target, uint8_t q, id_t id);
+bool daisy_resetpos(uint8_t target, uint8_t q, id_t id);
+bool daisy_setpos(uint8_t target, uint8_t q, id_t id, int32_t pos);
+bool daisy_setmark(uint8_t target, uint8_t q, id_t id, int32_t mark);
+bool daisy_setconfig(uint8_t target, uint8_t q, id_t id, const char * data);
+bool daisy_waitbusy(uint8_t target, uint8_t q, id_t id);
+bool daisy_waitrunning(uint8_t target, uint8_t q, id_t id);
+bool daisy_waitms(uint8_t target, uint8_t q, id_t id, uint32_t millis);
+bool daisy_waitswitch(uint8_t target, uint8_t q, id_t id, bool state);
 
-bool daisy_emptyqueue(uint8_t address, uint8_t q, id_t id);
-bool daisy_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src);
-bool daisy_savequeue(uint8_t address, uint8_t q, id_t id);
-bool daisy_loadqueue(uint8_t address, uint8_t q, id_t id);
-bool daisy_estop(uint8_t address, id_t id, bool hiz, bool soft);
+bool daisy_emptyqueue(uint8_t target, uint8_t q, id_t id);
+bool daisy_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src);
+bool daisy_savequeue(uint8_t target, uint8_t q, id_t id);
+bool daisy_loadqueue(uint8_t target, uint8_t q, id_t id);
+bool daisy_estop(uint8_t target, id_t id, bool hiz, bool soft);
 
 
 void lowcom_init();
 void lowcom_loop(unsigned long now);
 void lowcom_update(unsigned long now);
+void lowcom_ecc_hmacend(uint8_t * sha, uint8_t * data, size_t datalen);
 
 void resetcfg();
 
@@ -506,28 +504,28 @@ void mqtt_init();
 void mqtt_loop(unsigned long looptime);
 
 // Mux Functions
-static inline bool m_stop(uint8_t address, uint8_t q, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_stop(queue_get(q), id, hiz, soft); } else { return daisy_stop(address, q, id, hiz, soft); } }
-static inline bool m_run(uint8_t address, uint8_t q, id_t id, ps_direction dir, float stepss) { if (address == 0) { return cmd_run(queue_get(q), id, dir, stepss); } else { return daisy_run(address, q, id, dir, stepss); } }
-static inline bool m_stepclock(uint8_t address, uint8_t q, id_t id, ps_direction dir) { if (address == 0) { return cmd_stepclock(queue_get(q), id, dir); } else { return daisy_stepclock(address, q, id, dir); } }
-static inline bool m_move(uint8_t address, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps) { if (address == 0) { return cmd_move(queue_get(q), id, dir, microsteps); } else { return daisy_move(address, q, id, dir, microsteps); } }
-static inline bool m_goto(uint8_t address, uint8_t q, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD) { if (address == 0) { return cmd_goto(queue_get(q), id, pos, hasdir, dir); } else { return daisy_goto(address, q, id, pos, hasdir, dir); } }
-static inline bool m_gountil(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss) { if (address == 0) { return cmd_gountil(queue_get(q), id, action, dir, stepss); } else { return daisy_gountil(address, q, id, action, dir, stepss); } }
-static inline bool m_releasesw(uint8_t address, uint8_t q, id_t id, ps_posact action, ps_direction dir) { if (address == 0) { return cmd_releasesw(queue_get(q), id, action, dir); } else { return daisy_releasesw(address, q, id, action, dir); } }
-static inline bool m_gohome(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_gohome(queue_get(q), id); } else { return daisy_gohome(address, q, id); } }
-static inline bool m_gomark(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_gomark(queue_get(q), id); } else { return daisy_gomark(address, q, id); } }
-static inline bool m_resetpos(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_resetpos(queue_get(q), id); } else { return daisy_resetpos(address, q, id); } }
-static inline bool m_setpos(uint8_t address, uint8_t q, id_t id, int32_t pos) { if (address == 0) { return cmd_setpos(queue_get(q), id, pos); } else { return daisy_setpos(address, q, id, pos); } }
-static inline bool m_setmark(uint8_t address, uint8_t q, id_t id, int32_t mark) { if (address == 0) { return cmd_setmark(queue_get(q), id, mark); } else { return daisy_setmark(address, q, id, mark); } }
-static inline bool m_setconfig(uint8_t address, uint8_t q, id_t id, const char * data) { if (address == 0) { return cmd_setconfig(queue_get(q), id, data); } else { return daisy_setconfig(address, q, id, data); } }
-static inline bool m_waitbusy(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_waitbusy(queue_get(q), id); } else { return daisy_waitbusy(address, q, id); } }
-static inline bool m_waitrunning(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(address, q, id); } }
-static inline bool m_waitms(uint8_t address, uint8_t q, id_t id, uint32_t ms) { if (address == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(address, q, id, ms); } }
-static inline bool m_waitswitch(uint8_t address, uint8_t q, id_t id, bool state) { if (address == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(address, q, id, state); } }
-static inline bool m_emptyqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return cmdq_empty(queue_get(q), id); } else { return daisy_emptyqueue(address, q, id); } }
-static inline bool m_copyqueue(uint8_t address, uint8_t q, id_t id, uint8_t src) { if (address == 0) { return cmdq_copy(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(address, q, id, src); } }
-static inline bool m_savequeue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { return queuecfg_write(q); } else { return daisy_savequeue(address, q, id); } }
-static inline bool m_loadqueue(uint8_t address, uint8_t q, id_t id) { if (address == 0) { queuecfg_read(q); } else { return daisy_loadqueue(address, q, id); } }
-static inline bool m_estop(uint8_t address, id_t id, bool hiz, bool soft) { if (address == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(address, id, hiz, soft); } }
+static inline bool m_stop(uint8_t target, uint8_t q, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_stop(queue_get(q), id, hiz, soft); } else { return daisy_stop(target, q, id, hiz, soft); } }
+static inline bool m_run(uint8_t target, uint8_t q, id_t id, ps_direction dir, float stepss) { if (target == 0) { return cmd_run(queue_get(q), id, dir, stepss); } else { return daisy_run(target, q, id, dir, stepss); } }
+static inline bool m_stepclock(uint8_t target, uint8_t q, id_t id, ps_direction dir) { if (target == 0) { return cmd_stepclock(queue_get(q), id, dir); } else { return daisy_stepclock(target, q, id, dir); } }
+static inline bool m_move(uint8_t target, uint8_t q, id_t id, ps_direction dir, uint32_t microsteps) { if (target == 0) { return cmd_move(queue_get(q), id, dir, microsteps); } else { return daisy_move(target, q, id, dir, microsteps); } }
+static inline bool m_goto(uint8_t target, uint8_t q, id_t id, int32_t pos, bool hasdir = false, ps_direction dir = FWD) { if (target == 0) { return cmd_goto(queue_get(q), id, pos, hasdir, dir); } else { return daisy_goto(target, q, id, pos, hasdir, dir); } }
+static inline bool m_gountil(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir, float stepss) { if (target == 0) { return cmd_gountil(queue_get(q), id, action, dir, stepss); } else { return daisy_gountil(target, q, id, action, dir, stepss); } }
+static inline bool m_releasesw(uint8_t target, uint8_t q, id_t id, ps_posact action, ps_direction dir) { if (target == 0) { return cmd_releasesw(queue_get(q), id, action, dir); } else { return daisy_releasesw(target, q, id, action, dir); } }
+static inline bool m_gohome(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_gohome(queue_get(q), id); } else { return daisy_gohome(target, q, id); } }
+static inline bool m_gomark(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_gomark(queue_get(q), id); } else { return daisy_gomark(target, q, id); } }
+static inline bool m_resetpos(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_resetpos(queue_get(q), id); } else { return daisy_resetpos(target, q, id); } }
+static inline bool m_setpos(uint8_t target, uint8_t q, id_t id, int32_t pos) { if (target == 0) { return cmd_setpos(queue_get(q), id, pos); } else { return daisy_setpos(target, q, id, pos); } }
+static inline bool m_setmark(uint8_t target, uint8_t q, id_t id, int32_t mark) { if (target == 0) { return cmd_setmark(queue_get(q), id, mark); } else { return daisy_setmark(target, q, id, mark); } }
+static inline bool m_setconfig(uint8_t target, uint8_t q, id_t id, const char * data) { if (target == 0) { return cmd_setconfig(queue_get(q), id, data); } else { return daisy_setconfig(target, q, id, data); } }
+static inline bool m_waitbusy(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_waitbusy(queue_get(q), id); } else { return daisy_waitbusy(target, q, id); } }
+static inline bool m_waitrunning(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(target, q, id); } }
+static inline bool m_waitms(uint8_t target, uint8_t q, id_t id, uint32_t ms) { if (target == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(target, q, id, ms); } }
+static inline bool m_waitswitch(uint8_t target, uint8_t q, id_t id, bool state) { if (target == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(target, q, id, state); } }
+static inline bool m_emptyqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmdq_empty(queue_get(q), id); } else { return daisy_emptyqueue(target, q, id); } }
+static inline bool m_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src) { if (target == 0) { return cmdq_copy(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(target, q, id, src); } }
+static inline bool m_savequeue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return queuecfg_write(q); } else { return daisy_savequeue(target, q, id); } }
+static inline bool m_loadqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { queuecfg_read(q); } else { return daisy_loadqueue(target, q, id); } }
+static inline bool m_estop(uint8_t target, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(target, id, hiz, soft); } }
 
 // Utility functions
 extern config_t config;

@@ -2,6 +2,7 @@
 #include <FS.h>
 
 #include "wifistepper.h"
+#include "ecc508a.h"
 
 extern ESP8266WebServer server;
 extern StaticJsonBuffer<2048> jsonbuf;
@@ -634,7 +635,38 @@ void api_init() {
   server.on("/api/crypto/set", HTTP_GET, [](){
     add_headers()
     check_auth()
-    // TODO
+    if (!server.hasArg("master") || !server.hasArg("key")) {
+      server.send(200, "application/json", json_error("master, key args must be specified"));
+      return;
+    }
+    if (state.service.crypto.fault || !ecc_ok()) {
+      server.send(200, "application/json", json_error("Crypto not available"));
+      return;
+    }
+    
+    String master = server.arg("master");
+    String key = server.arg("key");
+    bool f = !ecc_locked()? ecc_provision(master.c_str(), key.c_str()) : ecc_setpassword(master.c_str(), key.c_str());
+    if (!f) {
+      server.send(200, "application/json", json_error("Could not set crypto configuration"));
+      return;
+    }
+
+    // Loop waiting for crypto
+    for (size_t i = 0; i < 500; i++) {
+      yield();
+      ESP.wdtFeed();
+      ecc_loop(millis());
+      delay(1);
+    }
+
+    // Send response
+    if (sketch.service.crypto.mark != ECC_SUCCESS) {
+      server.send(200, "application/json", json_error("Crypto configuration failed"));
+    } else {
+      server.send(200, "application/json", json_ok());
+    }
+    flag_reboot = true;
   });
   server.on("/api/factoryreset", HTTP_GET, [](){
     add_headers()

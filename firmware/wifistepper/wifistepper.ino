@@ -725,6 +725,12 @@ void loop() {
 
   // Reboot if requested
   if (flag_reboot) {
+    // Delay for a second before restarting
+    for (size_t i = 0; i < 1000; i++) {
+      yield();
+      ESP.wdtFeed();
+      delay(1);
+    }
     ESP.restart();
   }
 
