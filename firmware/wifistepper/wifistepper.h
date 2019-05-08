@@ -322,7 +322,7 @@ typedef struct {
   bool iserror;
   char message[LEN_MESSAGE];
   uint8_t ontype;
-  uint8_t preamble[76];
+  uint8_t preamble[123];
   size_t preamblelen, length;
   char imagemd5[33];
   unsigned int files;

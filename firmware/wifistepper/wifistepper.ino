@@ -48,10 +48,12 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      .ssid = {'B','D','F','i','r','e',0},
-      .password = {'m','c','d','e','r','m','o','t','t',0},
+      //.ssid = {'B','D','F','i','r','e',0},
+      //.password = {'m','c','d','e','r','m','o','t','t',0},
       //.ssid = {'A','T','T','5','4','9',0},
       //.password = {'9','0','7','1','9','1','8','6','0','1',0},
+      .ssid = {'H','o','m','e','2','1','9','A',0},
+      .password = {'d','r','e','a','m','s','3','7','3','2','6','7',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},

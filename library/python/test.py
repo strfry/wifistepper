@@ -12,5 +12,5 @@ s.stop()
 
 
 import goodrobotics as gr
-s = gr.WifiStepper('wsx100.local', proto='lowcom_crypto', key="newpass1")
+s = gr.WifiStepper(proto=gr.ComCrypto, host='wsx100.local', key="newpass1")
 s.connect()

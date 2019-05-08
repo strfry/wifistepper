@@ -16,7 +16,7 @@ class Nack(Exception):
     def __str__(self):
         return str(self.message)
 
-class _lowcom_common:
+class _ComCommon:
     _L_MAGIC_1 = (0xAE)
     _L_MAGIC_2 = (0x7B11)
 
@@ -28,9 +28,10 @@ class _lowcom_common:
     _TYPE_CRYPTO = (0x05)
 
     _OPCODE_ESTOP = (0x00)
-    _OPCODE_SETCONFIG = (0x01)
-    _OPCODE_GETCONFIG = (0x02)
-    _OPCODE_LASTWILL = (0x03)
+    _OPCODE_PING = (0x01)
+    _OPCODE_SETCONFIG = (0x02)
+    _OPCODE_GETCONFIG = (0x03)
+    _OPCODE_LASTWILL = (0x04)
 
     _OPCODE_STOP = (0x11)
     _OPCODE_RUN = (0x12)
@@ -250,9 +251,9 @@ class _lowcom_common:
         return self._waitack(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue))
 
 
-class ComStandard(_lowcom_common):
+class ComStandard(_ComCommon):
     def __init__(self, host, port):
-        _lowcom_common.__init__(self, host, port)
+        _ComCommon.__init__(self, host, port)
 
     def _send(self, opcode, subcode, target, queue, data = ''):
         packetid = self._nextid()
@@ -270,9 +271,9 @@ class ComStandard(_lowcom_common):
         pass
 
 
-class ComCrypto(_lowcom_common):
+class ComCrypto(_ComCommon):
     def __init__(self, host, port, key):
-        _lowcom_common.__init__(self, host, port)
+        _ComCommon.__init__(self, host, port)
         self.__key = hashlib.sha256(key).digest()
 
     def _send(self, opcode, subcode, target, queue, data = ''):
@@ -325,7 +326,7 @@ class WifiStepper:
         return t if t is not None else self.__target
 
     def __init__(self, proto=ComStandard, host=None, port=1000, target=0, key=None, comm=None):
-        self.__comm = comm if comm not None else proto(**{'host': host, 'port': port, 'key': key})
+        self.__comm = comm if comm is not None else proto(**{'host': host, 'port': port, 'key': key})
 
     def connect(self):
         return self.__comm.connect()

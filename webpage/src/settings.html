@@ -6,6 +6,7 @@ css:
     - bulma-checkradio
     - bulma-switch
     - bulma-divider
+animate: true
 layout: default
 ---
 {% include helptext.html %}
@@ -155,12 +156,12 @@ layout: default
                 </div>
                 <div class="modal" v-bind:class="{'is-active': wifi.changemodal}">
                     <div class="modal-background" v-on:click="wifi.changemodal = false"></div>
-                        <div class="modal-content">
-                            <div class="box has-text-centered">
-                                <div class="title is-4">{% mdicon sync-alert %}Wifi Settings Changed</div>
-                                <div>You may need to modify your network connections and reconnect.</div>
-                            </div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Wifi Settings Changed</div>
+                            <div>Rebooting device. You may need to modify your network connections and reconnect.</div>
                         </div>
+                    </div>
                     <button class="modal-close is-large" v-on:click="wifi.changemodal = false"></button>
                 </div>
             </div>
@@ -249,12 +250,12 @@ layout: default
                 </div>
                 <div class="modal" v-bind:class="{'is-active': service.changemodal}">
                     <div class="modal-background" v-on:click="service.changemodal = false"></div>
-                        <div class="modal-content">
-                            <div class="box has-text-centered">
-                                <div class="title is-4">{% mdicon sync-alert %}Service Settings Changed</div>
-                                <div>You may need to refresh the page to see changes.</div>
-                            </div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Service Settings Changed</div>
+                            <div>Rebooting device. You may need to refresh the page to see changes.</div>
                         </div>
+                    </div>
                     <button class="modal-close is-large" v-on:click="service.changemodal = false"></button>
                 </div>
             </div>
@@ -264,7 +265,7 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon lan %}Daisy Chaining</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
-                <div class="field is-horizontal is-spaced-mobile">
+                <div class="field is-horizontal">
                     <div class="field-label is-normal"></div>
                     <div class="field-body">
                         <span class="control">
@@ -273,7 +274,6 @@ layout: default
                             </span>
                     </div>
                 </div>
-
                 <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"></div>
                     <div class="field-body">
@@ -295,27 +295,110 @@ layout: default
                 </div>
                 <div class="modal" v-bind:class="{'is-active': daisy.changemodal}">
                     <div class="modal-background" v-on:click="daisy.changemodal = false"></div>
-                        <div class="modal-content">
-                            <div class="box has-text-centered">
-                                <div class="title is-4">{% mdicon sync-alert %}Daisy Chaining Settings Changed</div>
-                                <div>You may need to refresh the page to see changes.</div>
-                            </div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Daisy Chaining Settings Changed</div>
+                            <div>Rebooting device. You may need to refresh the page to see changes.</div>
                         </div>
+                    </div>
                     <button class="modal-close is-large" v-on:click="daisy.changemodal = false"></button>
                 </div>
             </div>
         </div>
     </div>
-    <!--
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon lock-plus %}Crypto Authentication</span></div>
-        <div class="message-body" style="color: #666;">
-            <strong>Work in progress:</strong> Crypto chip authentication development is still in progress. Nothing to see here, move along =)
+        <div class="message-header"><span class="title is-5">{% mdicon key %}Crypto Authentication</span></div>
+        <div class="message-body">
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="level warnings">
+                    <div class="level-left">
+                        <div class="level-item subtitle is-5">Chip Status:</div>
+                    </div>
+                    <div class="level-item">
+                        <div class="level">
+                            <div class="level-item"><span class="tag is-medium" v-bind:class="{'is-error': crypto.fault}">Fault</span></div>
+                            <div class="level-item">
+                                <span class="tag is-medium is-success" v-if="crypto.probed">Probed</span>
+                                <span class="tag is-medium is-error" v-else>Not Probed</span>
+                            </div>
+                            <div class="level-item">
+                                <span class="tag is-medium is-success" v-if="crypto.available">Available</span>
+                                <span class="tag is-medium is-error" v-else>Not Available</span>
+                            </div>
+                            <div class="level-item">
+                                <span class="tag is-medium" v-if="crypto.provisioned">Provisioned</span>
+                                <span class="tag is-medium is-info" v-else>Not Provisioned</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="notification is-danger has-text-centered animated fadeInDown" style="padding: 10px;" v-if="crypto.errorpop">
+                    <p>{% raw %}<strong>Error:</strong> {{ crypto.errorpop }}{% endraw %}</p>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Master Key</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded">
+                                <input class="input" type="text" placeholder="Master Key" v-model="crypto.master" v-bind:disabled="!crypto.available" />
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Auth Key</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded">
+                                <input class="input" type="text" placeholder="Key" v-model="crypto.key" v-bind:disabled="!crypto.available" />
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="field has-text-centered">
+                    <span class="control">
+                        <button class="button is-primary is-medium" v-bind:disabled="!crypto.available" v-on:click="writeprovision" v-if="!crypto.provisioned">Provision</button>
+                        <button class="button is-primary is-medium" v-bind:disabled="!crypto.available" v-on:click="writecrypto" v-else>Update Key</button>
+                    </span>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': crypto.provisionmodal}">
+                    <div class="modal-background" v-on:click="crypto.provisionmodal = false"></div>
+                    <div class="modal-content">
+                        <div class="box">
+                            <div class="title is-4">{% mdicon lock-alert %}Provision Warning</div>
+                            <div style="color: #ccc;">
+                                <p>You are about to provision the Crypto Chip on the Wi-Fi Stepper. This is a write-once operation that will permanently encode the <strong style="color: #fff;">Master Key</strong> on the device in way that cannot be retrieved or changed. It is <strong style="color: #fff;">strongly</strong> recommended that you write down the Master Key <span class="tag is-medium is-family-code" style="color: #c00; font-weight: bold; margin-left: 5px; margin-right: 5px;">{% raw %}{{ crypto.master }}{% endraw %}</span> and secure it for future reference.</p>
+                                <p>The <strong style="color: #fff;">Auth Key</strong> is then locked behind the Master Key and may only be changed by knowing the Master Key. During runtime operation, the <strong style="color: #fff;">Auth Key</strong> is used to authenticate connected clients.</p>
+                                <p>In order to have a truly secured device, you must additionally disable the services <strong style="color: #fff;">HTTP</strong>, <strong style="color: #fff;">MQTT</strong>,  <strong style="color: #fff;">Arduino OTA</strong>, and any other unsecured connection/programming method (as it would still be possible to connect using these unsecured methods).</p>
+                                <p>Crypto Authentication only validates clients ability to send commands (it does <strong style="color: #fff;">not</strong> encrypt communication). With physical access to the device, an attacker could still reprogram or reconfigure the device to bypass security features. When undergoing a <strong>Factory Reset</strong> (either by software or hardware pushbutton on the device), the Crypto Chip will remain provisioned and Master Key and Auth Key will remain inaccessible.</p>
+                                <p>For more info, visit <a class="link" href="https://www.wifistepper.com/documentation/crypto-authentication" target="_blank">wifistepper.com/documentation/crypto-authentication</a></p>
+                            </div>
+                            <hr />
+                            <div class="has-text-centered">
+                                <button class="button is-primary is-medium" v-on:click="crypto.provisionmodal = false">Cancel</button>
+                                <button class="button is-primary is-medium is-info" v-on:click="crypto.provisionmodal = false; writecrypto()">Continue and Provision</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close is-large" v-on:click="crypto.provisionmodal = false"></button>
+                </div>
+                <div class="modal" v-bind:class="{'is-active': crypto.changemodal}">
+                    <div class="modal-background" v-on:click="crypto.changemodal = false"></div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Crypto Authentication Settings Changed</div>
+                            <div>Rebooting device. You may need to refresh the page to see changes.</div>
+                        </div>
+                    </div>
+                    <button class="modal-close is-large" v-on:click="crypto.changemodal = false"></button>
+                </div>
+            </div>
         </div>
     </div>
-    -->
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon update %}Reset Device</span></div>
+        <div class="message-header"><span class="title is-5">{% mdicon update %}Reset &amp; Upgrade</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="field is-horizontal is-spaced-mobile">
@@ -326,7 +409,8 @@ layout: default
                         </div>
                     </div>
                 </div>
-                <div class="field is-horizontal is-spaced-mobile">
+                <hr />
+                <div class="field is-horizontal" style="padding-bottom: 10px;">
                     <div class="field-label is-normal">Check for official updated to the Wi-Fi Stepper project.</div>
                     <div class="field-body">
                         <div class="field">
@@ -363,13 +447,13 @@ layout: default
                 </div>
                 <div class="modal" v-bind:class="{'is-active': update.changemodal}">
                     <div class="modal-background" v-on:click="update.changemodal = false"></div>
-                        <div class="modal-content">
-                            <div class="box has-text-centered">
-                                <div class="title is-4">{% mdicon sync-alert %}Uploading Software Image</div>
-                                <div v-if="update.working">Please do not remove power from device.</div>
-                                <span v-html="update.message"></span>
-                            </div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Uploading Software Image</div>
+                            <div v-if="update.working">Please do not remove power from device.</div>
+                            <span v-html="update.message"></span>
                         </div>
+                    </div>
                     <button class="modal-close is-large" v-on:click="update.changemodal = false"></button>
                 </div>
             </div>
@@ -388,16 +472,19 @@ layout: default
         el: '#app',
         data: {
             wifi: {
-                detected: [],
                 changemodal: false,
+
+                detected: [],
                 ip: '',
                 rssi: 0,
                 mode: null,
+                
                 accesspoint_ssid: '',
                 accesspoint_password: '',
                 accesspoint_encryption: false,
                 accesspoint_channel: 1,
                 accesspoint_hidden: false,
+                
                 station_ssid: '',
                 station_password: '',
                 station_encryption: false,
@@ -408,6 +495,7 @@ layout: default
             },
             service: {
                 changemodal: false,
+
                 hostname: '',
                 http_enabled: true,
                 mdns_enabled: true,
@@ -419,11 +507,26 @@ layout: default
             },
             daisy: {
                 changemodal: false,
+
                 enabled: true,
                 master: false
             },
+            crypto: {
+                provisionmodal: false,
+                changemodal: false,
+                errorpop: '',
+
+                fault: false,
+                probed: false,
+                available: false,
+                provisioned: false,
+
+                master: '',
+                key: ''
+            },
             update: {
                 changemodal: false,
+                
                 working: false,
                 message: "",
                 version: 0,
@@ -460,29 +563,27 @@ layout: default
             writewifi: function() {
                 console.log("Writing wifi settings");
                 if (this.wifi.mode == 'off') {
-                    axios.get("{{ site.apiurl }}/api/wifi/set/off", {
-                        params: {}
-                    });
+                    axios.get("{{ site.apiurl }}/api/wifi/set/off");
 
                 } else if (this.wifi.mode == 'accesspoint') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/accesspoint", {
                         params: {
-                            ssid: app.wifi.accesspoint_ssid,
-                            password: app.wifi.accesspoint_encryption? app.wifi.accesspoint_password : '',
-                            channel: app.wifi.accesspoint_channel,
-                            hidden: app.wifi.accesspoint_hidden
+                            ssid: this.wifi.accesspoint_ssid,
+                            password: this.wifi.accesspoint_encryption? this.wifi.accesspoint_password : '',
+                            channel: this.wifi.accesspoint_channel,
+                            hidden: this.wifi.accesspoint_hidden
                         }
                     });
 
                 } else if (this.wifi.mode == 'station') {
                     axios.get("{{ site.apiurl }}/api/wifi/set/station", {
                         params: {
-                            ssid: app.wifi.station_ssid,
-                            password: app.wifi.station_encryption? app.wifi.station_password : '',
-                            forceip: app.wifi.station_forceip,
-                            forcesubnet: app.wifi.station_forcesubnet,
-                            forcegateway: app.wifi.station_forcegateway,
-                            revertap: app.wifi.station_revertap
+                            ssid: this.wifi.station_ssid,
+                            password: this.wifi.station_encryption? this.wifi.station_password : '',
+                            forceip: this.wifi.station_forceip,
+                            forcesubnet: this.wifi.station_forcesubnet,
+                            forcegateway: this.wifi.station_forcegateway,
+                            revertap: this.wifi.station_revertap
                         }
                     });
                 }
@@ -492,14 +593,14 @@ layout: default
                 console.log("Writing service settings");
                 axios.get("{{ site.apiurl }}/api/service/set", {
                     params: {
-                        hostname: app.service.hostname,
-                        http_enabled: app.service.http_enabled,
-                        mdns_enabled: app.service.mdns_enabled,
-                        auth_enabled: app.service.auth_enabled,
-                        auth_username: app.service.auth_username,
-                        auth_password: app.service.auth_password,
-                        ota_enabled: app.service.ota_enabled,
-                        ota_password: app.service.ota_password
+                        hostname: this.service.hostname,
+                        http_enabled: this.service.http_enabled,
+                        mdns_enabled: this.service.mdns_enabled,
+                        auth_enabled: this.service.auth_enabled,
+                        auth_username: this.service.auth_username,
+                        auth_password: this.service.auth_password,
+                        ota_enabled: this.service.ota_enabled,
+                        ota_password: this.service.ota_password
                     }
                 });
                 this.service.changemodal = true;
@@ -507,11 +608,37 @@ layout: default
             writedaisy: function() {
                 axios.get("{{ site.apiurl }}/api/daisy/set", {
                     params: {
-                        enabled: app.daisy.enabled,
-                        master: app.daisy.master
+                        enabled: this.daisy.enabled,
+                        master: this.daisy.master
                     }
                 });
                 this.daisy.changemodal = true;
+            },
+            writeprovision: function() {
+                if (this.crypto.master == '') { this.crypto.errorpop = "Enter Master Key"; return; }
+                if (this.crypto.key == '') { this.crypto.errorpop = "Enter Auth Key"; return; }
+                this.crypto.provisionmodal = true;
+            },
+            writecrypto: function() {
+                if (this.crypto.master == '') { this.crypto.errorpop = "Enter Master Key"; return; }
+                if (this.crypto.key == '') { this.crypto.errorpop = "Enter Auth Key"; return; }
+                axios.get("{{ site.apiurl }}/api/crypto/set", {
+                    params: {
+                        master: this.crypto.master,
+                        key: this.crypto.key,
+                    }
+                }).then(function(r) {
+                    console.log(r);
+                    if (r.data.status == 'ok') {
+                        app.crypto.errorpop = '';
+                        app.crypto.changemodal = true;
+                    } else {
+
+                        app.crypto.errorpop = r.data.message;
+                    }
+                }).catch(function(e) {
+                    app.crypto.errorpop = "Unable to issue crypto write command."
+                });
             },
             checkupdate: function() {
                 console.log("Checking for updates");
@@ -525,6 +652,9 @@ layout: default
                             return;
                         }
 
+                        window.open("https://www.wifistepper.com/downloads/"+model+"/check?version="+r.data.version, '_blank');
+
+                        /*
                         axios.get("https://www.wifistepper.com/downloads/"+model+"/latest/metainfo.json").then(function (s) {
                             if (s.data.version > r.data.version) {
                                 app.update.message = "Newer software version exists (Version "+s.data.version+"). Visit <a href=\"https://www.wifistepper.com/downloads\" target=\"_blank\">wifistepper.com/downloads</a> to download.";
@@ -534,6 +664,7 @@ layout: default
                         }).catch(function(e) {
                             app.update.message = "Unable to connect to server. No network detected."
                         });
+                        */
                     }
                 });
             },
@@ -547,7 +678,7 @@ layout: default
                 this.update.working = true;
                 axios.post("{{ site.apiurl }}/update/image", data, {headers: {'Content-Type': 'multipart/form-data'}}).then(function(r) {
                     if (r.data.status == 'ok') {
-                        app.update.message = 'Update completed successfully. '+r.data.updated_files+' files updated.<br />You may need to refresh the page to see changes.';
+                        app.update.message = 'Update completed successfully. '+r.data.updated_files+' files updated.<br />Rebooting device. You may need to refresh the page to see changes.';
                     } else {
                         app.update.message = '<span style="color: #c00;"><strong>Completed with Error:</strong> '+(r.data.message || "Unknown error!")+'</span><br />';
                         if (r.data.possible_corruption != "no") {
@@ -582,6 +713,11 @@ layout: default
             axios.get("{{ site.apiurl }}/api/daisy/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.daisy, r.data, ['enabled', 'master']);
+                }
+            });
+            axios.get("{{ site.apiurl }}/api/crypto/get").then(function(r) {
+                if (r.data.status == 'ok') {
+                    merge(app.crypto, r.data, ['fault', 'probed', 'available', 'provisioned']);
                 }
             });
         }

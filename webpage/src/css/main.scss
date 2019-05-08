@@ -60,6 +60,10 @@ $table-cell-padding: 1em;
     display: none;
 }
 
+p:not(:first-of-type) {
+    padding-top: 1em;
+}
+
 .mdicon {
     display: inline-flex;
     align-self: center;
@@ -226,12 +230,21 @@ sup {
         color: #666;
         background-color: $background-dark;
 
+        &.is-success {
+            color: $text;
+            font-weight: bold;
+            background-color: #093;
+        }
+        &.is-info {
+            color: $text;
+            font-weight: bold;
+            background-color: #36f;
+        }
         &.is-warning {
             color: $text;
             font-weight: bold;
             background-color: #f90;
         }
-
         &.is-error {
             color: $text;
             font-weight: bold;

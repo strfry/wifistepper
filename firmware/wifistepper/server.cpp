@@ -648,7 +648,7 @@ void api_init() {
     String key = server.arg("key");
     bool f = !ecc_locked()? ecc_provision(master.c_str(), key.c_str()) : ecc_setpassword(master.c_str(), key.c_str());
     if (!f) {
-      server.send(200, "application/json", json_error("Could not set crypto configuration"));
+      server.send(200, "application/json", json_error("Could not set crypto configuration."));
       return;
     }
 
@@ -662,7 +662,7 @@ void api_init() {
 
     // Send response
     if (sketch.service.crypto.mark != ECC_SUCCESS) {
-      server.send(200, "application/json", json_error("Crypto configuration failed"));
+      server.send(200, "application/json", json_error("Crypto configuration failed. (Check master key)"));
     } else {
       server.send(200, "application/json", json_ok());
     }

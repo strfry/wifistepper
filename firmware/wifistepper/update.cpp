@@ -6,6 +6,8 @@
 
 #include "wifistepper.h"
 
+//#define UP_DEBUG
+
 extern ESP8266WebServer server;
 extern StaticJsonBuffer<2048> jsonbuf;
 
@@ -46,14 +48,27 @@ typedef struct ispacked {
   char md5[33];
 } update_md5_t;
 
+inline void up_print(const char * str) { Serial.println(str); }
+inline void up_print(const char * str1, const char * str2) { Serial.print(str1); Serial.println(str2); }
+inline void up_print(const char * str1, const String & str2) { up_print(str1, str2.c_str()); }
+inline void up_print(const char * str1, size_t i) { Serial.print(str1); Serial.println(i); }
+
+#ifdef UP_DEBUG
+#define up_debug(...) up_print(__VA_ARGS__)
+#else
+#define up_debug(...)
+#endif
+
 size_t update_handlechunk(uint8_t * data, size_t length) {
+  up_debug("Handle chunk of size: ", length);
   ESP.wdtFeed();
   
   update_sketch * u = &sketch.update;
   size_t index = 0;
 
   // Handle preamble
-  if (u->ontype == 0) u ->ontype = data[index++];
+  if (u->ontype == 0) u->ontype = data[index++];
+  up_debug("On type: ", u->ontype);
 
   size_t preamble_size = 0;
   switch (u->ontype) {
@@ -63,12 +78,12 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
     case UPDATE_MD5:    preamble_size = sizeof(update_md5_t);       break;
     default: {
       // Unknown preamble, break out
+      up_print("Unknown preamble in image file.");
       strlcpy(u->message, "Unknown preamble in image file.", LEN_MESSAGE);
       u->iserror = true;
       return 0;
     }
   }
-
   if (u->preamblelen < preamble_size) {
     size_t numbytes = min(preamble_size - u->preamblelen, length - index);
     memcpy(&u->preamble[u->preamblelen], &data[index], numbytes);
@@ -84,19 +99,24 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
     // We have full preamble, start writing chunk
     switch (u->ontype) {
       case UPDATE_HEADER: {
+        up_debug("Handle header chunk");
+        
         update_header_t * header = (update_header_t *)u->preamble;
         if (header->magic != UPDATE_MAGIC || strcmp(header->model, MODEL) != 0) {
           // Bad header
+          up_print("Bad image file header.");
           strlcpy(u->message, "Bad image file header.", LEN_MESSAGE);
           u->iserror = true;
           return 0;
         }
-        Serial.println("Beginning image update");
+        up_print("Beginning image update");
         u->ontype = 0;
         u->preamblelen = u->length = 0;
         break;
       }
       case UPDATE_IMAGE: {
+        up_debug("Handle image chunk");
+        
         if (index == length) break;
         update_image_t * image = (update_image_t *)u->preamble;
         
@@ -129,7 +149,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
             return 0;
           }
 
-          Serial.println("Updated image");
+          up_print("Updated image");
           u->ontype = 0;
           u->preamblelen = u->length = 0;
           u->files += 1;
@@ -138,6 +158,8 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
       }
   
       case UPDATE_DATA: {
+        up_debug("Handle data chunk");
+        
         if (index == length) break;
         update_data_t * datafile = (update_data_t *)u->preamble;
   
@@ -149,7 +171,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
           size_t numbytes = min(datafile->size - u->length, length - index);
           File fp = SPIFFS.open(UPDATE_TMPFNAME, "a");
           {
-            if (!fp) { strlcpy(u->message, "Could not open data file.", LEN_MESSAGE); u->iserror = true; return 0; }
+            if (!fp) { up_print("Could not open data file."); strlcpy(u->message, "Could not open data file.", LEN_MESSAGE); u->iserror = true; return 0; }
             fp.write(&data[index], numbytes);
             fp.close();
           }
@@ -163,7 +185,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
   
           File fp = SPIFFS.open(UPDATE_TMPFNAME, "r");
           {
-            if (!fp) { strlcpy(u->message, "Could not open data file for MD5 verification.", LEN_MESSAGE); u->iserror = true; return 0; }
+            if (!fp) { up_print("Could not open data file for MD5 verification."); strlcpy(u->message, "Could not open data file for MD5 verification.", LEN_MESSAGE); u->iserror = true; return 0; }
             md5.addStream(fp, fp.size());
             fp.close();
           }
@@ -171,6 +193,7 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
           md5.calculate();
           if (strcmp(datafile->md5, md5.toString().c_str()) != 0) {
             // Bad md5
+            up_print("Bad data file MD5 verification."); 
             strlcpy(u->message, "Bad data file MD5 verification.", LEN_MESSAGE);
             u->iserror = true;
             return 0;
@@ -178,12 +201,13 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
 
           SPIFFS.remove(datafile->filename);
           if (!SPIFFS.rename(UPDATE_TMPFNAME, datafile->filename)) {
+            up_print("Could not rename data file."); 
             strlcpy(u->message, "Could not rename data file.", LEN_MESSAGE);
             u->iserror = true;
             return 0;
           }
           update_files.push_back(String(datafile->filename));
-          Serial.print("Updated file: "); Serial.println(datafile->filename);
+          up_print("Updated file: ", datafile->filename);
           u->ontype = 0;
           u->preamblelen = u->length = 0;
           u->files += 1;
@@ -191,8 +215,10 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
         break;
       }
       case UPDATE_MD5: {
+        up_debug("Handle md5 chunk");
+        
         update_md5_t * md5 = (update_md5_t *)u->preamble;
-        Serial.print("Checking against md5: "); Serial.println(md5->md5);
+        up_print("Checking against md5: ", md5->md5);
         strcpy(u->imagemd5, md5->md5);
         u->ontype = 0;
         u->preamblelen = u->length = 0;
@@ -207,6 +233,8 @@ size_t update_handlechunk(uint8_t * data, size_t length) {
 
 void update_init() {
   server.on("/update/image", HTTP_POST, [](){
+    up_debug("After upload");
+    
     add_headers()
     check_auth()
     JsonObject& root = jsonbuf.createObject();
@@ -218,6 +246,7 @@ void update_init() {
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
     flag_reboot = true;
+    //if (sketch.update.preamble) free(sketch.update.preamble);
   }, []() {
     if (config.service.auth.enabled && !server.authenticate(config.service.auth.username, config.service.auth.password)) {
       return;
@@ -225,7 +254,16 @@ void update_init() {
     
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
+      up_debug("Upload file start");
+      
       memset(&sketch.update, 0, sizeof(update_sketch));
+      /*sketch.update.preamble = (uint8_t *)malloc(sizeof(update_header_t));
+      if (!sketch.update.preamble) {
+        up_print("Not enough memory.");
+        strlcpy(sketch.update.message, "Not enough memory.", LEN_MESSAGE);
+        sketch.update.iserror = true;
+      }
+      memset(&sketch.update.preamble, 0, sizeof(update_header_t));*/
       update_md5.begin();
       update_files.clear();
       update_files.push_back(String(FNAME_WIFICFG));
@@ -233,11 +271,15 @@ void update_init() {
       update_files.push_back(String(FNAME_DAISYCFG));
       update_files.push_back(String(FNAME_MOTORCFG));
     } else if (upload.status == UPLOAD_FILE_WRITE) {
+      up_debug("Upload file write");
+      
       size_t index = 0;
       while (!sketch.update.iserror && index < upload.currentSize) {
         index += update_handlechunk(&upload.buf[index], upload.currentSize - index);
       }
     } else if (upload.status == UPLOAD_FILE_END) {
+      up_debug("Upload file end");
+      
       // Check md5
       update_md5.calculate();
       if (strcmp(sketch.update.imagemd5, update_md5.toString().c_str()) != 0) {
@@ -249,11 +291,11 @@ void update_init() {
         Dir root = SPIFFS.openDir("/");
         while (root.next()) {
           if (std::find(update_files.begin(), update_files.end(), root.fileName()) == update_files.end()) {
-            Serial.print("Deleting orphaned file: "); Serial.println(root.fileName());
+            up_print("Deleting orphaned file: ", root.fileName());
             SPIFFS.remove(root.fileName());
           }
         }
-        Serial.println("Update complete.");
+        up_print("Update complete.");
         strlcpy(sketch.update.message, "Upload complete (success).", LEN_MESSAGE);
       }
       

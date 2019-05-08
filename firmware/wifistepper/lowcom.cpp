@@ -107,13 +107,13 @@ typedef struct ispacked {
 #define LTO_PING          (3000)
 
 #ifdef LOWCOM_DEBUG
-void lowcom_debug(String msg) {
+void lc_debug(String msg) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
   Serial.println(msg);
 }
-void lowcom_debug(String msg, int i1) {
+void lc_debug(String msg, int i1) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -122,7 +122,7 @@ void lowcom_debug(String msg, int i1) {
   Serial.print(i1);
   Serial.println(")");
 }
-void lowcom_debug(String msg, int i1, float f1) {
+void lc_debug(String msg, int i1, float f1) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -133,7 +133,7 @@ void lowcom_debug(String msg, int i1, float f1) {
   Serial.print(f1);
   Serial.println(")");
 }
-void lowcom_debug(String msg, int i1, int i2) {
+void lc_debug(String msg, int i1, int i2) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -144,7 +144,7 @@ void lowcom_debug(String msg, int i1, int i2) {
   Serial.print(i2);
   Serial.println(")");
 }
-void lowcom_debug(String msg, int i1, int i2, int i3) {
+void lc_debug(String msg, int i1, int i2, int i3) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -157,7 +157,7 @@ void lowcom_debug(String msg, int i1, int i2, int i3) {
   Serial.print(i3);
   Serial.println(")");
 }
-void lowcom_debug(String msg, int i1, int i2, int i3, int i4, int i5) {
+void lc_debug(String msg, int i1, int i2, int i3, int i4, int i5) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -174,7 +174,7 @@ void lowcom_debug(String msg, int i1, int i2, int i3, int i4, int i5) {
   Serial.print(i5);
   Serial.println(")");
 }
-void lowcom_debug(const char * name, uint8_t * sha) {
+void lc_debug(const char * name, uint8_t * sha) {
   Serial.print("(");
   Serial.print(millis());
   Serial.print(") LOWCOM -> ");
@@ -183,7 +183,7 @@ void lowcom_debug(const char * name, uint8_t * sha) {
   Serial.println();
 }
 #else
-#define lowcom_debug(...)
+#define lc_debug(...)
 #endif
 
 WiFiServer lowcom_server(LTC_PORT);
@@ -306,17 +306,17 @@ static void lc_replyack(size_t client, uint8_t mode, uint8_t opcode, uint8_t tar
 
 #define lc_expectlen(elen)  ({ if (len != (elen)) { lc_replynack(client, mode, opcode, target, queue, packetid, "Bad message length"); return; } })
 static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t subcode, uint8_t target, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
-  lowcom_debug("CMD received", opcode, subcode, target, queue, packetid);
+  lc_debug("CMD received", opcode, subcode, target, queue, packetid);
 
   if (subcode != SUBCODE_CMD) {
-    lowcom_debug("ERR bad subcode (expect CMD)");
+    lc_debug("ERR bad subcode (expect CMD)");
     lc_replynack(client, mode, opcode, target, queue, packetid, "Bad subcode");
     return;
   }
 
   // Check if client initialized
   if (!lowcom_client[client].initialized) {
-    lowcom_debug("ERR client not initialized");
+    lc_debug("ERR client not initialized");
     lc_replynack(client, mode, opcode, target, queue, packetid, "Client not initialized (must send HELLO)");
     return;
   }
@@ -326,8 +326,14 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_ESTOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
-      lowcom_debug("CMD estop", cmd->hiz, cmd->soft);
+      lc_debug("CMD estop", cmd->hiz, cmd->soft);
       m_estop(target, id, cmd->hiz, cmd->soft);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
+      break;
+    }
+    case OPCODE_PING: {
+      lc_expectlen(0);
+      lc_debug("CMD ping");
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
@@ -336,7 +342,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
         lc_replynack(client, mode, opcode, target, queue, packetid, "Bad config data");
         return;
       }
-      lowcom_debug("CMD setconfig");
+      lc_debug("CMD setconfig");
       m_setconfig(target, queue, id, (const char *)data);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -346,7 +352,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     }
     case OPCODE_LASTWILL: {
       lc_expectlen(0);
-      lowcom_debug("CMD lastwill", queue);
+      lc_debug("CMD lastwill", queue);
       lowcom_client[client].lastwill = queue;
       lc_replyack(client, mode, opcode, 0, queue, packetid, id);
       break;
@@ -355,7 +361,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_STOP: {
       lc_expectlen(sizeof(cmd_stop_t));
       cmd_stop_t * cmd = (cmd_stop_t *)data;
-      lowcom_debug("CMD stop", cmd->hiz, cmd->soft);
+      lc_debug("CMD stop", cmd->hiz, cmd->soft);
       m_stop(target, queue, id, cmd->hiz, cmd->soft);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -363,7 +369,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_RUN: {
       lc_expectlen(sizeof(cmd_run_t));
       cmd_run_t * cmd = (cmd_run_t *)data;
-      lowcom_debug("CMD run", cmd->dir, cmd->stepss);
+      lc_debug("CMD run", cmd->dir, cmd->stepss);
       m_run(target, queue, id, cmd->dir, cmd->stepss);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -371,7 +377,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_STEPCLOCK: {
       lc_expectlen(sizeof(cmd_stepclk_t));
       cmd_stepclk_t * cmd = (cmd_stepclk_t *)data;
-      lowcom_debug("CMD stepclock", cmd->dir);
+      lc_debug("CMD stepclock", cmd->dir);
       m_stepclock(target, queue, id, cmd->dir);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -379,7 +385,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_MOVE: {
       lc_expectlen(sizeof(cmd_move_t));
       cmd_move_t * cmd = (cmd_move_t *)data;
-      lowcom_debug("CMD move", cmd->dir, (float)cmd->microsteps);
+      lc_debug("CMD move", cmd->dir, (float)cmd->microsteps);
       m_move(target, queue, id, cmd->dir, cmd->microsteps);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -387,7 +393,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_GOTO: {
       lc_expectlen(sizeof(cmd_goto_t));
       cmd_goto_t * cmd = (cmd_goto_t *)data;
-      lowcom_debug("CMD goto", cmd->pos, cmd->hasdir, cmd->dir);
+      lc_debug("CMD goto", cmd->pos, cmd->hasdir, cmd->dir);
       m_goto(target, queue, id, cmd->pos, cmd->hasdir, cmd->dir);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -395,7 +401,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_GOUNTIL: {
       lc_expectlen(sizeof(cmd_gountil_t));
       cmd_gountil_t * cmd = (cmd_gountil_t *)data;
-      lowcom_debug("CMD gountil", cmd->action, cmd->dir, cmd->stepss);
+      lc_debug("CMD gountil", cmd->action, cmd->dir, cmd->stepss);
       m_gountil(target, queue, id, cmd->action, cmd->dir, cmd->stepss);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -403,28 +409,28 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_RELEASESW: {
       lc_expectlen(sizeof(cmd_releasesw_t));
       cmd_releasesw_t * cmd = (cmd_releasesw_t *)data;
-      lowcom_debug("CMD releasesw", cmd->action, cmd->dir);
+      lc_debug("CMD releasesw", cmd->action, cmd->dir);
       m_releasesw(target, queue, id, cmd->action, cmd->dir);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOHOME: {
       lc_expectlen(0);
-      lowcom_debug("CMD gohome");
+      lc_debug("CMD gohome");
       m_gohome(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_GOMARK: {
       lc_expectlen(0);
-      lowcom_debug("CMD gomark");
+      lc_debug("CMD gomark");
       m_gomark(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RESETPOS: {
       lc_expectlen(0);
-      lowcom_debug("CMD resetpos");
+      lc_debug("CMD resetpos");
       m_resetpos(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -432,7 +438,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_SETPOS: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
-      lowcom_debug("CMD setpos", cmd->pos);
+      lc_debug("CMD setpos", cmd->pos);
       m_setpos(target, queue, id, cmd->pos);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -440,7 +446,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_SETMARK: {
       lc_expectlen(sizeof(cmd_setpos_t));
       cmd_setpos_t * cmd = (cmd_setpos_t *)data;
-      lowcom_debug("CMD setpos", cmd->pos);
+      lc_debug("CMD setpos", cmd->pos);
       m_setmark(target, queue, id, cmd->pos);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -448,14 +454,14 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     
     case OPCODE_WAITBUSY: {
       lc_expectlen(0);
-      lowcom_debug("CMD waitbusy");
+      lc_debug("CMD waitbusy");
       m_waitbusy(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_WAITRUNNING: {
       lc_expectlen(0);
-      lowcom_debug("CMD waitrunning");
+      lc_debug("CMD waitrunning");
       m_waitrunning(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -463,7 +469,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_WAITMS: {
       lc_expectlen(sizeof(cmd_waitms_t));
       cmd_waitms_t * cmd = (cmd_waitms_t *)data;
-      lowcom_debug("CMD waitms", cmd->ms);
+      lc_debug("CMD waitms", cmd->ms);
       m_waitms(target, queue, id, cmd->ms);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -471,7 +477,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     case OPCODE_WAITSWITCH: {
       lc_expectlen(sizeof(cmd_waitsw_t));
       cmd_waitsw_t * cmd = (cmd_waitsw_t *)data;
-      lowcom_debug("CMD waitswitch", cmd->state);
+      lc_debug("CMD waitswitch", cmd->state);
       m_waitswitch(target, queue, id, cmd->state);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -479,21 +485,21 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
 
     case OPCODE_EMPTYQUEUE: {
       lc_expectlen(0);
-      lowcom_debug("CMD emptyqueue");
+      lc_debug("CMD emptyqueue");
       m_emptyqueue(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_SAVEQUEUE: {
       lc_expectlen(0);
-      lowcom_debug("CMD savequeue");
+      lc_debug("CMD savequeue");
       m_savequeue(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_LOADQUEUE: {
       lc_expectlen(0);
-      lowcom_debug("CMD loadqueue");
+      lc_debug("CMD loadqueue");
       m_loadqueue(target, queue, id);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -503,14 +509,14 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
     }
     case OPCODE_COPYQUEUE: {
       lc_expectlen(sizeof(uint8_t));
-      lowcom_debug("CMD copyqueue", data[0]);
+      lc_debug("CMD copyqueue", data[0]);
       m_copyqueue(target, queue, id, data[0]);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_RUNQUEUE: {
       lc_expectlen(0);
-      lowcom_debug("CMD runqueue");
+      lc_debug("CMD runqueue");
       m_copyqueue(target, 0, id, queue);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
@@ -529,23 +535,25 @@ void lowcom_ecc_hmacend(uint8_t * sha, uint8_t * data, size_t datalen) {
     lc_crypto * crypto = (lc_crypto *)&meta[1];
     lc_header * header = (lc_header *)&crypto[1];
 
-    lowcom_debug("Calculated", sha);
-    lowcom_debug("Given", crypto->hmac);
+    //lc_debug("Calculated", sha);
+    //lc_debug("Given", crypto->hmac);
     if (memcmp(sha, crypto->hmac, 32) != 0) {
-      lowcom_debug("HMAC bad signature");
+      lc_debug("HMAC bad signature");
       lc_replynack(meta->client, MODE_CRYPTO, header->opcode, header->target, header->queue, header->packetid, "Bad hmac signature (Key error)");
       return;
     }
 
-    lowcom_debug("HMAC valid signature");
-    lowcom_debug("Crypto packet length", datalen);
-    lowcom_debug("Crypto packet received", header->opcode, header->subcode, header->target, header->queue, header->packetid);
+    //lc_debug("HMAC valid signature");
+    //lc_debug("Crypto packet length", datalen);
+    lc_debug("Crypto packet received", header->opcode, header->subcode, header->target, header->queue, header->packetid);
     lc_handlepacket(meta->client, MODE_CRYPTO, header->opcode, header->subcode, header->target, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
 
   } else if (meta->target == TARGET_CLIENT) {
     lc_preamble * preamble = (lc_preamble *)&meta[1];
     lc_crypto * crypto = (lc_crypto *)&preamble[1];
     lc_header * header = (lc_header *)&crypto[1];
+
+    lc_debug("Send crypto data to client", meta->client);
     
     memcpy(crypto->hmac, sha, 32);
     lc_send(meta->client, (uint8_t *)preamble, datalen - sizeof(lc_cryptometa_t));
@@ -563,7 +571,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
   
   switch (preamble->type) {
     case TYPE_HELLO: {
-      lowcom_debug("RX hello");
+      lc_debug("RX hello");
       uint8_t reply[sizeof(lc_preamble) + sizeof(type_hello)] = {0};
 
       // Reset client data
@@ -597,7 +605,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       return sizeof(lc_preamble);
     }
     case TYPE_GOODBYE: {
-      lowcom_debug("RX goodbye");
+      lc_debug("RX goodbye");
       if (lowcom_client[client].lastwill != 0) {
         // Execute last will
         cmdq_copy(Q0, nextid(), queue_get(lowcom_client[client].lastwill));
@@ -619,12 +627,12 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       return sizeof(lc_preamble);
     }
     case TYPE_PING: {
-      lowcom_debug("RX ping");
+      lc_debug("RX ping");
       lowcom_client[client].last.ping = millis();
       return sizeof(lc_preamble);
     }
     case TYPE_STD: {
-      lowcom_debug("RX std");
+      lc_debug("RX std");
       
       // Ensure at lease full header in buffer
       size_t expectlen = sizeof(lc_preamble) + sizeof(lc_header);
@@ -644,7 +652,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       return expectlen;
     }
     case TYPE_CRYPTO: {
-      lowcom_debug("RX crypto");
+      lc_debug("RX crypto");
 
       // Ensure at lease full header in buffer
       size_t expectlen = sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header);
@@ -690,7 +698,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
     }
     default: {
       // Unknown type.
-      lowcom_debug("RX unknown type", preamble->type);
+      lc_debug("RX unknown type", preamble->type);
       return 1;
     }
   }
@@ -759,12 +767,12 @@ void lowcom_loop(unsigned long now) {
 void lowcom_update(unsigned long now) {
   // Accept new clients
   if (lowcom_server.hasClient()) {
-    lowcom_debug("NEW client");
+    lc_debug("NEW client");
     
     size_t ci = 0;
     for (; ci < LTC_SIZE; ci++) {
       if (!lowcom_client[ci].active) {
-        lowcom_debug("NEW slot", ci);
+        lc_debug("NEW slot", ci);
         
         memset(&lowcom_client[ci], 0, sizeof(lowcom_client[ci]));
         lowcom_client[ci].sock = lowcom_server.available();
@@ -778,7 +786,7 @@ void lowcom_update(unsigned long now) {
 
     if (ci == LTC_SIZE) {
       // No open slots
-      lowcom_debug("ERR no client slots available");
+      lc_debug("ERR no client slots available");
       //lowcom_server.available().stop();
     }
   }
@@ -787,7 +795,7 @@ void lowcom_update(unsigned long now) {
   for (size_t ci = 0; ci < LTC_SIZE; ci++) {
     if (lowcom_client[ci].active && (timesince(lowcom_client[ci].last.ping, millis()) > LTO_PING || !lowcom_client[ci].sock.connected())) {
       // Socket has timed out
-      lowcom_debug("KILL client disconnect", ci);
+      lc_debug("KILL client disconnect", ci);
       lc_preamble goodbye = {0};
       lc_packpreamble(&goodbye, TYPE_GOODBYE);
       lc_handletype(ci, (uint8_t *)&goodbye, sizeof(lc_preamble));
@@ -801,12 +809,12 @@ void lowcom_update(unsigned long now) {
 
     for (size_t i = 0; i < LTC_SIZE; i++) {
       if (lowcom_client[i].active) {
-        lowcom_debug("PING client", i);
+        lc_debug("PING client", i);
         
         lc_preamble ping = {0};
         lc_packpreamble(&ping, TYPE_PING);
         if (lowcom_client[i].sock.availableForWrite() >= sizeof(lc_preamble)) {
-          lowcom_debug("PING client write", i);
+          lc_debug("PING client write", i);
           lowcom_client[i].sock.write((uint8_t *)&ping, sizeof(lc_preamble));
         }
         state.service.lowcom.clients += 1;

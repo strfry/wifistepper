@@ -17,6 +17,11 @@
             <script type="module" src="/js/bulmajs/plugins/{{ js }}.js" es6 inline minify></script>
         {% endfor %}
 
+        <!-- Animation -->
+        {% if page.animate == true %}
+            <link rel="stylesheet" href="/css/animate{% if jekyll.environment == 'production' %}.min{% endif %}.css" inline minify />
+        {% endif %}
+
         <!-- Prism code highlighter -->
         {% if page.prism == true %}
             <link rel="stylesheet" href="/css/prism{% if jekyll.environment == 'production' %}.min{% endif %}.css" inline minify />
