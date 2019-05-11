@@ -35,11 +35,12 @@
 #define CMD_WAITRUNNING (CP_MOTOR | 0x0F)
 #define CMD_WAITMS      (CP_MOTOR | 0x10)
 #define CMD_WAITSWITCH  (CP_MOTOR | 0x11)
-#define CMD_EMPTYQUEUE  (CP_MOTOR | 0x12)
-#define CMD_COPYQUEUE   (CP_MOTOR | 0x13)
-#define CMD_SAVEQUEUE   (CP_MOTOR | 0x14)
-#define CMD_LOADQUEUE   (CP_MOTOR | 0x15)
-#define CMD_ESTOP       (CP_MOTOR | 0x16)
+#define CMD_RUNQUEUE    (CP_MOTOR | 0x12)
+#define CMD_EMPTYQUEUE  (CP_MOTOR | 0x13)
+#define CMD_COPYQUEUE   (CP_MOTOR | 0x14)
+#define CMD_SAVEQUEUE   (CP_MOTOR | 0x15)
+#define CMD_LOADQUEUE   (CP_MOTOR | 0x16)
+#define CMD_ESTOP       (CP_MOTOR | 0x17)
 
 #define SELF            (0x00)
 
@@ -388,6 +389,13 @@ static void daisy_slaveconsume(uint8_t q, id_t id, uint8_t opcode, void * data, 
       daisy_ack(q, id);
       break;
     }
+    case CMD_RUNQUEUE: {
+      daisy_expectlen(sizeof(cmd_runqueue_t));
+      cmd_runqueue_t * cmd = (cmd_runqueue_t *)data;
+      cmd_runqueue(queue, id, cmd->targetqueue);
+      daisy_ack(q, id);
+      break;
+    }
     case CMD_EMPTYQUEUE: {
       daisy_expectlen(0);
       cmdq_empty(queue, id);
@@ -649,6 +657,12 @@ bool daisy_waitms(uint8_t target, uint8_t q, id_t id, uint32_t ms) {
 bool daisy_waitswitch(uint8_t target, uint8_t q, id_t id, bool state) {
   cmd_waitsw_t * cmd = (cmd_waitsw_t *)daisy_alloc(target, q, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
   if (cmd != NULL) *cmd = { .state = state };
+  return daisy_pack(cmd) != NULL;
+}
+
+bool daisy_runqueue(uint8_t target, uint8_t q, id_t id, uint8_t targetqueue) {
+  cmd_runqueue_t * cmd = (cmd_runqueue_t *)daisy_alloc(target, q, id, CMD_RUNQUEUE, sizeof(cmd_runqueue_t));
+  if (cmd != NULL) *cmd = { .targetqueue = targetqueue };
   return daisy_pack(cmd) != NULL;
 }
 

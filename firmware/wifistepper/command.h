@@ -26,6 +26,7 @@
 #define CMD_WAITRUNNING (QPRE_STOPPED | 0x0F)
 #define CMD_WAITMS      (QPRE_NONE | 0x10)
 #define CMD_WAITSWITCH  (QPRE_STATUS | 0x11)
+#define CMD_RUNQUEUE    (QPRE_NONE | 0x12)
 
 typedef struct ispacked {
   uint32_t ms;

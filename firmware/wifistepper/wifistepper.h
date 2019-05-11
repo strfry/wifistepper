@@ -7,13 +7,14 @@
 
 #define PRODUCT           "Wi-Fi Stepper"
 #define MODEL             "wsx100"
-#define SWBRANCH          "stable"
+#define BRANCH            "stable"
 #define VERSION           (1)
 
 #define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
 #define WIFI_LEDPIN       (16)
 #define WIFI_ADCCOEFF     (0.003223) /*(0.003125)*/
+#define MOTOR_RSENSE      (0.0675)
 #define MOTOR_ADCCOEFF    (2.65625)
 #define MOTOR_CLOCK       (CLK_INT16)
 
@@ -31,7 +32,7 @@
 #define AP_MASK           (IPAddress(255, 255, 255, 0))
 
 #define LEN_PRODUCT       (36)
-#define LEN_INFO          LEN_PRODUCT
+#define LEN_INFO          (36)
 #define LEN_HOSTNAME      (24)
 #define LEN_USERNAME      (64)
 #define LEN_URL           (256)
@@ -102,6 +103,7 @@ typedef struct {
 
 typedef struct {
   char hostname[LEN_HOSTNAME];
+  char security[LEN_INFO];
   struct {
     bool enabled;
   } http;
@@ -114,6 +116,7 @@ typedef struct {
     char password[LEN_PASSWORD];
   } auth;
   struct {
+    bool enabled;
     bool std_enabled;
     bool crypto_enabled;
   } lowcom;
@@ -122,7 +125,7 @@ typedef struct {
     char server[LEN_URL];
     int port;
     char username[LEN_USERNAME];
-    char key[LEN_PASSWORD];
+    char password[LEN_PASSWORD];
     char state_topic[LEN_URL];
     float state_publish_period;
     char command_topic[LEN_URL];
@@ -154,13 +157,13 @@ typedef struct ispacked {
   float maxspeed;
   float minspeed;
   float accel, decel;
-  float kthold;
-  float ktrun;
-  float ktaccel;
-  float ktdecel;
   float fsspeed;
   bool fsboost;
   struct {
+    float kthold;
+    float ktrun;
+    float ktaccel;
+    float ktdecel;
     float switchperiod;
     bool predict;
     float minon;
@@ -169,6 +172,10 @@ typedef struct ispacked {
     float faststep;
   } cm;
   struct {
+    float kthold;
+    float ktrun;
+    float ktaccel;
+    float ktdecel;
     float pwmfreq;
     float stall;
     bool volt_comp;
@@ -398,6 +405,10 @@ typedef struct ispacked {
   bool state;
 } cmd_waitsw_t;
 
+typedef struct ispacked {
+  uint8_t targetqueue;
+} cmd_runqueue_t;
+
 
 void cmd_init();
 void cmd_loop(unsigned long now);
@@ -422,6 +433,7 @@ bool cmd_waitbusy(queue_t * q, id_t id);
 bool cmd_waitrunning(queue_t * q, id_t id);
 bool cmd_waitms(queue_t * q, id_t id, uint32_t ms);
 bool cmd_waitswitch(queue_t * q, id_t id, bool state);
+bool cmd_runqueue(queue_t * q, id_t id, uint8_t targetqueue);
 
 bool cmd_estop(id_t id, bool hiz, bool soft);
 void cmd_clearerror();
@@ -460,6 +472,7 @@ bool daisy_waitbusy(uint8_t target, uint8_t q, id_t id);
 bool daisy_waitrunning(uint8_t target, uint8_t q, id_t id);
 bool daisy_waitms(uint8_t target, uint8_t q, id_t id, uint32_t millis);
 bool daisy_waitswitch(uint8_t target, uint8_t q, id_t id, bool state);
+bool daisy_runqueue(uint8_t target, uint8_t q, id_t id, uint8_t targetqueue);
 
 bool daisy_emptyqueue(uint8_t target, uint8_t q, id_t id);
 bool daisy_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src);
@@ -521,10 +534,11 @@ static inline bool m_waitbusy(uint8_t target, uint8_t q, id_t id) { if (target =
 static inline bool m_waitrunning(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(target, q, id); } }
 static inline bool m_waitms(uint8_t target, uint8_t q, id_t id, uint32_t ms) { if (target == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(target, q, id, ms); } }
 static inline bool m_waitswitch(uint8_t target, uint8_t q, id_t id, bool state) { if (target == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(target, q, id, state); } }
+static inline bool m_runqueue(uint8_t target, uint8_t q, id_t id, uint8_t targetqueue) { if (target == 0) { return cmd_runqueue(queue_get(q), id, targetqueue); } else { return daisy_runqueue(target, q, id, targetqueue); } }
 static inline bool m_emptyqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmdq_empty(queue_get(q), id); } else { return daisy_emptyqueue(target, q, id); } }
 static inline bool m_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src) { if (target == 0) { return cmdq_copy(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(target, q, id, src); } }
 static inline bool m_savequeue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return queuecfg_write(q); } else { return daisy_savequeue(target, q, id); } }
-static inline bool m_loadqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { queuecfg_read(q); } else { return daisy_loadqueue(target, q, id); } }
+static inline bool m_loadqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return queuecfg_read(q); } else { return daisy_loadqueue(target, q, id); } }
 static inline bool m_estop(uint8_t target, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(target, id, hiz, soft); } }
 
 // Utility functions

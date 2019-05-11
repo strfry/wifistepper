@@ -164,18 +164,22 @@ void cmd_loop(unsigned long now) {
           if (root.containsKey("minspeed"))   config.motor.minspeed = root["minspeed"].as<float>();
           if (root.containsKey("accel"))      config.motor.accel = root["accel"].as<float>();
           if (root.containsKey("decel"))      config.motor.decel = root["decel"].as<float>();
-          if (root.containsKey("kthold"))     config.motor.kthold = root["kthold"].as<float>();
-          if (root.containsKey("ktrun"))      config.motor.ktrun = root["ktrun"].as<float>();
-          if (root.containsKey("ktaccel"))    config.motor.ktaccel = root["ktaccel"].as<float>();
-          if (root.containsKey("ktdecel"))    config.motor.ktdecel = root["ktdecel"].as<float>();
           if (root.containsKey("fsspeed"))    config.motor.fsspeed = root["fsspeed"].as<float>();
           if (root.containsKey("fsboost"))    config.motor.fsboost = root["fsboost"].as<bool>();
+          if (root.containsKey("cm_kthold"))  config.motor.cm.kthold = root["cm_kthold"].as<float>();
+          if (root.containsKey("cm_ktrun"))   config.motor.cm.ktrun = root["cm_ktrun"].as<float>();
+          if (root.containsKey("cm_ktaccel")) config.motor.cm.ktaccel = root["cm_ktaccel"].as<float>();
+          if (root.containsKey("cm_ktdecel")) config.motor.cm.ktdecel = root["cm_ktdecel"].as<float>();
           if (root.containsKey("cm_switchperiod")) config.motor.cm.switchperiod = root["cm_switchperiod"].as<float>();
           if (root.containsKey("cm_predict")) config.motor.cm.predict = root["cm_predict"].as<bool>();
           if (root.containsKey("cm_minon"))   config.motor.cm.minon = root["cm_minon"].as<float>();
           if (root.containsKey("cm_minoff"))  config.motor.cm.minoff = root["cm_minoff"].as<float>();
           if (root.containsKey("cm_fastoff")) config.motor.cm.fastoff = root["cm_fastoff"].as<float>();
           if (root.containsKey("cm_faststep")) config.motor.cm.faststep = root["cm_faststep"].as<float>();
+          if (root.containsKey("vm_kthold"))  config.motor.vm.kthold = root["vm_kthold"].as<float>();
+          if (root.containsKey("vm_ktrun"))   config.motor.vm.ktrun = root["vm_ktrun"].as<float>();
+          if (root.containsKey("vm_ktaccel")) config.motor.vm.ktaccel = root["vm_ktaccel"].as<float>();
+          if (root.containsKey("vm_ktdecel")) config.motor.vm.ktdecel = root["vm_ktdecel"].as<float>();
           if (root.containsKey("vm_pwmfreq")) config.motor.vm.pwmfreq = root["vm_pwmfreq"].as<float>();
           if (root.containsKey("vm_stall"))   config.motor.vm.stall = root["vm_stall"].as<float>();
           if (root.containsKey("vm_volt_comp")) config.motor.vm.volt_comp = root["vm_volt_comp"].as<bool>();
@@ -205,10 +209,32 @@ void cmd_loop(unsigned long now) {
         consume += sizeof(cmd_waitsw_t);
         break;
       }
+      case CMD_RUNQUEUE: {
+        cmd_runqueue_t * cmd = (cmd_runqueue_t *)Qcmd;
+        consume += sizeof(cmd_runqueue_t);
+        queue_t * target = queue_get(cmd->targetqueue);
+        if (cmd->targetqueue == 0 || target == NULL) {
+          // Bad target queue
+          seterror(ESUB_CMD, head->id, ETYPE_NOQUEUE);
+          break;
+        }
+        if ((Q0->len - consume + target->len) > Q0->maxlen) {
+          // Not enough memory in queue
+          seterror(ESUB_CMD, head->id, ETYPE_MEM);
+          break;
+        }
+        memmove(&Q0->Q[target->len], &Q0->Q[consume], Q0->len - consume);
+        memcpy(Q0->Q, target->Q, target->len);
+        Q0->len += target->len - consume;
+        consume = 0;
+        break;
+      }
     }
 
-    memmove(Q0->Q, &(Q0->Q[consume]), Q0->len - consume);
-    Q0->len -= consume;
+    if (consume > 0) {
+      memmove(Q0->Q, &Q0->Q[consume], Q0->len - consume);
+      Q0->len -= consume;
+    }
     state.command.last_command = head->id;
     state.command.last_completed = millis();
 
@@ -353,6 +379,12 @@ bool cmd_waitms(queue_t * queue, id_t id, uint32_t ms) {
 bool cmd_waitswitch(queue_t * queue, id_t id, bool state) {
   cmd_waitsw_t * cmd = (cmd_waitsw_t *)cmd_alloc(queue, id, CMD_WAITSWITCH, sizeof(cmd_waitsw_t));
   if (cmd != NULL) *cmd = { .state = state };
+  return cmd != NULL;
+}
+
+bool cmd_runqueue(queue_t * queue, id_t id, uint8_t targetqueue) {
+  cmd_runqueue_t * cmd = (cmd_runqueue_t *)cmd_alloc(queue, id, CMD_RUNQUEUE, sizeof(cmd_runqueue_t));
+  if (cmd != NULL) *cmd = { .targetqueue = targetqueue };
   return cmd != NULL;
 }
 

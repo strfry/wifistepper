@@ -168,7 +168,7 @@ layout: default
         </div>
     </div>
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon application %}Browser &amp; API Interface</span></div>
+        <div class="message-header"><span class="title is-5">{% mdicon application %}Browser &amp; Services</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="field is-horizontal">
@@ -179,7 +179,18 @@ layout: default
                         </div>
                     </div>
                 </div>
-                <div class="field is-horizontal">
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">mDNS</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="service-mdns-enable" type="checkbox" v-model="service.mdns_enabled" />
+                                <label class="is-checkradio-enable" for="service-mdns-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"><label class="label">HTTP</label></div>
                     <div class="field-body">
                         <div class="field">
@@ -203,18 +214,7 @@ layout: default
                     </div>
                 </div>-->
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">mDNS</label></div>
-                    <div class="field-body">
-                        <div class="field">
-                            <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="service-mdns-enable" type="checkbox" v-model="service.mdns_enabled" />
-                                <label class="is-checkradio-enable" for="service-mdns-enable"><strong>Enabled</strong></label>
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">Authentication</label></div>
+                    <div class="field-label is-normal"><label class="label">Authorization</label></div>
                     <div class="field-body">
                         <div class="field">
                             <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.auth_username" v-bind:disabled="!service.auth_enabled" /></span>
@@ -227,6 +227,24 @@ layout: default
                                 <input class="is-checkradio has-background-color is-white" id="service-auth-enable" type="checkbox" v-model="service.auth_enabled" />
                                 <label class="is-checkradio-enable" for="service-auth-enable"><strong>Enabled</strong></label>
                             </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Low Level Interface</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <span class="select">
+                                    <select v-on:change="lowcomupdate">
+                                        <option value="disabled" v-bind:selected="!service.lowcom_enabled">Disabled</option>
+                                        <option value="std" v-bind:selected="service.lowcom_enabled && service.lowcom_std_enabled && !service.lowcom_crypto_enabled">Standard Only</option>
+                                        <option value="crypto" v-bind:selected="service.lowcom_enabled && !service.lowcom_std_enabled && service.lowcom_crypto_enabled">Crypto Only</option>
+                                        <option value="both" v-bind:selected="service.lowcom_enabled && service.lowcom_std_enabled && service.lowcom_crypto_enabled">Standard + Crypto</option>
+                                    </select>
+                                </span>
+                            </span>
+                            <span v-if="service.lowcom_enabled && service.lowcom_crypto_enabled && !crypto.provisioned" class="help is-danger"><strong>Warning:</strong> Crypto Authentication service will not be available until the chip is <strong>Provisioned</strong>.</span>
                         </div>
                     </div>
                 </div>
@@ -257,6 +275,51 @@ layout: default
                         </div>
                     </div>
                     <button class="modal-close is-large" v-on:click="service.changemodal = false"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon cloud %}MQTT</span></div>
+        <div class="message-body">
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal"></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="service-mqtt-enable" type="checkbox" v-model="service.mqtt_enabled" />
+                                <label class="is-checkradio-enable" for="service-mqtt-enable"><strong>Enabled</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Server</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><input class="input" type="text" placeholder="mqtt.example.com" maxlength="255" v-model="service.mqtt_server" v-bind:disabled="!service.mqtt_enabled" /></span>
+                        </div>
+                        <div class="field field-label is-normal"><label class="label">Port</label></div>
+                        <div class="field" style="width: 5rem;">
+                            <span class="control"><input class="input" type="text" placeholder="port" maxlength="5" v-model="service.mqtt_port" v-bind:disabled="!service.mqtt_enabled" /></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Authentication</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.mqtt_username" v-bind:disabled="!service.mqtt_enabled" /></span>
+                        </div>
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="service.mqtt_password" v-bind:disabled="!service.mqtt_enabled" /></span>
+                        </div>
+                    </div>
+                </div>
+                <hr />
+                <div class="field has-text-centered">
+                    <span class="control"><button class="button is-primary is-medium" v-on:click="writemqtt">Apply</button></span>
                 </div>
             </div>
         </div>
@@ -336,7 +399,7 @@ layout: default
                 <div class="notification is-danger has-text-centered animated fadeInDown" style="padding: 10px;" v-if="crypto.errorpop">
                     <p>{% raw %}<strong>Error:</strong> {{ crypto.errorpop }}{% endraw %}</p>
                 </div>
-                <div class="field is-horizontal is-spaced-mobile">
+                <div class="field is-horizontal">
                     <div class="field-label is-normal"><label class="label">Master Key</label></div>
                     <div class="field-body">
                         <div class="field">
@@ -398,23 +461,110 @@ layout: default
         </div>
     </div>
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon update %}Reset &amp; Upgrade</span></div>
+        <div class="message-header"><span class="title is-5">{% mdicon shield %}Security Analysis</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="notification has-text-centered" style="padding: 10px; background-color: #666;">
+                    <p v-if="service.security == 'none'">To view security recommendations choose the desired security level.</p>
+                    <p v-if="service.security == 'medium'">With <strong>medium</strong> security, you require some level of authentication, however the device is not in a hostile environment with potential attackers present.</p>
+                    <p v-if="service.security == 'high'">Under <strong>high</strong> security, only authorized clients with proper credentials can send commands.</p>
+                    <p v-if="service.security == 'max'"><strong>Maximum Security.</strong> Only enable services where, even if an attacker can gain physical access and compromise the device, the keys cannot be read. The attack is isolated to this device and other units using the same key are not compromised.</p>
+                </div>
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal">Reset all configuration to factory settings and reset device.</div>
+                    <div class="field-label is-normal"><label class="label">Security Level</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control"><button class="button is-primary is-medium" v-on:click="factoryreset">Factory Reset</button></span>
+                            <span class="control">
+                                <span class="select">
+                                    <select v-model="service.security" v-on:change="writesecurity">
+                                        <option value="none">None</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="max">Maximum</option>
+                                    </select>
+                                </span>
+                            </span>
                         </div>
                     </div>
                 </div>
-                <hr />
+                <table id="security-table" class="table is-narrow is-fullwidth" v-if="service.security != 'none'">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th class="has-text-centered">Current Status</th>
+                            <th class="has-text-centered">Recommendation</th>
+                            <th></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tr>
+                        <td>Wifi Connection</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_wifi}"></td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['wifi'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_wifi">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_wifi }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>mDNS</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mdns}">{% raw %}{{ service.mdns_enabled? 'On' : 'Off' }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['mdns'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_mdns">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_mdns }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>HTTP</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_http}">{% raw %}{{ service.http_enabled? 'On' : 'Off' }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['http'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_http">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_http }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr v-if="service.security == 'medium'">
+                        <td>Authorization</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_auth}">{% raw %}{{ service.auth_enabled? 'On' : 'Off' }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['auth'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_auth">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_auth }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>Low Level Interface</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_lowcom}"></td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['lowcom'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_lowcom">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_lowcom }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>MQTT</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mqtt}"></td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['mqtt'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_mqtt">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_mqtt }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>Arduino OTA</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_ota}">{% raw %}{{ service.ota_enabled? 'On' : 'Off' }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['ota'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_ota">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_ota }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="message">
+        <div class="message-header"><span class="title is-5">{% mdicon update %}Reset &amp; Upgrade</span></div>
+        <div class="message-body">
+            <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="field has-addons" style="margin-bottom: 30px;">
+                    <span class="control"><span class="button is-static">Product:&nbsp;<strong>{% raw %}{{ update.product }}{% endraw %}</strong></span></span>
+                    <span class="control"><span class="button is-static">Model:&nbsp;<strong>{% raw %}{{ update.model }}{% endraw %}</strong></span></span>
+                    <span class="control"><span class="button is-static">Branch:&nbsp;<strong>{% raw %}{{ update.branch }}{% endraw %}</strong></span></span>
+                    <span class="control"><span class="button is-static">Version:&nbsp;<strong>{% raw %}{{ update.version }}{% endraw %}</strong></span></span>
+                </div>
                 <div class="field is-horizontal" style="padding-bottom: 10px;">
-                    <div class="field-label is-normal">Check for official updated to the Wi-Fi Stepper project.</div>
+                    <div class="field-label is-normal">Check for official updates to the Wi-Fi Stepper project.</div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control"><button class="button is-primary is-medium" v-on:click="checkupdate">Check Now</button></span>
+                            <span class="control"><a class="button is-primary is-medium" v-bind:href="'http://www.wifistepper.com/downloads/'+update.model+'/check?version='+update.version+'&branch='+update.branch" target="_blank">Check Now</a></span>
                         </div>
                     </div>
                 </div>
@@ -424,7 +574,7 @@ layout: default
                 <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"><label class="label">Upgrade Software</label></div>
                     <div class="field-body">
-                        <div class="field">
+                        <div class="field" style="flex-grow: 0;">
                             <span class="control">
                                 <div class="file" v-bind:class="{'has-name': update.imagename}">
                                     <label class="file-label">
@@ -455,6 +605,15 @@ layout: default
                         </div>
                     </div>
                     <button class="modal-close is-large" v-on:click="update.changemodal = false"></button>
+                </div>
+                <hr />
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal">Reset all configuration to factory settings and reset device.</div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control"><button class="button is-primary is-medium" v-on:click="factoryreset">Factory Reset</button></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -497,19 +656,32 @@ layout: default
                 changemodal: false,
 
                 hostname: '',
+                security: 'none',
+                mdns_enabled: false,
                 http_enabled: true,
-                mdns_enabled: true,
                 auth_enabled: false,
                 auth_username: '',
                 auth_password: '',
-                ota_enabled: true,
+                lowcom_enabled: false,
+                lowcom_std_enabled: false,
+                lowcom_crypto_enabled: false,
+                mqtt_enabled: false,
+                mqtt_server: '',
+                mqtt_port: 0,
+                mqtt_username: '',
+                mqtt_password: '',
+                mqtt_state_topic: '',
+                mqtt_state_publish_period: 0.0,
+                mqtt_command_topic: '',
+                ota_enabled: false,
                 ota_password: ''
             },
             daisy: {
                 changemodal: false,
 
-                enabled: true,
-                master: false
+                enabled: false,
+                master: false,
+                slavewifioff: false
             },
             crypto: {
                 provisionmodal: false,
@@ -526,11 +698,44 @@ layout: default
             },
             update: {
                 changemodal: false,
+
+                product: 'unknown',
+                model: 'unknown',
+                branch: 'unknown',
+                version: '0',
                 
                 working: false,
-                message: "",
-                version: 0,
-                imagename: ""
+                message: '',
+                imagename: ''
+            },
+            security_matrix: {
+                medium: {
+                    wifi: '',
+                    mdns: 'On/Off',
+                    http: 'On/Off',
+                    auth: 'On when HTTP',
+                    lowcom: 'Crypto Only/Off',
+                    mqtt: 'PSK Only/Off',
+                    ota: 'Off'
+                },
+                high: {
+                    wifi: '',
+                    mdns: 'Off',
+                    http: 'Off',
+                    auth: 'Off',
+                    lowcom: 'Crypto Only/Off',
+                    mqtt: 'PSK Only/Off',
+                    ota: 'Off'
+                },
+                max: {
+                    wifi: '',
+                    mdns: 'Off',
+                    http: 'Off',
+                    auth: 'Off',
+                    lowcom: 'Crypto Only/Off',
+                    mqtt: 'Off',
+                    ota: 'Off'
+                }
             }
         },
         watch: {
@@ -548,6 +753,29 @@ layout: default
             }
         },
         computed: {
+            security_warn_wifi: function() {
+                return false;
+            },
+            security_warn_mdns: function() {
+                return this.service.mdns_enabled && (this.service.security == 'high' || this.service.security == 'max');
+            },
+            security_warn_http: function() {
+                return this.service.http_enabled && (this.service.security == 'high' || this.service.security == 'max');
+            },
+            security_warn_auth: function() {
+                return this.service.http_enabled &&
+                    (!this.service.auth_enabled && this.service.security == 'medium') ||
+                    (this.service.auth_enabled && (this.service.security == 'high' || this.service.security == 'max'));
+            },
+            security_warn_lowcom: function() {
+                return false;
+            },
+            security_warn_mqtt: function() {
+                return false;
+            },
+            security_warn_ota: function() {
+                return this.service.ota_enabled && this.service.security != 'none';
+            }
         },
         methods: {
             scanwifi: function() {
@@ -589,6 +817,34 @@ layout: default
                 }
                 this.wifi.changemodal = true;
             },
+            lowcomupdate: function(e) {
+                switch(e.target.value) {
+                    case 'disabled': {
+                        this.service.lowcom_enabled = false;
+                        this.service.lowcom_std_enabled = false;
+                        this.service.lowcom_crypto_enabled = false;
+                        break;
+                    }
+                    case 'std': {
+                        this.service.lowcom_enabled = true;
+                        this.service.lowcom_std_enabled = true;
+                        this.service.lowcom_crypto_enabled = false;
+                        break;
+                    }
+                    case 'crypto': {
+                        this.service.lowcom_enabled = true;
+                        this.service.lowcom_std_enabled = false;
+                        this.service.lowcom_crypto_enabled = true;
+                        break;
+                    }
+                    case 'both': {
+                        this.service.lowcom_enabled = true;
+                        this.service.lowcom_std_enabled = true;
+                        this.service.lowcom_crypto_enabled = true;
+                        break;
+                    }
+                }
+            },
             writeservice: function() {
                 console.log("Writing service settings");
                 axios.get("{{ site.apiurl }}/api/service/set", {
@@ -599,17 +855,32 @@ layout: default
                         auth_enabled: this.service.auth_enabled,
                         auth_username: this.service.auth_username,
                         auth_password: this.service.auth_password,
+                        lowcom_enabled: this.service.lowcom_enabled,
+                        lowcom_std_enabled: this.service.lowcom_std_enabled,
+                        lowcom_crypto_enabled: this.service.lowcom_crypto_enabled,
+                        mqtt_enabled: this.service.mqtt_enabled,
+                        mqtt_server: this.service.mqtt_server,
+                        mqtt_port: this.service.mqtt_port,
+                        mqtt_username: this.service.mqtt_username,
+                        mqtt_password: this.service.mqtt_password,
+                        mqtt_state_topic: this.service.mqtt_state_topic,
+                        mqtt_state_publish_period: this.service.mqtt_state_publish_period,
+                        mqtt_command_topic: this.service.mqtt_command_topic,
                         ota_enabled: this.service.ota_enabled,
                         ota_password: this.service.ota_password
                     }
                 });
                 this.service.changemodal = true;
             },
+            writemqtt: function() {
+
+            },
             writedaisy: function() {
                 axios.get("{{ site.apiurl }}/api/daisy/set", {
                     params: {
                         enabled: this.daisy.enabled,
-                        master: this.daisy.master
+                        master: this.daisy.master,
+                        slavewifioff: this.daisy.slavewifioff
                     }
                 });
                 this.daisy.changemodal = true;
@@ -628,7 +899,6 @@ layout: default
                         key: this.crypto.key,
                     }
                 }).then(function(r) {
-                    console.log(r);
                     if (r.data.status == 'ok') {
                         app.crypto.errorpop = '';
                         app.crypto.changemodal = true;
@@ -640,33 +910,8 @@ layout: default
                     app.crypto.errorpop = "Unable to issue crypto write command."
                 });
             },
-            checkupdate: function() {
-                console.log("Checking for updates");
-                axios.get("{{ site.apiurl }}/api/version").then(function(r) {
-                    if (r.data.status == 'ok') {
-                        app.update.version = r.data.version;
+            writesecurity: function() {
 
-                        if (r.data.product != product || r.data.model != model) {
-                            // Wrong product or model
-                            app.update.message = "The software image running on the Wi-Fi Stepper is not an official distribution. Visit <a href=\"https://www.wifistepper.com\" target=\"_blank\">wifistepper.com</a> for official images.";
-                            return;
-                        }
-
-                        window.open("https://www.wifistepper.com/downloads/"+model+"/check?version="+r.data.version, '_blank');
-
-                        /*
-                        axios.get("https://www.wifistepper.com/downloads/"+model+"/latest/metainfo.json").then(function (s) {
-                            if (s.data.version > r.data.version) {
-                                app.update.message = "Newer software version exists (Version "+s.data.version+"). Visit <a href=\"https://www.wifistepper.com/downloads\" target=\"_blank\">wifistepper.com/downloads</a> to download.";
-                            } else {
-                                app.update.message = "No newer version found."
-                            }
-                        }).catch(function(e) {
-                            app.update.message = "Unable to connect to server. No network detected."
-                        });
-                        */
-                    }
-                });
             },
             uploadimage: function() {
                 var image = this.$refs.updateimage.files[0];
@@ -700,14 +945,22 @@ layout: default
         mounted: function () {
             axios.get("{{ site.apiurl }}/api/wifi/get").then(function(r) {
                 if (r.data.status == 'ok') {
-                    merge(app.wifi, r.data, ['ip', 'rssi', 'mode']);
-                    merge(app.wifi, r.data, ['accesspoint_ssid', 'accesspoint_password', 'accesspoint_encryption', 'accesspoint_channel', 'accesspoint_hidden']);
-                    merge(app.wifi, r.data, ['station_ssid', 'station_password', 'station_encryption', 'station_forceip', 'station_forcesubnet', 'station_forcegateway', 'station_revertap']);
+                    merge(app.wifi, r.data, [
+                        'ip', 'rssi', 'mode',
+                        'accesspoint_ssid', 'accesspoint_password', 'accesspoint_encryption', 'accesspoint_channel', 'accesspoint_hidden',
+                        'station_ssid', 'station_password', 'station_encryption', 'station_forceip', 'station_forcesubnet', 'station_forcegateway', 'station_revertap'
+                    ]);
                 }
             });
             axios.get("{{ site.apiurl }}/api/service/get").then(function(r) {
                 if (r.data.status == 'ok') {
-                    merge(app.service, r.data, ['hostname', 'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password', 'ota_enabled', 'ota_password']);
+                    merge(app.service, r.data, [
+                        'hostname', 'security',
+                        'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password',
+                        'lowcom_enabled', 'lowcom_std_enabled', 'lowcom_crypto_enabled',
+                        'mqtt_enabled', 'mqtt_server', 'mqtt_port', 'mqtt_username', 'mqtt_password', 'mqtt_state_topic', 'mqtt_state_publish_period', 'mqtt_command_topic',
+                        'ota_enabled', 'ota_password'
+                    ]);
                 }
             });
             axios.get("{{ site.apiurl }}/api/daisy/get").then(function(r) {
@@ -718,6 +971,11 @@ layout: default
             axios.get("{{ site.apiurl }}/api/crypto/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.crypto, r.data, ['fault', 'probed', 'available', 'provisioned']);
+                }
+            });
+            axios.get("{{ site.apiurl }}/api/version").then(function(r) {
+                if (r.data.status == 'ok') {
+                    merge(app.update, r.data, ['product', 'model', 'branch', 'version']);
                 }
             });
         }

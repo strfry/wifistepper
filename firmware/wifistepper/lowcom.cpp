@@ -5,7 +5,7 @@
 #include "wifistepper.h"
 #include "ecc508a.h"
 
-#define LOWCOM_DEBUG
+//#define LOWCOM_DEBUG
 
 #define LTC_SIZE      (2)
 #define LTC_PORT      (1000)
@@ -515,9 +515,9 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       break;
     }
     case OPCODE_RUNQUEUE: {
-      lc_expectlen(0);
-      lc_debug("CMD runqueue");
-      m_copyqueue(target, 0, id, queue);
+      lc_expectlen(sizeof(uint8_t));
+      lc_debug("CMD runqueue", data[0]);
+      m_runqueue(target, queue, id, data[0]);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
@@ -539,7 +539,7 @@ void lowcom_ecc_hmacend(uint8_t * sha, uint8_t * data, size_t datalen) {
     //lc_debug("Given", crypto->hmac);
     if (memcmp(sha, crypto->hmac, 32) != 0) {
       lc_debug("HMAC bad signature");
-      lc_replynack(meta->client, MODE_CRYPTO, header->opcode, header->target, header->queue, header->packetid, "Bad hmac signature (Key error)");
+      lc_replynack(meta->client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "Bad hmac signature (Key error)");
       return;
     }
 
@@ -591,7 +591,7 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
         type_hello * payload = (type_hello *)(&reply[sizeof(lc_preamble)]);
         strncpy(payload->product, PRODUCT, LEN_PRODUCT-1);
         strncpy(payload->model, MODEL, LEN_INFO-1);
-        strncpy(payload->swbranch, SWBRANCH, LEN_INFO-1);
+        strncpy(payload->swbranch, BRANCH, LEN_INFO-1);
         payload->version = VERSION;
         strncpy(payload->hostname, config.service.hostname, LEN_HOSTNAME-1);
         payload->chipid = state.wifi.chipid;
@@ -645,8 +645,12 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       expectlen += header->length;
       if (len < expectlen) return 0;
 
-      // TODO - validate header
       // TODO - make sure packetid is increasing
+
+      if (!config.service.lowcom.std_enabled) {
+        lc_replynack(client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "ComStandard not enabled");
+        return expectlen;
+      }
       
       lc_handlepacket(client, MODE_STD, header->opcode, header->subcode, header->target, header->queue, header->packetid, (uint8_t *)&header[1], header->length);
       return expectlen;
@@ -666,7 +670,10 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
       expectlen += header->length;
       if (len < expectlen) return 0;
 
-      // TODO - validate header
+      if (!config.service.lowcom.crypto_enabled) {
+        lc_replynack(client, MODE_STD, header->opcode, header->target, header->queue, header->packetid, "ComCrypto not enabled");
+        return expectlen;
+      }
 
       // Make sure crypto is provisioned
       if (!ecc_locked()) {

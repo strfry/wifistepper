@@ -536,15 +536,36 @@ layout: default
                 </div>
             </div>
             <hr />
-            <div class="columns is-multiline">
-                <!-- KT Vals -->
+            <!--<div class="columns is-multiline">
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">Drive Mode:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control is-expanded">
+                                    <span class="select is-fullwidth">
+                                        <select v-model="mode">
+                                            <option value="current">Current</option>
+                                            <option value="voltage">Voltage</option>
+                                        </select>
+                                    </span>
+                                </span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_mode }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>-->
+            <div class="columns is-multiline" v-if="mode == 'current'">
+                <!-- Current Mode KT Vals -->
                 <div class="column is-half">
                     <div class="field is-horizontal">
                         <div class="field-label is-normal"><label class="label">KT Hold:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="kthold" /></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_kthold }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                <span class="control"><input class="input" type="number" min="0" max="15" step="0.1" v-model="cm_kthold" /></span>
+                                <span class="control"><span class="button is-static">A (peak)</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_kthold }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
@@ -554,8 +575,9 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Run:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktrun" /></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktrun }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                <span class="control"><input class="input" type="number" min="0" max="15" step="0.1" v-model="cm_ktrun" /></span>
+                                <span class="control"><span class="button is-static">A (peak)</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_ktrun }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
@@ -565,8 +587,9 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Accel:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktaccel" /></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktaccel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                <span class="control"><input class="input" type="number" min="0" max="15" step="0.1" v-model="cm_ktaccel" /></span>
+                                <span class="control"><span class="button is-static">A (peak)</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_ktaccel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
@@ -576,8 +599,60 @@ layout: default
                         <div class="field-label is-normal"><label class="label">KT Decel:</label></div>
                         <div class="field-body">
                             <div class="field has-addons">
-                                <span class="control"><input class="input" type="number" min="0" max="1" step="0.05" v-model="ktdecel" /></span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_ktdecel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                <span class="control"><input class="input" type="number" min="0" max="15" step="0.1" v-model="cm_ktdecel" /></span>
+                                <span class="control"><span class="button is-static">A (peak)</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_cm_ktdecel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="columns is-multiline" v-if="mode == 'voltage'">
+                <!-- Voltage Mode KT Vals -->
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Hold:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="100" step="1" v-model="vm_kthold" /></span>
+                                <span class="control"><span class="button is-static">% Vin</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_kthold }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Run:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="100" step="1" v-model="vm_ktrun" /></span>
+                                <span class="control"><span class="button is-static">% Vin</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_ktrun }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Accel:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="100" step="1" v-model="vm_ktaccel" /></span>
+                                <span class="control"><span class="button is-static">% Vin</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_ktaccel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="column is-half">
+                    <div class="field is-horizontal">
+                        <div class="field-label is-normal"><label class="label">KT Decel:</label></div>
+                        <div class="field-body">
+                            <div class="field has-addons">
+                                <span class="control"><input class="input" type="number" min="0" max="100" step="1" v-model="vm_ktdecel" /></span>
+                                <span class="control"><span class="button is-static">% Vin</span></span>
+                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_ktdecel }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                             </div>
                         </div>
                     </div>
@@ -616,8 +691,7 @@ layout: default
                 </div>
             </div>
             <hr />
-            <div v-if="advancedconfig">
-                <div class="title is-5" style="padding-left: 1rem;">Current Mode Settings:</div>
+            <div v-if="advancedconfig && mode == 'current'">
                 <div class="columns is-multiline">
                     <!-- Switching Period-->
                     <div class="column is-half">
@@ -703,8 +777,8 @@ layout: default
                         </div>
                     </div>
                 </div>
-                <hr />
-                <div class="title is-5" style="padding-left: 1rem;">Voltage Mode Settings:</div>
+            </div>
+            <div v-if="advancedconfig && mode == 'voltage'">
                 <div class="columns is-multiline">
                     <!-- PWM Freqency-->
                     <div class="column is-half">
@@ -787,9 +861,7 @@ layout: default
                     </div>
                 </div>
             </div>
-            <div v-else class="has-text-centered" style="cursor: pointer; font-weight: bold; padding: 10px; background-color: #444;" v-on:click="advancedconfig = true">
-                Show Advanced Settings
-            </div>
+            <div class="has-text-centered" style="cursor: pointer; font-weight: bold; padding: 10px; background-color: #444;" v-on:click="advancedconfig = true" v-if="!advancedconfig">Show Advanced Settings</div>
             <hr />
             <div class="field is-grouped is-grouped-right">
                 <span class="control">
@@ -843,10 +915,14 @@ MAXSPEED="{{ maxspeed }}"
 MINSPEED="{{ minspeed }}"
 ACCEL="{{ accel }}"
 DECEL="{{ decel }}"
-KTHOLD="{{ kthold }}"
-KTRUN="{{ ktrun }}"
-KTACCEL="{{ ktaccel }}"
-KTDECEL="{{ ktdecel }}"
+CM_KTHOLD="{{ cm_kthold }}"
+CM_KTRUN="{{ cm_ktrun }}"
+CM_KTACCEL="{{ cm_ktaccel }}"
+CM_KTDECEL="{{ cm_ktdecel }}"
+VM_KTHOLD="{{ vm_kthold }}"
+VM_KTRUN="{{ vm_ktrun }}"
+VM_KTACCEL="{{ vm_ktaccel }}"
+VM_KTDECEL="{{ vm_ktdecel }}"
 FSSPEED="{{ fsspeed }}"
 FSBOOST="{{ fsboost }}"
 REVERSE="{{ reverse }}"
@@ -870,7 +946,8 @@ curl -sS "${PROTOCOL}://${HOST}/api/motor/set?\
 mode=${MODE}&stepsize=${STEPSIZE}&\
 ocd=${OCD}&ocdshutdown=${OCDSHUTDOWN}&\
 maxspeed=${MAXSPEED}&minspeed=${MINSPEED}&accel=${ACCEL}&decel=${DECEL}&\
-kthold=${KTHOLD}&ktrun=${KTRUN}&ktaccel=${KTACCEL}&ktdecel=${KTDECEL}&\
+cm_kthold=${CM_KTHOLD}&cm_ktrun=${CM_KTRUN}&cm_ktaccel=${CM_KTACCEL}&cm_ktdecel=${CM_KTDECEL}&\
+vm_kthold=${VM_KTHOLD}&vm_ktrun=${VM_KTRUN}&vm_ktaccel=${VM_KTACCEL}&vm_ktdecel=${VM_KTDECEL}&\
 fsspeed=${FSSPEED}&fsboost=${FSBOOST}&\
 cm_switchperiod=${CM_SWITCHPERIOD}&cm_predict=${CM_PREDICT}&\
 cm_minon=${CM_MINON}&cm_minoff=${CM_MINOFF}&cm_fastoff=${CM_FASTOFF}&cm_faststep=${CM_FASTSTEP}&\
@@ -931,7 +1008,7 @@ if not MOTOR.connect(username, password):
 MOTOR.writeConfig(
     mode='{{ mode }}', stepsize={{ stepsize }},
     maxspeed={{ maxspeed }}, minspeed={{ minspeed }}, accel={{ accel }}, decel={{ decel }},
-    kthold={{ kthold }}, ktrun={{ ktrun }}, ktaccel={{ ktaccel }}, ktdecel={{ ktdecel }},
+    cm_kthold={{ cm_kthold }}, cm_ktrun={{ cm_ktrun }}, cm_ktaccel={{ cm_ktaccel }}, cm_ktdecel={{ cm_ktdecel }},
     fsseed={{ fsspeed }}, fsboost={{ fsboost | pybool }},
     reverse={{ reverse | pybool }}, save={{ save | pybool }}
 )
@@ -1024,8 +1101,10 @@ state = MOTOR.getState()
     function merge(dest, src, keys, round) {
         for (i in keys) {
             var v = src[keys[i]];
-            if (round && round[i]) v = Math.round(v / round[i]) * round[i];
-            dest[keys[i]] = v;
+            if (v !== undefined) {
+                if (round && round[i]) v = Math.round(v / round[i]) * round[i];
+                dest[keys[i]] = v;
+            }
         }
     }
 
@@ -1101,18 +1180,22 @@ state = MOTOR.getState()
             minspeed: 0,
             accel: 0,
             decel: 0,
-            kthold: 0.0,
-            ktrun: 0.0,
-            ktaccel: 0.0,
-            ktdecel: 0.0,
             fsspeed: 0,
             fsboost: false,
+            cm_kthold: 0.0,
+            cm_ktrun: 0.0,
+            cm_ktaccel: 0.0,
+            cm_ktdecel: 0.0,
             cm_switchperiod: 0,
             cm_predict: false,
             cm_minon: 0,
             cm_minoff: 0,
             cm_fastoff: 0,
             cm_faststep: 0,
+            vm_kthold: 0.0,
+            vm_ktrun: 0.0,
+            vm_ktaccel: 0.0,
+            vm_ktdecel: 0.0,
             vm_pwmfreq: 0,
             vm_stall: 0,
             vm_bemf_slopel: 0,
@@ -1203,10 +1286,10 @@ state = MOTOR.getState()
                 if (this.mode == 'current' && this.stepsize > 16) {
                     this.stepsize = 16;
                 }
-                this.writemotor(null);
+                //this.writemotor(null);
             },
             updatemode: function() {
-                this.writemotor(['mode']);
+                this.writemotor(['mode', 'stepsize']);
                 this.updatepreset();
             },
             updatecode: function() {
@@ -1257,15 +1340,22 @@ state = MOTOR.getState()
                 axios.get("{{ site.apiurl }}/api/motor/get", {params: {target: this.target}}).then(function (r) {
                     if (r.data.status == 'ok') {
                         merge(app, r.data,
-                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
-                            [null, null, 20, null, 20, 20, 10, 10, 0.01, 0.01, 0.01, 0.01, 20, null, 4, null, 0.5, 0.5, 2, 2, 0.15, 0.5, 0.0015, 0.05, 0.0015, 0.0015, null]
+                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'cm_kthold', 'cm_ktrun', 'cm_ktaccel', 'cm_ktdecel', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
+                            [null, null, 20, null, 20, 20, 10, 10, 20, null, 0.1, 0.1, 0.1, 0.1, 4, null, 0.5, 0.5, 2, 2, 1, 1, 1, 1, 0.15, 0.5, 0.0015, 0.05, 0.0015, 0.0015, null]
                         );
                         app.initialload = true;
                     }
                 });
             },
             writemotor: function(keys) {
-                keys = keys || ['ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'kthold', 'ktrun', 'ktaccel', 'ktdecel', 'fsspeed', 'fsboost', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
+                if (this.mode == 'current') {
+                    if (this.stepsize > 16) this.stepsize = 16;
+                    keys = keys || ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'cm_kthold', 'cm_ktrun', 'cm_ktaccel', 'cm_ktdecel', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep'];
+                } else if (this.mode == 'voltage') {
+                    keys = keys || ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
+                } else {
+                    return;
+                }
                 var params = {};
                 merge(params, this, keys.concat(['target', 'save']));
                 axios.get("{{ site.apiurl }}/api/motor/set", {params: params});

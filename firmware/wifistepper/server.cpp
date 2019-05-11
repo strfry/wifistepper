@@ -126,14 +126,25 @@ void api_initservice() {
     check_auth()
     JsonObject& root = jsonbuf.createObject();
     root["hostname"] = config.service.hostname;
+    root["security"] = config.service.security;
     root["http_enabled"] = config.service.http.enabled;
     root["mdns_enabled"] = config.service.mdns.enabled;
     root["auth_enabled"] = config.service.auth.enabled;
     root["auth_username"] = config.service.auth.username;
     root["auth_password"] = config.service.auth.password;
+    root["lowcom_enabled"] = config.service.lowcom.enabled;
+    root["lowcom_std_enabled"] = config.service.lowcom.std_enabled;
+    root["lowcom_crypto_enabled"] = config.service.lowcom.crypto_enabled;
+    root["mqtt_enabled"] = config.service.mqtt.enabled;
+    root["mqtt_server"] = config.service.mqtt.server;
+    root["mqtt_port"] = config.service.mqtt.port;
+    root["mqtt_username"] = config.service.mqtt.username;
+    root["mqtt_password"] = config.service.mqtt.password;
+    root["mqtt_state_topic"] = config.service.mqtt.state_topic;
+    root["mqtt_state_publish_period"] = config.service.mqtt.state_publish_period;
+    root["mqtt_command_topic"] = config.service.mqtt.command_topic;
     root["ota_enabled"] = config.service.ota.enabled;
     root["ota_password"] = config.service.ota.password;
-    // TODO add rest of config
     root["status"] = "ok";
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
@@ -142,15 +153,26 @@ void api_initservice() {
   server.on("/api/service/set", HTTP_GET, [](){
     add_headers()
     check_auth()
-    if (server.hasArg("hostname"))      strlcpy(config.service.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
-    if (server.hasArg("http_enabled"))  config.service.http.enabled = server.arg("http_enabled") == "true";
-    if (server.hasArg("mdns_enabled"))  config.service.mdns.enabled = server.arg("mdns_enabled") == "true";
-    if (server.hasArg("auth_enabled"))  config.service.auth.enabled = server.arg("auth_enabled") == "true";
-    if (server.hasArg("auth_username")) strlcpy(config.service.auth.username, server.arg("auth_username").c_str(), LEN_USERNAME);
-    if (server.hasArg("auth_password")) strlcpy(config.service.auth.password, server.arg("auth_password").c_str(), LEN_PASSWORD);
-    if (server.hasArg("ota_enabled"))   config.service.ota.enabled = server.arg("ota_enabled") == "true";
-    if (server.hasArg("ota_password"))  strlcpy(config.service.ota.password, server.arg("ota_password").c_str(), LEN_PASSWORD);
-    // TODO - add rest of service config
+    if (server.hasArg("hostname"))                strlcpy(config.service.hostname, server.arg("hostname").c_str(), LEN_HOSTNAME);
+    if (server.hasArg("security"))                strlcpy(config.service.security, server.arg("security").c_str(), LEN_INFO);
+    if (server.hasArg("http_enabled"))            config.service.http.enabled = server.arg("http_enabled") == "true";
+    if (server.hasArg("mdns_enabled"))            config.service.mdns.enabled = server.arg("mdns_enabled") == "true";
+    if (server.hasArg("auth_enabled"))            config.service.auth.enabled = server.arg("auth_enabled") == "true";
+    if (server.hasArg("auth_username"))           strlcpy(config.service.auth.username, server.arg("auth_username").c_str(), LEN_USERNAME);
+    if (server.hasArg("auth_password"))           strlcpy(config.service.auth.password, server.arg("auth_password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("lowcom_enabled"))          config.service.lowcom.enabled = server.arg("lowcom_enabled") == "true";
+    if (server.hasArg("lowcom_std_enabled"))      config.service.lowcom.std_enabled = server.arg("lowcom_std_enabled") == "true";
+    if (server.hasArg("lowcom_crypto_enabled"))   config.service.lowcom.crypto_enabled = server.arg("lowcom_crypto_enabled") == "true";
+    if (server.hasArg("mqtt_enabled"))            config.service.mqtt.enabled = server.arg("mqtt_enabled") == "true";
+    if (server.hasArg("mqtt_server"))             strlcpy(config.service.mqtt.server, server.arg("mqtt_server").c_str(), LEN_URL);
+    if (server.hasArg("mqtt_port"))               config.service.mqtt.port = server.arg("mqtt_port").toInt();
+    if (server.hasArg("mqtt_username"))           strlcpy(config.service.mqtt.username, server.arg("mqtt_username").c_str(), LEN_USERNAME);
+    if (server.hasArg("mqtt_password"))           strlcpy(config.service.mqtt.password, server.arg("mqtt_password").c_str(), LEN_PASSWORD);
+    if (server.hasArg("mqtt_state_topic"))        strlcpy(config.service.mqtt.state_topic, server.arg("mqtt_state_topic").c_str(), LEN_URL);
+    if (server.hasArg("mqtt_state_publish_period")) config.service.mqtt.state_publish_period = server.arg("mqtt_state_publish_period").toFloat();
+    if (server.hasArg("mqtt_command_topic"))      strlcpy(config.service.mqtt.command_topic, server.arg("mqtt_command_topic").c_str(), LEN_URL);
+    if (server.hasArg("ota_enabled"))             config.service.ota.enabled = server.arg("ota_enabled") == "true";
+    if (server.hasArg("ota_password"))            strlcpy(config.service.ota.password, server.arg("ota_password").c_str(), LEN_PASSWORD);
     servicecfg_write(&config.service);
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
@@ -241,18 +263,22 @@ void api_initmotor() {
     root["minspeed"] = cfg->minspeed;
     root["accel"] = cfg->accel;
     root["decel"] = cfg->decel;
-    root["kthold"] = cfg->kthold;
-    root["ktrun"] = cfg->ktrun;
-    root["ktaccel"] = cfg->ktaccel;
-    root["ktdecel"] = cfg->ktdecel;
     root["fsspeed"] = cfg->fsspeed;
     root["fsboost"] = cfg->fsboost;
+    root["cm_kthold"] = cfg->cm.kthold;
+    root["cm_ktrun"] = cfg->cm.ktrun;
+    root["cm_ktaccel"] = cfg->cm.ktaccel;
+    root["cm_ktdecel"] = cfg->cm.ktdecel;
     root["cm_switchperiod"] = cfg->cm.switchperiod;
     root["cm_predict"] = cfg->cm.predict;
     root["cm_minon"] = cfg->cm.minon;
     root["cm_minoff"] = cfg->cm.minoff;
     root["cm_fastoff"] = cfg->cm.fastoff;
     root["cm_faststep"] = cfg->cm.faststep;
+    root["vm_kthold"] = cfg->vm.kthold;
+    root["vm_ktrun"] = cfg->vm.ktrun;
+    root["vm_ktaccel"] = cfg->vm.ktaccel;
+    root["vm_ktdecel"] = cfg->vm.ktdecel;
     root["vm_pwmfreq"] = cfg->vm.pwmfreq;
     root["vm_stall"] = cfg->vm.stall;
     root["vm_volt_comp"] = cfg->vm.volt_comp;
@@ -280,18 +306,22 @@ void api_initmotor() {
     if (server.hasArg("minspeed"))  root["minspeed"] = server.arg("minspeed").toFloat();
     if (server.hasArg("accel"))     root["accel"] = server.arg("accel").toFloat();
     if (server.hasArg("decel"))     root["decel"] = server.arg("decel").toFloat();
-    if (server.hasArg("kthold"))    root["kthold"] = server.arg("kthold").toFloat();
-    if (server.hasArg("ktrun"))     root["ktrun"] = server.arg("ktrun").toFloat();
-    if (server.hasArg("ktaccel"))   root["ktaccel"] = server.arg("ktaccel").toFloat();
-    if (server.hasArg("ktdecel"))   root["ktdecel"] = server.arg("ktdecel").toFloat();
     if (server.hasArg("fsspeed"))   root["fsspeed"] = server.arg("fsspeed").toFloat();
     if (server.hasArg("fsboost"))   root["fsboost"] = server.arg("fsboost") == "true";
+    if (server.hasArg("cm_kthold")) root["cm_kthold"] = server.arg("cm_kthold").toFloat();
+    if (server.hasArg("cm_ktrun"))  root["cm_ktrun"] = server.arg("cm_ktrun").toFloat();
+    if (server.hasArg("cm_ktaccel")) root["cm_ktaccel"] = server.arg("cm_ktaccel").toFloat();
+    if (server.hasArg("cm_ktdecel")) root["cm_ktdecel"] = server.arg("cm_ktdecel").toFloat();
     if (server.hasArg("cm_switchperiod")) root["cm_switchperiod"] = server.arg("cm_switchperiod").toFloat();
     if (server.hasArg("cm_predict")) root["cm_predict"] = server.arg("cm_predict") == "true";
     if (server.hasArg("cm_minon"))  root["cm_minon"] = server.arg("cm_minon").toFloat();
     if (server.hasArg("cm_minoff")) root["cm_minoff"] = server.arg("cm_minoff").toFloat();
     if (server.hasArg("cm_fastoff")) root["cm_fastoff"] = server.arg("cm_fastoff").toFloat();
     if (server.hasArg("cm_faststep")) root["cm_faststep"] = server.arg("cm_faststep").toFloat();
+    if (server.hasArg("vm_kthold")) root["vm_kthold"] = server.arg("vm_kthold").toFloat();
+    if (server.hasArg("vm_ktrun"))  root["vm_ktrun"] = server.arg("vm_ktrun").toFloat();
+    if (server.hasArg("vm_ktaccel")) root["vm_ktaccel"] = server.arg("vm_ktaccel").toFloat();
+    if (server.hasArg("vm_ktdecel")) root["vm_ktdecel"] = server.arg("vm_ktdecel").toFloat();
     if (server.hasArg("vm_pwmfreq")) root["vm_pwmfreq"] = server.arg("vm_pwmfreq").toFloat();
     if (server.hasArg("vm_stall"))  root["vm_stall"] = server.arg("vm_stall").toFloat();
     if (server.hasArg("vm_bemf_slopel")) root["vm_bemf_slopel"] = server.arg("vm_bemf_slopel").toFloat();
@@ -665,8 +695,8 @@ void api_init() {
       server.send(200, "application/json", json_error("Crypto configuration failed. (Check master key)"));
     } else {
       server.send(200, "application/json", json_ok());
+      flag_reboot = true;
     }
-    flag_reboot = true;
   });
   server.on("/api/factoryreset", HTTP_GET, [](){
     add_headers()
@@ -681,7 +711,7 @@ void api_init() {
     JsonObject& obj = jsonbuf.createObject();
     obj["product"] = PRODUCT;
     obj["model"] = MODEL;
-    obj["swbranch"] = SWBRANCH;
+    obj["branch"] = BRANCH;
     obj["version"] = VERSION;
     obj["status"] = "ok";
     JsonVariant v = obj;

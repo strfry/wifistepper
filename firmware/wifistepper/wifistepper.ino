@@ -1,5 +1,5 @@
 #include <FS.h>
-#include <DNSServer.h>
+//#include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
 #include <PubSubClient.h>
@@ -23,7 +23,7 @@
 queue_t queue[QS_SIZE];
 volatile id_t _id = ID_START;
 
-DNSServer dns;
+//DNSServer dns;
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
 
@@ -48,12 +48,12 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      //.ssid = {'B','D','F','i','r','e',0},
-      //.password = {'m','c','d','e','r','m','o','t','t',0},
+      .ssid = {'B','D','F','i','r','e',0},
+      .password = {'m','c','d','e','r','m','o','t','t',0},
       //.ssid = {'A','T','T','5','4','9',0},
       //.password = {'9','0','7','1','9','1','8','6','0','1',0},
-      .ssid = {'H','o','m','e','2','1','9','A',0},
-      .password = {'d','r','e','a','m','s','3','7','3','2','6','7',0},
+      //.ssid = {'H','o','m','e','2','1','9','A',0},
+      //.password = {'d','r','e','a','m','s','3','7','3','2','6','7',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
@@ -63,6 +63,7 @@ config_t config = {
   },
   .service = {
     .hostname = {'w','s','x','1','0','0',0},
+    .security = {'n','o','n','e',0},
     .http = {
       .enabled = true,
     },
@@ -75,15 +76,16 @@ config_t config = {
       .password = {0}
     },
     .lowcom = {
+      .enabled = true,
       .std_enabled = true,
-      .crypto_enabled = true
+      .crypto_enabled = false
     },
     .mqtt = {
-      .enabled = false,
+      .enabled = true,
       .server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
       .port = 1883,
       .username = {'a','k','l','o','f','a','s',0},
-      .key = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
+      .password = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
       .state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
       .state_publish_period = 5.0,
       .command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
@@ -115,13 +117,13 @@ config_t config = {
     .minspeed = 0.0,
     .accel = 1000.0,
     .decel = 1000.0,
-    .kthold = 0.15,
-    .ktrun = 0.15,
-    .ktaccel = 0.15,
-    .ktdecel = 0.15,
     .fsspeed = 2000.0,
     .fsboost = false,
     .cm = {
+      .kthold = 2.5,
+      .ktrun = 2.5,
+      .ktaccel = 2.5,
+      .ktdecel = 2.5,
       .switchperiod = 44,
       .predict = true,
       .minon = 21,
@@ -130,6 +132,10 @@ config_t config = {
       .faststep = 20
     },
     .vm = {
+      .kthold = 15.0,
+      .ktrun = 15.0,
+      .ktaccel = 15.0,
+      .ktdecel = 15.0,
       .pwmfreq = 23.4,
       .stall = 750.0,
       .volt_comp = false,
@@ -317,7 +323,7 @@ void servicecfg_read(service_config * cfg) {
     if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
     if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
     if (root.containsKey("mqtt_username"))  strlcpy(cfg->mqtt.username, root["mqtt_username"].as<char *>(), LEN_USERNAME);
-    if (root.containsKey("mqtt_key"))       strlcpy(cfg->mqtt.key, root["mqtt_key"].as<char *>(), LEN_PASSWORD);
+    if (root.containsKey("mqtt_password"))  strlcpy(cfg->mqtt.password, root["mqtt_password"].as<char *>(), LEN_PASSWORD);
     if (root.containsKey("mqtt_state_topic")) strlcpy(cfg->mqtt.state_topic, root["mqtt_state_topic"].as<char *>(), LEN_URL);
     if (root.containsKey("mqtt_state_publish_period")) cfg->mqtt.state_publish_period = root["mqtt_state_publish_period"].as<float>();
     if (root.containsKey("mqtt_command_topic")) strlcpy(cfg->mqtt.command_topic, root["mqtt_command_topic"].as<char *>(), LEN_URL);
@@ -340,7 +346,7 @@ void servicecfg_write(service_config * const cfg) {
   root["mqtt_server"] = cfg->mqtt.server;
   root["mqtt_port"] = cfg->mqtt.port;
   root["mqtt_username"] = cfg->mqtt.username;
-  root["mqtt_key"] = cfg->mqtt.key;
+  root["mqtt_password"] = cfg->mqtt.password;
   root["mqtt_state_topic"] = cfg->mqtt.state_topic;
   root["mqtt_state_publish_period"] = cfg->mqtt.state_publish_period;
   root["mqtt_command_topic"] = cfg->mqtt.command_topic;
@@ -426,14 +432,14 @@ void motorcfg_pull(motor_config * cfg) {
   cfg->accel = ps_getaccel();
   cfg->decel = ps_getdecel();
   ps_ktvals ktvals = ps_getktvals(cfg->mode);
-  cfg->kthold = ktvals.hold;
-  cfg->ktrun = ktvals.run;
-  cfg->ktaccel = ktvals.accel;
-  cfg->ktdecel = ktvals.decel;
   ps_fullstepspeed fullstepspeed = ps_getfullstepspeed();
   cfg->fsspeed = fullstepspeed.steps_per_sec;
   cfg->fsboost = fullstepspeed.boost_mode;
   if (cfg->mode == MODE_CURRENT) {
+    cfg->cm.kthold = ktvals.hold / MOTOR_RSENSE;
+    cfg->cm.ktrun = ktvals.run / MOTOR_RSENSE;
+    cfg->cm.ktaccel = ktvals.accel / MOTOR_RSENSE;
+    cfg->cm.ktdecel = ktvals.decel / MOTOR_RSENSE;
     cfg->cm.switchperiod = ps_cm_getswitchperiod();
     cfg->cm.predict = ps_cm_getpredict();
     ps_cm_ctrltimes ctrltimes = ps_cm_getctrltimes();
@@ -441,7 +447,11 @@ void motorcfg_pull(motor_config * cfg) {
     cfg->cm.minoff = ctrltimes.min_off_us;
     cfg->cm.fastoff = ctrltimes.fast_off_us;
     cfg->cm.faststep = ctrltimes.fast_step_us;
-  } else {
+  } else if (cfg->mode == MODE_VOLTAGE) {
+    cfg->vm.kthold = ktvals.hold * 100.0;
+    cfg->vm.ktrun = ktvals.run * 100.0;
+    cfg->vm.ktaccel = ktvals.accel * 100.0;
+    cfg->vm.ktdecel = ktvals.decel * 100.0;
     ps_vm_pwmfreq pwmfreq = ps_vm_getpwmfreq();
     cfg->vm.pwmfreq = ps_vm_coeffs2pwmfreq(MOTOR_CLOCK, &pwmfreq) / 1000.0;
     cfg->vm.stall = ps_vm_getstall();
@@ -468,11 +478,13 @@ void motorcfg_push(motor_config * cfg) {
 
   ps_setocd(cfg->ocd, cfg->ocdshutdown);
   if (cfg->mode == MODE_CURRENT) {
+    ps_setktvals(cfg->mode, cfg->cm.kthold * MOTOR_RSENSE, cfg->cm.ktrun * MOTOR_RSENSE, cfg->cm.ktaccel * MOTOR_RSENSE, cfg->cm.ktdecel * MOTOR_RSENSE);
     ps_cm_setswitchperiod(cfg->cm.switchperiod);
     ps_cm_setpredict(cfg->cm.predict);
     ps_cm_setctrltimes(cfg->cm.minon, cfg->cm.minoff, cfg->cm.fastoff, cfg->cm.faststep);
     ps_cm_settqreg(false);
-  } else {
+  } else if (cfg->mode == MODE_VOLTAGE) {
+    ps_setktvals(cfg->mode, cfg->vm.kthold / 100.0, cfg->vm.ktrun / 100.0, cfg->vm.ktaccel / 100.0, cfg->vm.ktdecel / 100.0);
     ps_vm_pwmfreq pwmfreq = ps_vm_pwmfreq2coeffs(MOTOR_CLOCK, cfg->vm.pwmfreq * 1000.0);
     ps_vm_setpwmfreq(&pwmfreq);
     ps_vm_setstall(cfg->vm.stall);
@@ -482,8 +494,7 @@ void motorcfg_push(motor_config * cfg) {
   
   ps_setswmode(SW_USER);
   ps_setclocksel(MOTOR_CLOCK);
-
-  ps_setktvals(cfg->mode, cfg->kthold, cfg->ktrun, cfg->ktaccel, cfg->ktdecel);
+  
   ps_setalarmconfig(true, true, true, true);
 
   // Clear errors at end of push
@@ -500,18 +511,22 @@ void motorcfg_write(motor_config * cfg) {
   root["minspeed"] = cfg->minspeed;
   root["accel"] = cfg->accel;
   root["decel"] = cfg->decel;
-  root["kthold"] = cfg->kthold;
-  root["ktrun"] = cfg->ktrun;
-  root["ktaccel"] = cfg->ktaccel;
-  root["ktdecel"] = cfg->ktdecel;
   root["fsspeed"] = cfg->fsspeed;
   root["fsboost"] = cfg->fsboost;
+  root["cm_kthold"] = cfg->cm.kthold;
+  root["cm_ktrun"] = cfg->cm.ktrun;
+  root["cm_ktaccel"] = cfg->cm.ktaccel;
+  root["cm_ktdecel"] = cfg->cm.ktdecel;
   root["cm_switchperiod"] = cfg->cm.switchperiod;
   root["cm_predict"] = cfg->cm.predict;
   root["cm_minon"] = cfg->cm.minon;
   root["cm_minoff"] = cfg->cm.minoff;
   root["cm_fastoff"] = cfg->cm.fastoff;
   root["cm_faststep"] = cfg->cm.faststep;
+  root["vm_kthold"] = cfg->vm.kthold;
+  root["vm_ktrun"] = cfg->vm.ktrun;
+  root["vm_ktaccel"] = cfg->vm.ktaccel;
+  root["vm_ktdecel"] = cfg->vm.ktdecel;
   root["vm_pwmfreq"] = cfg->vm.pwmfreq;
   root["vm_stall"] = cfg->vm.stall;
   root["vm_volt_comp"] = cfg->vm.volt_comp;
@@ -655,9 +670,9 @@ void setup() {
       server.begin();
       websocket_init();
 
-      dns.setTTL(300);
-      dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
-      dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
+      //dns.setTTL(300);
+      //dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
+      //dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
     }
 
     if (config.service.mqtt.enabled) {
@@ -703,9 +718,9 @@ void loop() {
     }
     server.handleClient();
 
-    if (state.wifi.mode == M_ACCESSPOINT) {
+    /*if (state.wifi.mode == M_ACCESSPOINT) {
       dns.processNextRequest();
-    }
+    }*/
   }
 
   HANDLE_LOOPS();

@@ -263,6 +263,18 @@ sup {
     }
 }
 
+#security-table {
+    td {
+        vertical-align: middle;
+        border-width: 0px;
+    }
+
+    .is-issue {
+        color: #f90;
+        font-weight: bold;
+    }
+}
+
 #speed-hizstop {
     & + label::before {
         background-color: #900;

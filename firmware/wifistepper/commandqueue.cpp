@@ -42,6 +42,8 @@ void cmdq_parse(JsonObject& entry, uint8_t target, uint8_t queue) {
     m_waitms(target, queue, id, entry["ms"].as<uint32_t>());
   } else if (type == "waitswitch") {
     m_waitswitch(target, queue, id, entry["state"].as<bool>());
+  } else if (type == "runqueue") {
+    m_runqueue(target, queue, id, entry["targetqueue"].as<uint8_t>());
   }
 }
 
@@ -166,6 +168,13 @@ size_t cmdq_serialize(JsonObject& entry, cmd_head_t * head) {
       entry["type"] = "waitswitch";
       entry["state"] = cmd->state;
       consume += sizeof(cmd_waitsw_t);
+      break;
+    }
+    case CMD_RUNQUEUE: {
+      cmd_runqueue_t * cmd = (cmd_runqueue_t *)data;
+      entry["type"] = "runqueue";
+      entry["targetqueue"] = cmd->targetqueue;
+      consume += sizeof(cmd_runqueue_t);
       break;
     }
   }
