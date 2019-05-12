@@ -214,7 +214,7 @@ layout: default
                     </div>
                 </div>-->
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">Authorization</label></div>
+                    <div class="field-label is-normal"><label class="label">HTTP Auth</label></div>
                     <div class="field-body">
                         <div class="field">
                             <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.auth_username" v-bind:disabled="!service.auth_enabled" /></span>
@@ -283,6 +283,21 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon cloud %}MQTT</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="level status-tags">
+                    <div class="level-left">
+                        <div class="level-item subtitle is-5">Status:</div>
+                    </div>
+                    <div class="level-item">
+                        <div class="level">
+                            <div class="level-item">
+                                <span class="tag is-medium" v-if="!service.mqtt_enabled">Not Enabled</span>
+                                <span class="tag is-medium is-success" v-else-if="service.state.mqtt_connected">Connected</span>
+                                <span class="tag is-medium is-error" v-else>Not Connected</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <hr />
                 <div class="field is-horizontal">
                     <div class="field-label is-normal"></div>
                     <div class="field-body">
@@ -298,23 +313,52 @@ layout: default
                     <div class="field-label is-normal"><label class="label">Server</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control"><input class="input" type="text" placeholder="mqtt.example.com" maxlength="255" v-model="service.mqtt_server" v-bind:disabled="!service.mqtt_enabled" /></span>
+                            <span class="control"><input class="input" type="text" placeholder="mqtt.example.com" maxlength="255" v-model="service.mqtt_server" /></span>
                         </div>
-                        <div class="field field-label is-normal"><label class="label">Port</label></div>
-                        <div class="field" style="width: 5rem;">
-                            <span class="control"><input class="input" type="text" placeholder="port" maxlength="5" v-model="service.mqtt_port" v-bind:disabled="!service.mqtt_enabled" /></span>
+                        <div class="field has-addons" style="width: 10rem;">
+                            <span class="control"><span class="button is-static">Port</span></span>
+                            <span class="control"><input class="input" type="text" placeholder="port" maxlength="5" v-model="service.mqtt_port" /></span>
                         </div>
                     </div>
                 </div>
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">Authentication</label></div>
+                    <div class="field-label is-normal"><label class="label">Auth</label></div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.mqtt_username" v-bind:disabled="!service.mqtt_enabled" /></span>
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Username" maxlength="63" v-model="service.mqtt_username" v-bind:disabled="!service.mqtt_auth_enabled" /></span>
                         </div>
                         <div class="field">
-                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="service.mqtt_password" v-bind:disabled="!service.mqtt_enabled" /></span>
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Password" maxlength="63" v-model="service.mqtt_password" v-bind:disabled="!service.mqtt_auth_enabled" /></span>
                         </div>
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="service-mqtt-auth-enable" type="checkbox" v-model="service.mqtt_auth_enabled" />
+                                <label class="is-checkradio-enable" for="service-mqtt-auth-enable"><strong>Use&nbsp;Auth</strong></label>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">State Topic</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Topic" maxlength="255" v-model="service.mqtt_state_topic" /></span>
+                        </div>
+                        <div class="field has-addons" style="width: 20rem;">
+                            <span class="control"><span class="button is-static">Every</span></span>
+                            <span class="control"><input class="input" type="number" min="0" step="5" v-model="service.mqtt_state_publish_period" /></span>
+                            <span class="control"><span class="button is-static">Secs</span></span>
+                        </div>
+                        <span class="control"><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_mqtt_state_topic }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                    </div>
+                </div>
+                <div class="field is-horizontal is-spaced-mobile">
+                    <div class="field-label is-normal"><label class="label">Command Topic</label></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control is-expanded"><input class="input" type="text" placeholder="Topic" maxlength="255" v-model="service.mqtt_command_topic" /></span>
+                        </div>
+                        <span class="control"><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_mqtt_command_topic }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                     </div>
                 </div>
                 <hr />
@@ -373,9 +417,9 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon key %}Crypto Authentication</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
-                <div class="level warnings">
+                <div class="level status-tags">
                     <div class="level-left">
-                        <div class="level-item subtitle is-5">Chip Status:</div>
+                        <div class="level-item subtitle is-5">Status:</div>
                     </div>
                     <div class="level-item">
                         <div class="level">
@@ -414,7 +458,7 @@ layout: default
                     <div class="field-body">
                         <div class="field">
                             <span class="control is-expanded">
-                                <input class="input" type="text" placeholder="Key" v-model="crypto.key" v-bind:disabled="!crypto.available" />
+                                <input class="input" type="text" placeholder="Auth Key" v-model="crypto.key" v-bind:disabled="!crypto.available" />
                             </span>
                         </div>
                     </div>
@@ -461,26 +505,24 @@ layout: default
         </div>
     </div>
     <div class="message">
-        <div class="message-header"><span class="title is-5">{% mdicon shield %}Security Analysis</span></div>
+        <div class="message-header"><span class="title is-5">{% mdicon shield %}Security Analysis &amp; Recommendations</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="notification has-text-centered" style="padding: 10px; background-color: #666;">
                     <p v-if="service.security == 'none'">To view security recommendations choose the desired security level.</p>
-                    <p v-if="service.security == 'medium'">With <strong>medium</strong> security, you require some level of authentication, however the device is not in a hostile environment with potential attackers present.</p>
-                    <p v-if="service.security == 'high'">Under <strong>high</strong> security, only authorized clients with proper credentials can send commands.</p>
-                    <p v-if="service.security == 'max'"><strong>Maximum Security.</strong> Only enable services where, even if an attacker can gain physical access and compromise the device, the keys cannot be read. The attack is isolated to this device and other units using the same key are not compromised.</p>
+                    <p v-if="service.security == 'medium'">With <strong>Medium</strong> security, you require some level of authentication, however the device is not in a hostile environment with potential attackers present.</p>
+                    <p v-if="service.security == 'high'">Under <strong>High</strong> security, only authorized clients with proper credentials can send commands. Even if an attacker could gain physical access and compromise a device, the keys cannot be read from that device. The attack is isolated to the device and other units using the same key are not compromised.</p>
                 </div>
                 <div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">Security Level</label></div>
+                    <div class="field-label is-normal" style="padding-top: 12px;"><label class="label title is-5">Security Level</label></div>
                     <div class="field-body">
                         <div class="field">
                             <span class="control">
-                                <span class="select">
+                                <span class="select is-medium">
                                     <select v-model="service.security" v-on:change="writesecurity">
                                         <option value="none">None</option>
                                         <option value="medium">Medium</option>
                                         <option value="high">High</option>
-                                        <option value="max">Maximum</option>
                                     </select>
                                 </span>
                             </span>
@@ -498,53 +540,71 @@ layout: default
                         </tr>
                     </thead>
                     <tr>
-                        <td>Wifi Connection</td>
-                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_wifi}"></td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['wifi'] }}{% endraw %}</td>
+                        <td>Wifi Network</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_wifi}">
+                            <span v-if="wifi.mode == 'off'">Off</span>
+                            <span v-else-if="(wifi.mode == 'accesspoint' && !wifi.accesspoint_encryption) || (wifi.mode == 'station' && !wifi.station_encryption)">No Password</span>
+                            <span v-else>Password</span>
+                            <span v-if="wifi.mode == 'accesspoint' && wifi.accesspoint_hidden">&nbsp;&amp; Hidden</span>
+                        </td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['wifi'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_wifi">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_wifi }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_wifi }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr v-if="wifi.mode == 'station'">
+                        <td>Revert AP</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_revertap}">{% raw %}{{ wifi.station_revertap? 'On' : 'Off' }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['revertap'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_revertap">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_revertap }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>mDNS</td>
                         <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mdns}">{% raw %}{{ service.mdns_enabled? 'On' : 'Off' }}{% endraw %}</td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['mdns'] }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['mdns'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_mdns">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_mdns }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_mdns }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>HTTP</td>
-                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_http}">{% raw %}{{ service.http_enabled? 'On' : 'Off' }}{% endraw %}</td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['http'] }}{% endraw %}</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_http}">
+                            <span v-if="!service.http_enabled">Off</span>
+                            <span v-else-if="service.auth_enabled">Auth</span>
+                            <span v-else>Open</span>
+                        </td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['http'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_http">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_http }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
-                    </tr>
-                    <tr v-if="service.security == 'medium'">
-                        <td>Authorization</td>
-                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_auth}">{% raw %}{{ service.auth_enabled? 'On' : 'Off' }}{% endraw %}</td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['auth'] }}{% endraw %}</td>
-                        <td class="title is-3"><span v-if="security_warn_auth">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_auth }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_http }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>Low Level Interface</td>
-                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_lowcom}"></td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['lowcom'] }}{% endraw %}</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_lowcom}">
+                            <span v-if="!service.lowcom_enabled">Off</span>
+                            <span v-else-if="service.lowcom_std_enabled && !service.lowcom_crypto_enabled">Standard Only</span>
+                            <span v-else-if="!service.lowcom_std_enabled && service.lowcom_crypto_enabled">Crypto Only</span>
+                            <span v-else-if="service.lowcom_std_enabled && service.lowcom_crypto_enabled">Standard + Crypto</span>
+                        </td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['lowcom'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_lowcom">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_lowcom }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
-                    </tr>
-                    <tr>
-                        <td>MQTT</td>
-                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mqtt}"></td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['mqtt'] }}{% endraw %}</td>
-                        <td class="title is-3"><span v-if="security_warn_mqtt">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_mqtt }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_lowcom }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>Arduino OTA</td>
                         <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_ota}">{% raw %}{{ service.ota_enabled? 'On' : 'Off' }}{% endraw %}</td>
-                        <td class="has-text-centered">{% raw %}{{ security_matrix[service.security]['ota'] }}{% endraw %}</td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['ota'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_ota">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ security_ota }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_ota }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
+                    </tr>
+                    <tr>
+                        <td>MQTT</td>
+                        <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mqtt}">
+                            <span v-if="!service.mqtt_enabled">Off</span>
+                            <span v-else-if="service.mqtt_auth_enabled">Password</span>
+                            <span v-else>Open</span>
+                        </td>
+                        <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['mqtt'] }}{% endraw %}</td>
+                        <td class="title is-3"><span v-if="security_warn_mqtt">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
+                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_mqtt }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                 </table>
             </div>
@@ -554,12 +614,17 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon update %}Reset &amp; Upgrade</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
-                <div class="field has-addons" style="margin-bottom: 30px;">
-                    <span class="control"><span class="button is-static">Product:&nbsp;<strong>{% raw %}{{ update.product }}{% endraw %}</strong></span></span>
-                    <span class="control"><span class="button is-static">Model:&nbsp;<strong>{% raw %}{{ update.model }}{% endraw %}</strong></span></span>
-                    <span class="control"><span class="button is-static">Branch:&nbsp;<strong>{% raw %}{{ update.branch }}{% endraw %}</strong></span></span>
-                    <span class="control"><span class="button is-static">Version:&nbsp;<strong>{% raw %}{{ update.version }}{% endraw %}</strong></span></span>
+                <div class="level status-tags">
+                    <div class="level-item">
+                        <div class="level">
+                            <div class="level-item"><span class="tag is-medium" style="color: #fff;">Product:&nbsp;<strong>{% raw %}{{ update.product }}{% endraw %}</strong></span></div>
+                            <div class="level-item"><span class="tag is-medium" style="color: #fff;">Model:&nbsp;<strong>{% raw %}{{ update.model }}{% endraw %}</strong></span></div>
+                            <div class="level-item"><span class="tag is-medium" style="color: #fff;">Branch:&nbsp;<strong>{% raw %}{{ update.branch }}{% endraw %}</strong></span></div>
+                            <div class="level-item"><span class="tag is-medium" style="color: #fff;">Version:&nbsp;<strong>{% raw %}{{ update.version }}{% endraw %}</strong></span></div>
+                        </div>
+                    </div>
                 </div>
+                <hr />
                 <div class="field is-horizontal" style="padding-bottom: 10px;">
                     <div class="field-label is-normal">Check for official updates to the Wi-Fi Stepper project.</div>
                     <div class="field-body">
@@ -615,6 +680,16 @@ layout: default
                         </div>
                     </div>
                 </div>
+                <div class="modal" v-bind:class="{'is-active': update.factoryresetmodal}">
+                    <div class="modal-background" v-on:click="update.factoryresetmodal = false"></div>
+                    <div class="modal-content">
+                        <div class="box has-text-centered">
+                            <div class="title is-4">{% mdicon sync-alert %}Factory Reset</div>
+                            <div>Rebooting device. You may need to refresh the page to see changes.</div>
+                        </div>
+                    </div>
+                    <button class="modal-close is-large" v-on:click="update.factoryresetmodal = false"></button>
+                </div>
             </div>
         </div>
     </div>
@@ -668,13 +743,42 @@ layout: default
                 mqtt_enabled: false,
                 mqtt_server: '',
                 mqtt_port: 0,
+                mqtt_auth_enabled: false,
                 mqtt_username: '',
                 mqtt_password: '',
                 mqtt_state_topic: '',
                 mqtt_state_publish_period: 0.0,
                 mqtt_command_topic: '',
                 ota_enabled: false,
-                ota_password: ''
+                ota_password: '',
+
+                security_matrix: {
+                    medium: {
+                        wifi: 'Password/Off',
+                        revertap: 'On/Off',
+                        mdns: 'On/Off',
+                        http: 'Auth/Off',
+                        auth: 'On when HTTP',
+                        lowcom: 'Crypto Only/Off',
+                        mqtt: 'Password/Off',
+                        ota: 'Off'
+                    },
+                    high: {
+                        wifi: 'Password & Hidden/Off',
+                        revertap: 'Off',
+                        mdns: 'Off',
+                        http: 'Off',
+                        auth: 'Off',
+                        lowcom: 'Crypto Only/Off',
+                        mqtt: 'Off',
+                        ota: 'Off'
+                    },
+                },
+
+                state: {
+                    lowcom_clients: 0,
+                    mqtt_connected: false
+                }
             },
             daisy: {
                 changemodal: false,
@@ -698,6 +802,7 @@ layout: default
             },
             update: {
                 changemodal: false,
+                factoryresetmodal: false,
 
                 product: 'unknown',
                 model: 'unknown',
@@ -707,35 +812,6 @@ layout: default
                 working: false,
                 message: '',
                 imagename: ''
-            },
-            security_matrix: {
-                medium: {
-                    wifi: '',
-                    mdns: 'On/Off',
-                    http: 'On/Off',
-                    auth: 'On when HTTP',
-                    lowcom: 'Crypto Only/Off',
-                    mqtt: 'PSK Only/Off',
-                    ota: 'Off'
-                },
-                high: {
-                    wifi: '',
-                    mdns: 'Off',
-                    http: 'Off',
-                    auth: 'Off',
-                    lowcom: 'Crypto Only/Off',
-                    mqtt: 'PSK Only/Off',
-                    ota: 'Off'
-                },
-                max: {
-                    wifi: '',
-                    mdns: 'Off',
-                    http: 'Off',
-                    auth: 'Off',
-                    lowcom: 'Crypto Only/Off',
-                    mqtt: 'Off',
-                    ota: 'Off'
-                }
             }
         },
         watch: {
@@ -754,27 +830,34 @@ layout: default
         },
         computed: {
             security_warn_wifi: function() {
-                return false;
+                return this.service.security != 'none' && (
+                    (this.wifi.mode == 'accesspoint' && !this.wifi.accesspoint_encryption) ||
+                    (this.wifi.mode == 'station' && !this.wifi.station_encryption)
+                );
+            },
+            security_warn_revertap: function() {
+                return this.service.security == 'high' && this.wifi.mode == 'station' && this.wifi.station_revertap;
             },
             security_warn_mdns: function() {
-                return this.service.mdns_enabled && (this.service.security == 'high' || this.service.security == 'max');
+                return this.service.mdns_enabled && this.service.security == 'high';
             },
             security_warn_http: function() {
-                return this.service.http_enabled && (this.service.security == 'high' || this.service.security == 'max');
-            },
-            security_warn_auth: function() {
-                return this.service.http_enabled &&
+                return this.service.http_enabled && (
                     (!this.service.auth_enabled && this.service.security == 'medium') ||
-                    (this.service.auth_enabled && (this.service.security == 'high' || this.service.security == 'max'));
+                    (this.service.security == 'high')
+                );
             },
             security_warn_lowcom: function() {
-                return false;
-            },
-            security_warn_mqtt: function() {
-                return false;
+                return this.service.lowcom_enabled && this.service.lowcom_std_enabled && this.service.security != 'none';
             },
             security_warn_ota: function() {
                 return this.service.ota_enabled && this.service.security != 'none';
+            },
+            security_warn_mqtt: function() {
+                return this.service.mqtt_enabled && (
+                    (!this.service.mqtt_auth_enabled && this.service.security == 'medium') ||
+                    (this.service.security == 'high')
+                );
             }
         },
         methods: {
@@ -846,7 +929,6 @@ layout: default
                 }
             },
             writeservice: function() {
-                console.log("Writing service settings");
                 axios.get("{{ site.apiurl }}/api/service/set", {
                     params: {
                         hostname: this.service.hostname,
@@ -858,14 +940,6 @@ layout: default
                         lowcom_enabled: this.service.lowcom_enabled,
                         lowcom_std_enabled: this.service.lowcom_std_enabled,
                         lowcom_crypto_enabled: this.service.lowcom_crypto_enabled,
-                        mqtt_enabled: this.service.mqtt_enabled,
-                        mqtt_server: this.service.mqtt_server,
-                        mqtt_port: this.service.mqtt_port,
-                        mqtt_username: this.service.mqtt_username,
-                        mqtt_password: this.service.mqtt_password,
-                        mqtt_state_topic: this.service.mqtt_state_topic,
-                        mqtt_state_publish_period: this.service.mqtt_state_publish_period,
-                        mqtt_command_topic: this.service.mqtt_command_topic,
                         ota_enabled: this.service.ota_enabled,
                         ota_password: this.service.ota_password
                     }
@@ -873,7 +947,20 @@ layout: default
                 this.service.changemodal = true;
             },
             writemqtt: function() {
-
+                axios.get("{{ site.apiurl }}/api/service/set", {
+                    params: {
+                        mqtt_enabled: this.service.mqtt_enabled,
+                        mqtt_server: this.service.mqtt_server,
+                        mqtt_port: this.service.mqtt_port,
+                        mqtt_auth_enabled: this.service.mqtt_auth_enabled,
+                        mqtt_username: this.service.mqtt_username,
+                        mqtt_password: this.service.mqtt_password,
+                        mqtt_state_topic: this.service.mqtt_state_topic,
+                        mqtt_state_publish_period: this.service.mqtt_state_publish_period,
+                        mqtt_command_topic: this.service.mqtt_command_topic
+                    }
+                });
+                this.service.changemodal = true;
             },
             writedaisy: function() {
                 axios.get("{{ site.apiurl }}/api/daisy/set", {
@@ -911,7 +998,11 @@ layout: default
                 });
             },
             writesecurity: function() {
-
+                axios.get("{{ site.apiurl }}/api/service/security/set", {
+                    params: {
+                        security: this.service.security
+                    }
+                });
             },
             uploadimage: function() {
                 var image = this.$refs.updateimage.files[0];
@@ -938,11 +1029,23 @@ layout: default
                 });
             },
             factoryreset: function() {
-                console.log("Factory reset device");
+                this.update.factoryresetmodal = true;
                 axios.get("{{ site.apiurl }}/api/factoryreset");
+            },
+            readstate: function() {
+                axios.get("{{ site.apiurl }}/api/service/state").then(function(r) {
+                    if (r.data.status == 'ok') {
+                        merge(app.service.state, r.data, ['lowcom_clients', 'mqtt_connected']);
+                    }
+                });
             }
         },
         mounted: function () {
+            var pollstate = function() {
+                this.readstate(false);
+                setTimeout(pollstate, 2000);
+            }.bind(this);
+
             axios.get("{{ site.apiurl }}/api/wifi/get").then(function(r) {
                 if (r.data.status == 'ok') {
                     merge(app.wifi, r.data, [
@@ -958,7 +1061,7 @@ layout: default
                         'hostname', 'security',
                         'http_enabled', 'mdns_enabled', 'auth_enabled', 'auth_username', 'auth_password',
                         'lowcom_enabled', 'lowcom_std_enabled', 'lowcom_crypto_enabled',
-                        'mqtt_enabled', 'mqtt_server', 'mqtt_port', 'mqtt_username', 'mqtt_password', 'mqtt_state_topic', 'mqtt_state_publish_period', 'mqtt_command_topic',
+                        'mqtt_enabled', 'mqtt_server', 'mqtt_port', 'mqtt_auth_enabled', 'mqtt_username', 'mqtt_password', 'mqtt_state_topic', 'mqtt_state_publish_period', 'mqtt_command_topic',
                         'ota_enabled', 'ota_password'
                     ]);
                 }
@@ -978,6 +1081,8 @@ layout: default
                     merge(app.update, r.data, ['product', 'model', 'branch', 'version']);
                 }
             });
+
+            pollstate();
         }
     });
 </script>

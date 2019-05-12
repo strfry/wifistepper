@@ -1,65 +1,117 @@
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecureBearSSL.h>
-#include <PubSubClient.h>
+#include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 
 #include "wifistepper.h"
+#include "PubSubClient.h"
 
-extern WiFiClient * mqtt_conn;
-extern PubSubClient * mqtt_client;
+#define MQTT_DEBUG
+
+WiFiClient mqtt_conn;
+PubSubClient mqtt_client(mqtt_conn);
+
 extern StaticJsonBuffer<2048> jsonbuf;
 
-void mqtt_callback(char* topic, byte* payload, unsigned int length) {
-  
+#ifdef MQTT_DEBUG
+void mqtt_debug(String msg) {
+  Serial.println(msg);
+}
+void mqtt_debug(String msg, const char * str) {
+  Serial.print(msg);
+  Serial.print(": ");
+  Serial.println(str);
+}
+#else
+#define mqtt_debug(...)
+#endif
+
+void mqtt_callback(char * topic, byte * payload, unsigned int length) {
+  if (
+    config.service.mqtt.command_topic[0] != 0 &&
+    strcmp(config.service.mqtt.command_topic, topic) == 0
+  ) {
+    if (length == MQTT_MAX_PACKET_SIZE) {
+      seterror(ESUB_MQTT, 0, ETYPE_IBUF);
+      return;
+    }
+
+    payload[length] = 0;
+    mqtt_debug((const char *)payload);
+    
+    JsonObject& root = jsonbuf.parseObject(payload);
+    if (root == JsonObject::invalid()) {
+      mqtt_debug("Bad parse!");
+      return;
+    }
+    
+    if (root.containsKey("commands")) {
+      JsonArray& arr = root["commands"].as<JsonArray&>();
+      cmdq_read(arr);
+    }
+    jsonbuf.clear();
+  }
 }
 
 bool mqtt_connect() {
-  if (!mqtt_client->connected()) {
-    if (mqtt_client->connect(PRODUCT " " MODEL " (" BRANCH ")", config.service.mqtt.username, config.service.mqtt.password)) {
-      mqtt_client->subscribe(config.service.mqtt.command_topic);
-    } else {
-      Serial.println("MQTT Not connected");
-      return false;
-    }
+  if (!mqtt_client.connected()) {
+    bool connected = config.service.mqtt.auth_enabled? mqtt_client.connect(PRODUCT " " MODEL " (" BRANCH ")", config.service.mqtt.username, config.service.mqtt.password) : mqtt_client.connect(PRODUCT " " MODEL " (" BRANCH ")");
+    if (connected) mqtt_client.subscribe(config.service.mqtt.command_topic);
+    mqtt_debug(connected? "MQTT connected" : "MQTT Not connected");
+    return connected;
   }
-
-  Serial.println("MQTT connected");
+  
   return true;
 }
 
 void mqtt_init() {
-  /*if (servicecfg.mqttcfg.secure) {
-    mqtt_conn = new WiFiClientSecure;
-  } else*/
-  mqtt_conn = new WiFiClient;
-  mqtt_client = new PubSubClient(*mqtt_conn);
-  
-  mqtt_client->setServer(config.service.mqtt.server, config.service.mqtt.port);
-  mqtt_client->setCallback(mqtt_callback);
+  mqtt_client.setServer(config.service.mqtt.server, config.service.mqtt.port);
+  mqtt_client.setCallback(mqtt_callback);
   mqtt_connect();
 }
 
-static volatile unsigned long last_connect = 0;
-static volatile unsigned long last_publish = 0;
-void mqtt_loop(unsigned long looptime) {
-  bool connected = state.service.mqtt.connected = mqtt_client->connected();
-  if (!connected && (looptime - last_connect) > TIME_MQTT_RECONNECT) {
+void mqtt_loop(unsigned long now) {
+  bool connected = state.service.mqtt.connected = mqtt_client.connected();
+  if (!connected && timesince(sketch.service.mqtt.last.connect, now) > TIME_MQTT_RECONNECT) {
     connected = state.service.mqtt.connected = mqtt_connect();
-    last_connect = looptime;
+    sketch.service.mqtt.last.connect = now;
   }
 
-  mqtt_client->loop();
+  mqtt_client.loop();
 
-  /*if (connected && (looptime - last_publish) > config.service.mqtt.state_publish_period) {
+  if (
+    connected &&
+    config.service.mqtt.state_publish_period != 0.0 &&
+    config.service.mqtt.state_topic[0] != 0 &&
+    timesince(sketch.service.mqtt.last.publish, now) > (config.service.mqtt.state_publish_period * 1000.0)
+  ) {
+    mqtt_debug("Send state", config.service.mqtt.state_topic);
+    
+    motor_state * st = &state.motor;
     JsonObject& root = jsonbuf.createObject();
-    root["position"] = motorcfg_pos(state.motor.pos);
-    root["mark"] = motorcfg_pos(state.motor.mark);
-    root["stepss"] = state.motor.stepss;
-    root["busy"] = state.motor.busy;
+    root["stepss"] = st->stepss;
+    root["pos"] = st->pos;
+    root["mark"] = st->mark;
+    root["adc"] = st->adc;
+    root["dir"] = json_serialize(st->status.direction);
+    root["movement"] = json_serialize(st->status.movement);
+    root["hiz"] = st->status.hiz;
+    root["busy"] = st->status.busy;
+    root["switch"] = st->status.user_switch;
+    root["stepclock"] = st->status.step_clock;
+    JsonObject& alarms = root.createNestedObject("alarms");
+    alarms["commanderror"] = st->status.alarms.command_error;
+    alarms["overcurrent"] = st->status.alarms.overcurrent;
+    alarms["undervoltage"] = st->status.alarms.undervoltage;
+    alarms["thermalshutdown"] = st->status.alarms.thermal_shutdown;
+    alarms["thermalwarning"] = st->status.alarms.thermal_warning;
+    alarms["stalldetect"] = st->status.alarms.stall_detect;
+    alarms["switch"] = st->status.alarms.user_switch;
     JsonVariant v = root;
-    mqtt_client->publish(config.service.mqtt.state_topic, v.as<String>().c_str());
+    if (!mqtt_client.publish(config.service.mqtt.state_topic, v.as<String>().c_str())) {
+      mqtt_debug("Failed to publish!");
+    }
     jsonbuf.clear();
-    last_publish = looptime;
-  }*/
+    sketch.service.mqtt.last.publish = now;
+  }
 }
 

@@ -39,6 +39,19 @@ void cmd_debug(id_t id, uint8_t opcode, const char * msg) {
 #define cmd_debug(...)
 #endif
 
+static void cmd_updatestatus(bool clearerrors) {
+  state.motor.status = ps_getstatus(clearerrors);
+  state.motor.status.direction = motorcfg_dir(state.motor.status.direction);
+}
+
+static void cmd_updatestate() {
+  cmd_updatestatus(false);
+  state.motor.stepss = ps_getspeed();
+  state.motor.pos = motorcfg_pos(ps_getpos());
+  state.motor.mark = motorcfg_pos(ps_getmark());
+  state.motor.adc = (float)ps_readadc() * MOTOR_ADCCOEFF;
+}
+
 void cmd_init() {
   // Initialize queues
   size_t i = 0;
@@ -63,14 +76,14 @@ void cmd_loop(unsigned long now) {
     // Check pre-conditions
     if (head->opcode & (QPRE_STATUS | QPRE_NOTBUSY | QPRE_STOPPED)) {
       sketch.motor.last.status = now;
-      state.motor.status = ps_getstatus();
+      cmd_updatestatus(false);
 
       if ((head->opcode & QPRE_NOTBUSY) && state.motor.status.busy) return;
       if ((head->opcode & QPRE_STOPPED) && state.motor.status.movement != M_STOPPED) return;
     }
       
     switch (head->opcode) {
-      case CMD_NOP:
+      //case CMD_NOP:
       case CMD_WAITBUSY:
       case CMD_WAITRUNNING: {
         // Do nothing
@@ -246,8 +259,7 @@ void cmd_loop(unsigned long now) {
 void cmd_update(unsigned long now) {
   if (timesince(sketch.motor.last.status, now) > CTO_UPDATE) {
     sketch.motor.last.status = now;
-    state.motor.status = ps_getstatus();
-    state.motor.status.direction = motorcfg_dir(state.motor.status.direction);
+    cmd_updatestatus(false);
     
     bool iserror = state.motor.status.alarms.command_error || state.motor.status.alarms.overcurrent || state.motor.status.alarms.undervoltage || state.motor.status.alarms.thermal_shutdown;
     if (iserror) {
@@ -257,10 +269,7 @@ void cmd_update(unsigned long now) {
   
   if (timesince(sketch.motor.last.state, now) > CTO_UPDATE) {
     sketch.motor.last.state = now;
-    state.motor.stepss = ps_getspeed();
-    state.motor.pos = motorcfg_pos(ps_getpos());
-    state.motor.mark = motorcfg_pos(ps_getmark());
-    state.motor.adc = (float)ps_readadc() * MOTOR_ADCCOEFF;
+    cmd_updatestate();
   }
 }
 
@@ -285,9 +294,9 @@ static void * cmd_alloc(queue_t * queue, id_t id, uint8_t opcode, size_t len) {
   return &cmd[1];
 }
 
-bool cmd_nop(queue_t * queue, id_t id) {
+/*bool cmd_nop(queue_t * queue, id_t id) {
   return cmd_alloc(queue, id, CMD_NOP, 0) != NULL;
-}
+}*/
 
 bool cmd_stop(queue_t * queue, id_t id, bool hiz, bool soft) {
   cmd_stop_t * cmd = (cmd_stop_t *)cmd_alloc(queue, id, CMD_STOP, sizeof(cmd_stop_t));
@@ -400,7 +409,7 @@ bool cmd_estop(id_t id, bool hiz, bool soft) {
 }
 
 void cmd_clearerror() {
-  state.motor.status = ps_getstatus(true);
+  cmd_updatestatus(true);
 }
 
 bool cmdq_copy(queue_t * queue, id_t id, queue_t * src) {

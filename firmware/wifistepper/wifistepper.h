@@ -124,6 +124,7 @@ typedef struct {
     bool enabled;
     char server[LEN_URL];
     int port;
+    bool auth_enabled;
     char username[LEN_USERNAME];
     char password[LEN_PASSWORD];
     char state_topic[LEN_URL];
@@ -203,6 +204,7 @@ typedef struct {
 #define ESUB_DAISY    (0x04)
 #define ESUB_LC       (0x05)
 #define ESUB_HTTP     (0x06)
+#define ESUB_MQTT     (0x07)
 
 #define ETYPE_UNK     (0x00)
 #define ETYPE_MEM     (0x01)
@@ -243,7 +245,6 @@ typedef struct {
   } lowcom;
   struct {
     int connected;
-    int status;
   } mqtt;
   struct {
     bool fault;
@@ -292,12 +293,18 @@ typedef struct {
   struct {
     int mark;
   } crypto;
+  struct {
+    struct {
+      unsigned long connect;
+      unsigned long publish;
+    } last;
+  } mqtt;
 } service_sketch;
 
 typedef struct ispacked {
   char product[LEN_PRODUCT];
   char model[LEN_INFO];
-  char swbranch[LEN_INFO];
+  char branch[LEN_INFO];
   uint16_t version;
   io_config io;
   motor_config motor;
@@ -415,7 +422,10 @@ void cmd_loop(unsigned long now);
 void cmd_update(unsigned long now);
 
 // Commands for local Queue
-bool cmd_nop(queue_t * q, id_t id);
+//bool cmd_nop(queue_t * q, id_t id);
+bool cmd_estop(id_t id, bool hiz, bool soft);
+void cmd_clearerror();
+bool cmd_runqueue(queue_t * q, id_t id, uint8_t targetqueue);
 bool cmd_stop(queue_t * q, id_t id, bool hiz, bool soft);
 bool cmd_run(queue_t * q, id_t id, ps_direction dir, float stepss);
 bool cmd_stepclock(queue_t * q, id_t id, ps_direction dir);
@@ -433,17 +443,13 @@ bool cmd_waitbusy(queue_t * q, id_t id);
 bool cmd_waitrunning(queue_t * q, id_t id);
 bool cmd_waitms(queue_t * q, id_t id, uint32_t ms);
 bool cmd_waitswitch(queue_t * q, id_t id, bool state);
-bool cmd_runqueue(queue_t * q, id_t id, uint8_t targetqueue);
-
-bool cmd_estop(id_t id, bool hiz, bool soft);
-void cmd_clearerror();
 
 void cmdq_read(JsonArray& arr, uint8_t target, uint8_t queue);
 void cmdq_read(JsonArray& arr, uint8_t queue);
 void cmdq_read(JsonArray& arr);
 void cmdq_write(JsonArray& arr, queue_t * queue);
 bool cmdq_empty(queue_t * q, id_t id);
-bool cmdq_copy(queue_t * q, id_t id, queue_t * src);
+bool cmdq_copy(queue_t * q, id_t id, queue_t * sourcequeue);
 
 
 void daisy_init();
@@ -475,7 +481,7 @@ bool daisy_waitswitch(uint8_t target, uint8_t q, id_t id, bool state);
 bool daisy_runqueue(uint8_t target, uint8_t q, id_t id, uint8_t targetqueue);
 
 bool daisy_emptyqueue(uint8_t target, uint8_t q, id_t id);
-bool daisy_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src);
+bool daisy_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t sourcequeue);
 bool daisy_savequeue(uint8_t target, uint8_t q, id_t id);
 bool daisy_loadqueue(uint8_t target, uint8_t q, id_t id);
 bool daisy_estop(uint8_t target, id_t id, bool hiz, bool soft);
@@ -517,6 +523,9 @@ void mqtt_init();
 void mqtt_loop(unsigned long looptime);
 
 // Mux Functions
+static inline bool m_estop(uint8_t target, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(target, id, hiz, soft); } }
+static inline bool m_clearerror(uint8_t target, id_t id) { if (target == 0) { clearerror(); return true; } else { return daisy_clearerror(target, id); } }
+static inline bool m_setconfig(uint8_t target, uint8_t q, id_t id, const char * data) { if (target == 0) { return cmd_setconfig(queue_get(q), id, data); } else { return daisy_setconfig(target, q, id, data); } }
 static inline bool m_stop(uint8_t target, uint8_t q, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_stop(queue_get(q), id, hiz, soft); } else { return daisy_stop(target, q, id, hiz, soft); } }
 static inline bool m_run(uint8_t target, uint8_t q, id_t id, ps_direction dir, float stepss) { if (target == 0) { return cmd_run(queue_get(q), id, dir, stepss); } else { return daisy_run(target, q, id, dir, stepss); } }
 static inline bool m_stepclock(uint8_t target, uint8_t q, id_t id, ps_direction dir) { if (target == 0) { return cmd_stepclock(queue_get(q), id, dir); } else { return daisy_stepclock(target, q, id, dir); } }
@@ -529,17 +538,16 @@ static inline bool m_gomark(uint8_t target, uint8_t q, id_t id) { if (target == 
 static inline bool m_resetpos(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_resetpos(queue_get(q), id); } else { return daisy_resetpos(target, q, id); } }
 static inline bool m_setpos(uint8_t target, uint8_t q, id_t id, int32_t pos) { if (target == 0) { return cmd_setpos(queue_get(q), id, pos); } else { return daisy_setpos(target, q, id, pos); } }
 static inline bool m_setmark(uint8_t target, uint8_t q, id_t id, int32_t mark) { if (target == 0) { return cmd_setmark(queue_get(q), id, mark); } else { return daisy_setmark(target, q, id, mark); } }
-static inline bool m_setconfig(uint8_t target, uint8_t q, id_t id, const char * data) { if (target == 0) { return cmd_setconfig(queue_get(q), id, data); } else { return daisy_setconfig(target, q, id, data); } }
 static inline bool m_waitbusy(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_waitbusy(queue_get(q), id); } else { return daisy_waitbusy(target, q, id); } }
 static inline bool m_waitrunning(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmd_waitrunning(queue_get(q), id); } else { return daisy_waitrunning(target, q, id); } }
 static inline bool m_waitms(uint8_t target, uint8_t q, id_t id, uint32_t ms) { if (target == 0) { return cmd_waitms(queue_get(q), id, ms); } else { return daisy_waitms(target, q, id, ms); } }
 static inline bool m_waitswitch(uint8_t target, uint8_t q, id_t id, bool state) { if (target == 0) { return cmd_waitswitch(queue_get(q), id, state); } else { return daisy_waitswitch(target, q, id, state); } }
 static inline bool m_runqueue(uint8_t target, uint8_t q, id_t id, uint8_t targetqueue) { if (target == 0) { return cmd_runqueue(queue_get(q), id, targetqueue); } else { return daisy_runqueue(target, q, id, targetqueue); } }
 static inline bool m_emptyqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return cmdq_empty(queue_get(q), id); } else { return daisy_emptyqueue(target, q, id); } }
-static inline bool m_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t src) { if (target == 0) { return cmdq_copy(queue_get(q), id, queue_get(src)); } else { return daisy_copyqueue(target, q, id, src); } }
 static inline bool m_savequeue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return queuecfg_write(q); } else { return daisy_savequeue(target, q, id); } }
 static inline bool m_loadqueue(uint8_t target, uint8_t q, id_t id) { if (target == 0) { return queuecfg_read(q); } else { return daisy_loadqueue(target, q, id); } }
-static inline bool m_estop(uint8_t target, id_t id, bool hiz, bool soft) { if (target == 0) { return cmd_estop(id, hiz, soft); } else { return daisy_estop(target, id, hiz, soft); } }
+static inline bool m_copyqueue(uint8_t target, uint8_t q, id_t id, uint8_t sourcequeue) { if (target == 0) { return cmdq_copy(queue_get(q), id, queue_get(sourcequeue)); } else { return daisy_copyqueue(target, q, id, sourcequeue); } }
+
 
 // Utility functions
 extern config_t config;
@@ -554,7 +562,7 @@ static inline ps_direction motorcfg_dir(ps_direction d) {
   }
 }
 
-static inline int motorcfg_pos(int32_t p) {
+static inline int32_t motorcfg_pos(int32_t p) {
   return config.motor.reverse? -p : p;
 }
 

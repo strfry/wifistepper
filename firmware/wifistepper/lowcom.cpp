@@ -69,9 +69,11 @@ typedef struct ispacked {
 
 #define OPCODE_ESTOP        (0x00)
 #define OPCODE_PING         (0x01)
-#define OPCODE_SETCONFIG    (0x02)
-#define OPCODE_GETCONFIG    (0x03)
-#define OPCODE_LASTWILL     (0x04)
+#define OPCODE_CLEARERROR   (0x02)
+#define OPCODE_SETCONFIG    (0x03)
+#define OPCODE_GETCONFIG    (0x04)
+#define OPCODE_RUNQUEUE     (0x05)
+#define OPCODE_LASTWILL     (0x06)
 
 #define OPCODE_STOP         (0x11)
 #define OPCODE_RUN          (0x12)
@@ -96,7 +98,7 @@ typedef struct ispacked {
 #define OPCODE_LOADQUEUE    (0x33)
 #define OPCODE_ADDQUEUE     (0x34)
 #define OPCODE_COPYQUEUE    (0x35)
-#define OPCODE_RUNQUEUE     (0x36)
+
 #define OPCODE_GETQUEUE     (0x37)
 
 
@@ -337,6 +339,13 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
+    case OPCODE_CLEARERROR: {
+      lc_expectlen(0);
+      lc_debug("CMD clearerror");
+      m_clearerror(target, id);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
+      break;
+    }
     case OPCODE_SETCONFIG: {
       if (len == 0 || data[len-1] != 0) {
         lc_replynack(client, mode, opcode, target, queue, packetid, "Bad config data");
@@ -348,6 +357,13 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       break;
     }
     case OPCODE_GETCONFIG: {
+      break;
+    }
+    case OPCODE_RUNQUEUE: {
+      lc_expectlen(sizeof(uint8_t));
+      lc_debug("CMD runqueue", data[0]);
+      m_runqueue(target, queue, id, data[0]);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
     case OPCODE_LASTWILL: {
@@ -511,13 +527,6 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       lc_expectlen(sizeof(uint8_t));
       lc_debug("CMD copyqueue", data[0]);
       m_copyqueue(target, queue, id, data[0]);
-      lc_replyack(client, mode, opcode, target, queue, packetid, id);
-      break;
-    }
-    case OPCODE_RUNQUEUE: {
-      lc_expectlen(sizeof(uint8_t));
-      lc_debug("CMD runqueue", data[0]);
-      m_runqueue(target, queue, id, data[0]);
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }

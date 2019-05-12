@@ -121,7 +121,8 @@ function cleancss($, file, done) {
                             /disabled/,
                             /\.is-active/,
                             /\.is-error/,
-                            /\.is-warning/
+                            /\.is-warning/,
+                            /\.is-issue/
                         ]
                     }),
                     autoprefixer({browsers: ['> 1%', 'last 2 versions']})

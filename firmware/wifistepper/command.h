@@ -8,7 +8,7 @@
 #define QPRE_NOTBUSY    (0x40)
 #define QPRE_STOPPED    (0x80)
 
-#define CMD_NOP         (QPRE_NONE | 0x00)
+//#define CMD_NOP         (QPRE_NONE | 0x00)
 #define CMD_STOP        (QPRE_NONE | 0x01)
 #define CMD_RUN         (QPRE_NONE | 0x02)
 #define CMD_STEPCLK     (QPRE_STOPPED | 0x03)

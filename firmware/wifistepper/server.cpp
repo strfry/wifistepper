@@ -138,6 +138,7 @@ void api_initservice() {
     root["mqtt_enabled"] = config.service.mqtt.enabled;
     root["mqtt_server"] = config.service.mqtt.server;
     root["mqtt_port"] = config.service.mqtt.port;
+    root["mqtt_auth_enabled"] = config.service.mqtt.auth_enabled;
     root["mqtt_username"] = config.service.mqtt.username;
     root["mqtt_password"] = config.service.mqtt.password;
     root["mqtt_state_topic"] = config.service.mqtt.state_topic;
@@ -166,6 +167,7 @@ void api_initservice() {
     if (server.hasArg("mqtt_enabled"))            config.service.mqtt.enabled = server.arg("mqtt_enabled") == "true";
     if (server.hasArg("mqtt_server"))             strlcpy(config.service.mqtt.server, server.arg("mqtt_server").c_str(), LEN_URL);
     if (server.hasArg("mqtt_port"))               config.service.mqtt.port = server.arg("mqtt_port").toInt();
+    if (server.hasArg("mqtt_auth_enabled"))       config.service.mqtt.auth_enabled = server.arg("mqtt_auth_enabled") == "true";
     if (server.hasArg("mqtt_username"))           strlcpy(config.service.mqtt.username, server.arg("mqtt_username").c_str(), LEN_USERNAME);
     if (server.hasArg("mqtt_password"))           strlcpy(config.service.mqtt.password, server.arg("mqtt_password").c_str(), LEN_PASSWORD);
     if (server.hasArg("mqtt_state_topic"))        strlcpy(config.service.mqtt.state_topic, server.arg("mqtt_state_topic").c_str(), LEN_URL);
@@ -177,6 +179,17 @@ void api_initservice() {
     flag_reboot = true;
     server.send(200, "application/json", json_ok());
   });
+  server.on("/api/service/state", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    JsonObject& root = jsonbuf.createObject();
+    root["lowcom_clients"] = state.service.lowcom.clients;
+    root["mqtt_connected"] = state.service.mqtt.connected;
+    root["status"] = "ok";
+    JsonVariant v = root;
+    server.send(200, "application/json", v.as<String>());
+    jsonbuf.clear();
+  });
   server.on("/api/service/streamprotocol", HTTP_GET, [](){
     add_headers()
     check_auth()
@@ -186,6 +199,13 @@ void api_initservice() {
     JsonVariant v = root;
     server.send(200, "application/json", v.as<String>());
     jsonbuf.clear();
+  });
+  server.on("/api/service/security/set", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    if (server.hasArg("security"))                strlcpy(config.service.security, server.arg("security").c_str(), LEN_INFO);
+    servicecfg_write(&config.service);
+    server.send(200, "application/json", json_ok());
   });
 }
 
@@ -504,15 +524,6 @@ void api_initmotor() {
     m_waitswitch(target, queue, id, state);
     server.send(200, "application/json", json_okid(id));
   });
-  server.on("/api/motor/queue/empty", HTTP_GET, [](){
-    add_headers()
-    check_auth()
-    get_target()
-    get_queue()
-    id_t id = nextid();
-    m_emptyqueue(target, queue, id);
-    server.send(200, "application/json", json_okid(id));
-  });
   server.on("/api/motor/queue/get", HTTP_GET, [](){
     add_headers()
     check_auth()
@@ -532,24 +543,9 @@ void api_initmotor() {
   server.on("/api/motor/queue/add", HTTP_POST, [](){
     add_headers()
     check_auth()
-    id_t id = nextid();
     JsonArray& arr = jsonbuf.parseArray(server.arg("plain"));
     cmdq_read(arr);
     jsonbuf.clear();
-    server.send(200, "application/json", json_okid(id));
-  });
-  server.on("/api/motor/queue/copy", HTTP_GET, [](){
-    add_headers()
-    check_auth()
-    get_target()
-    get_queue()
-    if (!server.hasArg("source")) {
-      server.send(200, "application/json", json_error("source arg must be specified"));
-      return;
-    }
-    int src = server.arg("source").toInt();
-    id_t id = nextid();
-    m_copyqueue(target, queue, id, src);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/run", HTTP_GET, [](){
@@ -557,8 +553,22 @@ void api_initmotor() {
     check_auth()
     get_target()
     get_queue()
+    if (!server.hasArg("targetqueue")) {
+      server.send(200, "application/json", json_error("targetqueue arg must be specified"));
+      return;
+    }
+    int targetqueue = server.arg("targetqueue").toInt();
     id_t id = nextid();
-    m_copyqueue(target, 0, id, queue);
+    m_runqueue(target, queue, id, targetqueue);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/empty", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    get_target()
+    get_queue()
+    id_t id = nextid();
+    m_emptyqueue(target, queue, id);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/queue/save", HTTP_GET, [](){
@@ -585,6 +595,20 @@ void api_initmotor() {
     }
     id_t id = nextid();
     m_loadqueue(target, queue, id);
+    server.send(200, "application/json", json_okid(id));
+  });
+  server.on("/api/motor/queue/copy", HTTP_GET, [](){
+    add_headers()
+    check_auth()
+    get_target()
+    get_queue()
+    if (!server.hasArg("sourcequeue")) {
+      server.send(200, "application/json", json_error("sourcequeue arg must be specified"));
+      return;
+    }
+    int sourcequeue = server.arg("sourcequeue").toInt();
+    id_t id = nextid();
+    m_copyqueue(target, queue, id, sourcequeue);
     server.send(200, "application/json", json_okid(id));
   });
   server.on("/api/motor/estop", HTTP_GET, [](){

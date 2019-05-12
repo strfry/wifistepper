@@ -2,7 +2,6 @@
 //#include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
-#include <PubSubClient.h>
 
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
@@ -26,9 +25,6 @@ volatile id_t _id = ID_START;
 //DNSServer dns;
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
-
-WiFiClient * mqtt_conn = NULL;
-PubSubClient * mqtt_client = NULL;
 
 StaticJsonBuffer<2048> jsonbuf;
 StaticJsonBuffer<1024> configbuf;
@@ -82,16 +78,21 @@ config_t config = {
     },
     .mqtt = {
       .enabled = true,
-      .server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
+      .server = {'1','0','.','1','.','1','0','.','1','9','5',0},
+      //.server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
       .port = 1883,
+      .auth_enabled = false,
+      //.auth_enabled = true,
       .username = {'a','k','l','o','f','a','s',0},
       .password = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
-      .state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
-      .state_publish_period = 5.0,
-      .command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
+      .state_topic = {'s','t','a','t','e',0},
+      //.state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
+      .state_publish_period = 10.0,
+      .command_topic = {'c','o','m','m','a','n','d',0}
+      //.command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
     },
     .ota = {
-      .enabled = true,
+      .enabled = false,
       .password = {0}
     }
   },
@@ -109,8 +110,6 @@ config_t config = {
   .motor = {
     .mode = MODE_CURRENT,
     .stepsize = STEP_16,
-    //.mode = MODE_VOLTAGE,
-    //.stepsize = STEP_128,
     .ocd = 500.0,
     .ocdshutdown = true,
     .maxspeed = 10000.0,
@@ -311,22 +310,24 @@ void servicecfg_read(service_config * cfg) {
     std::unique_ptr<char[]> buf(new char[size]);
     fp.readBytes(buf.get(), size);
     JsonObject& root = jsonbuf.parseObject(buf.get());
-    if (root.containsKey("hostname"))  strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
-    if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
+    if (root.containsKey("hostname"))       strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
+    if (root.containsKey("security"))       strlcpy(cfg->security, root["security"].as<char *>(), LEN_INFO);
     if (root.containsKey("mdns_enabled"))   cfg->mdns.enabled = root["mdns_enabled"].as<bool>();
+    if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
     if (root.containsKey("auth_enabled"))   cfg->auth.enabled = root["auth_enabled"].as<bool>();
     if (root.containsKey("auth_username"))  strlcpy(cfg->auth.username, root["auth_username"].as<char *>(), LEN_USERNAME);
     if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
-    if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
     if (root.containsKey("mqtt_enabled"))   cfg->mqtt.enabled = root["mqtt_enabled"].as<bool>();
     if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
     if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
+    if (root.containsKey("mqtt_auth_enabled")) cfg->mqtt.auth_enabled = root["mqtt_auth_enabled"].as<bool>();
     if (root.containsKey("mqtt_username"))  strlcpy(cfg->mqtt.username, root["mqtt_username"].as<char *>(), LEN_USERNAME);
     if (root.containsKey("mqtt_password"))  strlcpy(cfg->mqtt.password, root["mqtt_password"].as<char *>(), LEN_PASSWORD);
     if (root.containsKey("mqtt_state_topic")) strlcpy(cfg->mqtt.state_topic, root["mqtt_state_topic"].as<char *>(), LEN_URL);
     if (root.containsKey("mqtt_state_publish_period")) cfg->mqtt.state_publish_period = root["mqtt_state_publish_period"].as<float>();
     if (root.containsKey("mqtt_command_topic")) strlcpy(cfg->mqtt.command_topic, root["mqtt_command_topic"].as<char *>(), LEN_URL);
+    if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
+    if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
     jsonbuf.clear();
     fp.close();
   }
@@ -335,21 +336,23 @@ void servicecfg_read(service_config * cfg) {
 void servicecfg_write(service_config * const cfg) {
   JsonObject& root = jsonbuf.createObject();
   root["hostname"] = cfg->hostname;
-  root["http_enabled"] = cfg->http.enabled;
+  root["security"] = cfg->security;
   root["mdns_enabled"] = cfg->mdns.enabled;
+  root["http_enabled"] = cfg->http.enabled;
   root["auth_enabled"] = cfg->auth.enabled;
   root["auth_username"] = cfg->auth.username;
   root["auth_password"] = cfg->auth.password;
-  root["ota_enabled"] = cfg->ota.enabled;
-  root["ota_password"] = cfg->ota.password;
   root["mqtt_enabled"] = cfg->mqtt.enabled;
   root["mqtt_server"] = cfg->mqtt.server;
   root["mqtt_port"] = cfg->mqtt.port;
+  root["mqtt_auth_enabled"] = cfg->mqtt.auth_enabled;
   root["mqtt_username"] = cfg->mqtt.username;
   root["mqtt_password"] = cfg->mqtt.password;
   root["mqtt_state_topic"] = cfg->mqtt.state_topic;
   root["mqtt_state_publish_period"] = cfg->mqtt.state_publish_period;
   root["mqtt_command_topic"] = cfg->mqtt.command_topic;
+  root["ota_enabled"] = cfg->ota.enabled;
+  root["ota_password"] = cfg->ota.password;
   File fp = SPIFFS.open(FNAME_SERVICECFG, "w");
   root.printTo(fp);
   fp.close();
@@ -498,7 +501,7 @@ void motorcfg_push(motor_config * cfg) {
   ps_setalarmconfig(true, true, true, true);
 
   // Clear errors at end of push
-  ps_getstatus(true);
+  cmd_clearerror();
 }
 
 void motorcfg_write(motor_config * cfg) {

@@ -246,6 +246,11 @@ static void daisy_slaveconsume(uint8_t q, id_t id, uint8_t opcode, void * data, 
       daisy_expectlen(0);
       daisy_slave_t * self = (daisy_slave_t *)daisy_alloc(SELF, q, id, CMD_SYNC, sizeof(daisy_slave_t));
       if (self != NULL) {
+        memset(self, 0, sizeof(daisy_slave_t));
+        strlcpy(self->config.product, PRODUCT, LEN_PRODUCT);
+        strlcpy(self->config.model, MODEL, LEN_INFO);
+        strlcpy(self->config.branch, BRANCH, LEN_INFO);
+        self->config.version = VERSION;
         memcpy(&self->config.io, &config.io, sizeof(io_config));
         memcpy(&self->config.motor, &config.motor, sizeof(motor_config));
         memcpy(&self->state.error, &state.error, sizeof(error_state));

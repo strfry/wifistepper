@@ -30,9 +30,11 @@ class _ComCommon:
 
     _OPCODE_ESTOP = (0x00)
     _OPCODE_PING = (0x01)
-    _OPCODE_SETCONFIG = (0x02)
-    _OPCODE_GETCONFIG = (0x03)
-    _OPCODE_LASTWILL = (0x04)
+    _OPCODE_CLEARERROR = (0x02)
+    _OPCODE_SETCONFIG = (0x03)
+    _OPCODE_GETCONFIG = (0x04)
+    _OPCODE_RUNQUEUE = (0x05)
+    _OPCODE_LASTWILL = (0x06)
 
     _OPCODE_STOP = (0x11)
     _OPCODE_RUN = (0x12)
@@ -57,7 +59,7 @@ class _ComCommon:
     _OPCODE_LOADQUEUE = (0x33)
     _OPCODE_ADDQUEUE = (0x34)
     _OPCODE_COPYQUEUE = (0x35)
-    _OPCODE_RUNQUEUE = (0x36)
+    
     _OPCODE_GETQUEUE = (0x37)
 
     _SUBCODE_NACK = (0x00)
@@ -188,6 +190,10 @@ class _ComCommon:
         self._checkconnected()
         return self._waitack(self._send(self._OPCODE_PING, self._SUBCODE_CMD, target, queue))
 
+    def cmd_clearerror(self, target):
+        self._checkconnected()
+        return self._waitack(self._send(self._OPCODE_CLEARERROR, self._SUBCODE_CMD, target, 0))
+
     def cmd_setconfig(self, target, queue, config):
         self._checkconnected()
         data = json.dumps(config, separators=(',', ':'))
@@ -196,6 +202,10 @@ class _ComCommon:
     def cmd_getconfig(self, target):
         self._checkconnected()
         pass
+
+    def cmd_runqueue(self, target, queue, targetqueue):
+        self._checkconnected()
+        return self._waitack(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)))
 
     def cmd_lastwill(self, queue):
         self._checkconnected()
@@ -277,10 +287,6 @@ class _ComCommon:
         b_state = 0x01 if state else 0x00
         return self._waitack(self._send(self._OPCODE_WAITSWITCH, self._SUBCODE_CMD, target, queue, struct.pack('<B', b_state)))
 
-    def cmd_runqueue(self, target, queue, targetqueue):
-        self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)))
-
     def cmd_emptyqueue(self, target, queue):
         self._checkconnected()
         return self._waitack(self._send(self._OPCODE_EMPTYQUEUE, self._SUBCODE_CMD, target, queue))
@@ -293,9 +299,9 @@ class _ComCommon:
         self._checkconnected()
         return self._waitack(self._send(self._OPCODE_LOADQUEUE, self._SUBCODE_CMD, target, queue))
 
-    def cmd_copyqueue(self, target, queue, source):
+    def cmd_copyqueue(self, target, queue, sourcequeue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_COPYQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', source)))
+        return self._waitack(self._send(self._OPCODE_COPYQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', sourcequeue)))
 
 
 class ComStandard(_ComCommon):
@@ -407,11 +413,17 @@ class WifiStepper:
     def ping(self, target = None, queue = 0):
         return self.__comm.cmd_ping(self._target(target), queue)
 
+    def clearerror(self, target = None):
+        return self.__comm.cmd_clearerror(self._target(target))
+
     def setconfig(self, config, target = None, queue = 0):
         return self.__comm.cmd_setconfig(self._target(target), queue, config.tojson())
 
     def getconfig(self):
         pass
+
+    def runqueue(self, targetqueue, target = None, queue = 0):
+        return self.__comm.cmd_runqueue(self._target(target), queue, targetqueue)
 
     def lastwill(self, queue):
         return self.__comm.cmd_lastwill(queue)
@@ -464,9 +476,6 @@ class WifiStepper:
     def waitswitch(self, state, target = None, queue = 0):
         return self.__comm.cmd_waitswitch(self._target(target), queue, state)
 
-    def runqueue(self, targetqueue, target = None, queue = 0):
-        return self.__comm.cmd_runqueue(self._target(target), queue, targetqueue)
-
     def emptyqueue(self, queue, target = None):
         return self.__comm.cmd_emptyqueue(self._target(target), queue)
 
@@ -476,5 +485,5 @@ class WifiStepper:
     def loadqueue(self, queue, target = None):
         return self.__comm.cmd_loadqueue(self._target(target), queue)
 
-    def copyqueue(self, queue, source, target = None):
-        return self.__comm.cmd_copyqueue(self._target(target), queue, source)
+    def copyqueue(self, queue, sourcequeue, target = None):
+        return self.__comm.cmd_copyqueue(self._target(target), queue, sourcequeue)

@@ -3,12 +3,20 @@
 #include "command.h"
 #include "wifistepper.h"
 
-void cmdq_parse(JsonObject& entry, uint8_t target, uint8_t queue) {
+static void cmdq_parse(JsonObject& entry, id_t id, uint8_t target, uint8_t queue) {
   if (!entry.containsKey("type")) return;
+  if (id == 0) id = nextid();
   
   String type = entry["type"].as<String>();
-  id_t id = entry.containsKey("id")? entry["id"].as<id_t>() : nextid();
-  if (type == "stop") {
+  if (type == "estop") {
+    m_estop(target, id, entry["hiz"].as<bool>(), entry["soft"].as<bool>());
+  } else if (type == "clearerror") {
+    m_clearerror(target, id);
+  } else if (type == "setconfig") {
+    m_setconfig(target, queue, id, entry["config"].as<char *>());
+  } else if (type == "runqueue") {
+    m_runqueue(target, queue, id, entry["targetqueue"].as<uint8_t>());
+  } else if (type == "stop") {
     m_stop(target, queue, id, entry["hiz"].as<bool>(), entry["soft"].as<bool>());
   } else if (type == "run") {
     m_run(target, queue, id, parse_direction(entry["dir"].as<String>(), FWD), entry["stepss"].as<float>());
@@ -32,8 +40,6 @@ void cmdq_parse(JsonObject& entry, uint8_t target, uint8_t queue) {
     m_setpos(target, queue, id, entry["pos"].as<int32_t>());
   } else if (type == "setmark") {
     m_setmark(target, queue, id, entry["mark"].as<int32_t>());
-  } else if (type == "setconfig") {
-    m_setconfig(target, queue, id, entry["config"].as<char *>());
   } else if (type == "waitbusy") {
     m_waitbusy(target, queue, id);
   } else if (type == "waitrunning") {
@@ -42,9 +48,19 @@ void cmdq_parse(JsonObject& entry, uint8_t target, uint8_t queue) {
     m_waitms(target, queue, id, entry["ms"].as<uint32_t>());
   } else if (type == "waitswitch") {
     m_waitswitch(target, queue, id, entry["state"].as<bool>());
-  } else if (type == "runqueue") {
-    m_runqueue(target, queue, id, entry["targetqueue"].as<uint8_t>());
+  } else if (type == "emptyqueue") {
+    m_emptyqueue(target, queue, id);
+  } else if (type == "savequeue") {
+    m_savequeue(target, queue, id);
+  } else if (type == "loadqueue") {
+    m_loadqueue(target, queue, id);
+  } else if (type == "copyqueue") {
+    m_copyqueue(target, queue, id, entry["sourcequeue"].as<uint8_t>());
   }
+}
+
+static void cmdq_parse(JsonObject& entry, uint8_t target, uint8_t queue) {
+  cmdq_parse(entry, entry.containsKey("id")? entry["id"].as<id_t>() : 0, target, queue);
 }
 
 size_t cmdq_serialize(JsonObject& entry, cmd_head_t * head) {
@@ -53,8 +69,19 @@ size_t cmdq_serialize(JsonObject& entry, cmd_head_t * head) {
 
   entry["id"] = head->id;
   switch (head->opcode) {
-    case CMD_NOP: {
-      entry["type"] = "nop";
+    case CMD_SETCONFIG: {
+      const char * data = (const char *)data;
+      size_t ldata = strlen(data);
+      entry["type"] = "setconfig";
+      entry["config"] = data;
+      consume += ldata + 1;
+      break;
+    }
+    case CMD_RUNQUEUE: {
+      cmd_runqueue_t * cmd = (cmd_runqueue_t *)data;
+      entry["type"] = "runqueue";
+      entry["targetqueue"] = cmd->targetqueue;
+      consume += sizeof(cmd_runqueue_t);
       break;
     }
     case CMD_STOP: {
@@ -140,14 +167,6 @@ size_t cmdq_serialize(JsonObject& entry, cmd_head_t * head) {
       consume += sizeof(cmd_setpos_t);
       break;
     }
-    case CMD_SETCONFIG: {
-      const char * data = (const char *)data;
-      size_t ldata = strlen(data);
-      entry["type"] = "setconfig";
-      entry["config"] = data;
-      consume += ldata + 1;
-      break;
-    }
     case CMD_WAITBUSY: {
       entry["type"] = "waitbusy";
       break;
@@ -168,13 +187,6 @@ size_t cmdq_serialize(JsonObject& entry, cmd_head_t * head) {
       entry["type"] = "waitswitch";
       entry["state"] = cmd->state;
       consume += sizeof(cmd_waitsw_t);
-      break;
-    }
-    case CMD_RUNQUEUE: {
-      cmd_runqueue_t * cmd = (cmd_runqueue_t *)data;
-      entry["type"] = "runqueue";
-      entry["targetqueue"] = cmd->targetqueue;
-      consume += sizeof(cmd_runqueue_t);
       break;
     }
   }
