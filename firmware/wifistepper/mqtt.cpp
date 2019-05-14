@@ -5,7 +5,7 @@
 #include "wifistepper.h"
 #include "PubSubClient.h"
 
-#define MQTT_DEBUG
+//#define MQTT_DEBUG
 
 WiFiClient mqtt_conn;
 PubSubClient mqtt_client(mqtt_conn);
@@ -46,7 +46,7 @@ void mqtt_callback(char * topic, byte * payload, unsigned int length) {
     
     if (root.containsKey("commands")) {
       JsonArray& arr = root["commands"].as<JsonArray&>();
-      cmdq_read(arr);
+      cmdq_read(arr, 0);
     }
     jsonbuf.clear();
   }
@@ -64,12 +64,16 @@ bool mqtt_connect() {
 }
 
 void mqtt_init() {
+  if (!config.service.mqtt.enabled) return;
+  
   mqtt_client.setServer(config.service.mqtt.server, config.service.mqtt.port);
   mqtt_client.setCallback(mqtt_callback);
   mqtt_connect();
 }
 
 void mqtt_loop(unsigned long now) {
+  if (!config.service.mqtt.enabled) return;
+  
   bool connected = state.service.mqtt.connected = mqtt_client.connected();
   if (!connected && timesince(sketch.service.mqtt.last.connect, now) > TIME_MQTT_RECONNECT) {
     connected = state.service.mqtt.connected = mqtt_connect();

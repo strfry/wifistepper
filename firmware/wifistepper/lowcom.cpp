@@ -7,6 +7,9 @@
 
 //#define LOWCOM_DEBUG
 
+extern StaticJsonBuffer<2048> jsonbuf;
+extern volatile bool flag_reboot;
+
 #define LTC_SIZE      (2)
 #define LTC_PORT      (1000)
 
@@ -105,6 +108,7 @@ typedef struct ispacked {
 #define SUBCODE_NACK      (0x00)
 #define SUBCODE_ACK       (0x01)
 #define SUBCODE_CMD       (0x02)
+#define SUBCODE_REPLY     (0x03)
 
 #define LTO_PING          (3000)
 
@@ -228,82 +232,49 @@ static void lc_send(size_t client, uint8_t * data, size_t len) {
   }
 }
 
-static void lc_replynack_std(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
-  size_t len = strlen(message) + 1;
+static void lc_reply_std(size_t client, uint8_t opcode, uint8_t subcode, uint8_t target, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + len];
   
   lc_preamble * preamble = (lc_preamble *)&packet[0];
   lc_header * header = (lc_header *)&preamble[1];
-  char * msg = (char *)&header[1];
+  uint8_t * payload = (uint8_t *)&header[1];
   
   lc_packpreamble(preamble, TYPE_STD);
-  *header = {.opcode = opcode, .subcode = SUBCODE_NACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
-  memcpy(msg, message, len);
+  *header = {.opcode = opcode, .subcode = subcode, .target = target, .queue = queue, .packetid = packetid, .length = len};
+  memcpy(payload, data, len);
   
   lc_send(client, packet, sizeof(lc_preamble) + sizeof(lc_header) + len);
 }
 
-static void lc_replynack_crypto(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
-  size_t len = strlen(message) + 1;
+static void lc_reply_crypto(size_t client, uint8_t opcode, uint8_t subcode, uint8_t target, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   uint8_t packet[sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len];
   
   lc_preamble * preamble = (lc_preamble *)&packet[0];
   lc_crypto * crypto = (lc_crypto *)&preamble[1];
   lc_header * header = (lc_header *)&crypto[1];
-  char * msg = (char *)&header[1];
+  uint8_t * payload = (uint8_t *)&header[1];
   
   lc_packpreamble(preamble, TYPE_CRYPTO);
-  *header = {.opcode = opcode, .subcode = SUBCODE_NACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
-  memcpy(msg, message, len);
+  *header = {.opcode = opcode, .subcode = subcode, .target = target, .queue = queue, .packetid = packetid, .length = len};
+  memcpy(payload, data, len);
 
   lc_cryptometa_t meta = {.client = client, .target = TARGET_CLIENT};
   ecc_lowcom_hmac(lowcom_client[client].crypto.nonce, (uint8_t *)&meta, sizeof(lc_cryptometa_t), (uint8_t *)preamble, sizeof(lc_preamble) + sizeof(lc_crypto), sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len);
 }
 
-static void lc_replynack(size_t client, uint8_t mode, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
+static void lc_reply(size_t client, uint8_t mode, uint8_t opcode, uint8_t subcode, uint8_t target, uint8_t queue, uint16_t packetid, uint8_t * data, size_t len) {
   switch (mode) {
-    case MODE_STD:    lc_replynack_std(client, opcode, target, queue, packetid, message);    break;
-    case MODE_CRYPTO: lc_replynack_crypto(client, opcode, target, queue, packetid, message); break;
+    case MODE_STD:    lc_reply_std(client, opcode, subcode, target, queue, packetid, data, len);     break;
+    case MODE_CRYPTO: lc_reply_crypto(client, opcode, subcode, target, queue, packetid, data, len);  break;
   }
-}
-
-static void lc_replyack_std(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
-  size_t len = sizeof(id_t);
-  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_header) + len];
-  
-  lc_preamble * preamble = (lc_preamble *)&packet[0];
-  lc_header * header = (lc_header *)&preamble[1];
-  id_t * ackid = (id_t *)&header[1];
-  
-  lc_packpreamble(preamble, TYPE_STD);
-  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
-  *ackid = id;
-  
-  lc_send(client, packet, sizeof(lc_preamble) + sizeof(lc_header) + len);
-}
-
-static void lc_replyack_crypto(size_t client, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
-  size_t len = sizeof(id_t);
-  uint8_t packet[sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len];
-  
-  lc_preamble * preamble = (lc_preamble *)&packet[0];
-  lc_crypto * crypto = (lc_crypto *)&preamble[1];
-  lc_header * header = (lc_header *)&crypto[1];
-  id_t * ackid = (id_t *)&header[1];
-  
-  lc_packpreamble(preamble, TYPE_CRYPTO);
-  *header = {.opcode = opcode, .subcode = SUBCODE_ACK, .target = target, .queue = queue, .packetid = packetid, .length = len};
-  *ackid = id;
-
-  lc_cryptometa_t meta = {.client = client, .target = TARGET_CLIENT};
-  ecc_lowcom_hmac(lowcom_client[client].crypto.nonce, (uint8_t *)&meta, sizeof(lc_cryptometa_t), (uint8_t *)preamble, sizeof(lc_preamble) + sizeof(lc_crypto), sizeof(lc_preamble) + sizeof(lc_crypto) + sizeof(lc_header) + len);
 }
 
 static void lc_replyack(size_t client, uint8_t mode, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, id_t id) {
-  switch (mode) {
-    case MODE_STD:    lc_replyack_std(client, opcode, target, queue, packetid, id);    break;
-    case MODE_CRYPTO: lc_replyack_crypto(client, opcode, target, queue, packetid, id); break;
-  }
+  lc_reply(client, mode, opcode, SUBCODE_ACK, target, queue, packetid, (uint8_t *)&id, sizeof(id_t));
+}
+
+static void lc_replynack(size_t client, uint8_t mode, uint8_t opcode, uint8_t target, uint8_t queue, uint16_t packetid, const char * message) {
+  lc_reply(client, mode, opcode, SUBCODE_NACK, target, queue, packetid, (uint8_t *)message, strlen(message) + 1);
 }
 
 #define lc_expectlen(elen)  ({ if (len != (elen)) { lc_replynack(client, mode, opcode, target, queue, packetid, "Bad message length"); return; } })
@@ -357,6 +328,50 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       break;
     }
     case OPCODE_GETCONFIG: {
+      lc_expectlen(0);
+      lc_debug("CMD getconfig");
+      if (target < 0 || target > state.daisy.slaves) {
+        lc_replynack(client, mode, opcode, target, queue, packetid, "Invalid target");
+        return;
+      }
+      motor_config * cfg = target == 0? &config.motor : &sketch.daisy.slave[target - 1].config.motor;
+      JsonObject& root = jsonbuf.createObject();
+      root["mode"] = json_serialize(cfg->mode);
+      root["stepsize"] = json_serialize(cfg->stepsize);
+      root["ocd"] = cfg->ocd;
+      root["ocdshutdown"] = cfg->ocdshutdown;
+      root["maxspeed"] = cfg->maxspeed;
+      root["minspeed"] = cfg->minspeed;
+      root["accel"] = cfg->accel;
+      root["decel"] = cfg->decel;
+      root["fsspeed"] = cfg->fsspeed;
+      root["fsboost"] = cfg->fsboost;
+      root["cm_kthold"] = cfg->cm.kthold;
+      root["cm_ktrun"] = cfg->cm.ktrun;
+      root["cm_ktaccel"] = cfg->cm.ktaccel;
+      root["cm_ktdecel"] = cfg->cm.ktdecel;
+      root["cm_switchperiod"] = cfg->cm.switchperiod;
+      root["cm_predict"] = cfg->cm.predict;
+      root["cm_minon"] = cfg->cm.minon;
+      root["cm_minoff"] = cfg->cm.minoff;
+      root["cm_fastoff"] = cfg->cm.fastoff;
+      root["cm_faststep"] = cfg->cm.faststep;
+      root["vm_kthold"] = cfg->vm.kthold;
+      root["vm_ktrun"] = cfg->vm.ktrun;
+      root["vm_ktaccel"] = cfg->vm.ktaccel;
+      root["vm_ktdecel"] = cfg->vm.ktdecel;
+      root["vm_pwmfreq"] = cfg->vm.pwmfreq;
+      root["vm_stall"] = cfg->vm.stall;
+      root["vm_volt_comp"] = cfg->vm.volt_comp;
+      root["vm_bemf_slopel"] = cfg->vm.bemf_slopel;
+      root["vm_bemf_speedco"] = cfg->vm.bemf_speedco;
+      root["vm_bemf_slopehacc"] = cfg->vm.bemf_slopehacc;
+      root["vm_bemf_slopehdec"] = cfg->vm.bemf_slopehdec;
+      root["reverse"] = cfg->reverse;
+      JsonVariant v = root;
+      String reply = v.as<String>();
+      lc_reply(client, mode, opcode, SUBCODE_REPLY, target, queue, packetid, (uint8_t *)reply.c_str(), reply.length()+1);
+      jsonbuf.clear();
       break;
     }
     case OPCODE_RUNQUEUE: {
@@ -521,6 +536,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       break;
     }
     case OPCODE_ADDQUEUE: {
+      // TODO
       break;
     }
     case OPCODE_COPYQUEUE: {
@@ -531,6 +547,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       break;
     }
     case OPCODE_GETQUEUE: {
+      // TODO
       break;
     }
   }
@@ -721,15 +738,19 @@ static size_t lc_handletype(size_t client, uint8_t * data, size_t len) {
 }
 
 void lowcom_init() {
-  lowcom_server.begin();
-  lowcom_server.setNoDelay(true);
-
   for (size_t i = 0; i < LTC_SIZE; i++) {
     lowcom_client[i].active = false;
+  }
+
+  if (config.service.lowcom.enabled) {
+    lowcom_server.begin();
+    lowcom_server.setNoDelay(true);
   }
 }
 
 void lowcom_loop(unsigned long now) {
+  if (!config.service.lowcom.enabled) return;
+  
   // Check all packets for rx
   for (size_t ci = 0; ci < LTC_SIZE; ci++) {
     if (lowcom_client[ci].active && lowcom_client[ci].sock.available()) {
@@ -781,6 +802,8 @@ void lowcom_loop(unsigned long now) {
 }
 
 void lowcom_update(unsigned long now) {
+  if (!config.service.lowcom.enabled) return;
+  
   // Accept new clients
   if (lowcom_server.hasClient()) {
     lc_debug("NEW client");

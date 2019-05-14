@@ -480,7 +480,7 @@ layout: default
                                 <p>The <strong style="color: #fff;">Auth Key</strong> is then locked behind the Master Key and may only be changed by knowing the Master Key. During runtime operation, the <strong style="color: #fff;">Auth Key</strong> is used to authenticate connected clients.</p>
                                 <p>In order to have a truly secured device, you must additionally disable the services <strong style="color: #fff;">HTTP</strong>, <strong style="color: #fff;">MQTT</strong>,  <strong style="color: #fff;">Arduino OTA</strong>, and any other unsecured connection/programming method (as it would still be possible to connect using these unsecured methods).</p>
                                 <p>Crypto Authentication only validates clients ability to send commands (it does <strong style="color: #fff;">not</strong> encrypt communication). With physical access to the device, an attacker could still reprogram or reconfigure the device to bypass security features. When undergoing a <strong>Factory Reset</strong> (either by software or hardware pushbutton on the device), the Crypto Chip will remain provisioned and Master Key and Auth Key will remain inaccessible.</p>
-                                <p>For more info, visit <a class="link" href="https://www.wifistepper.com/documentation/crypto-authentication" target="_blank">wifistepper.com/documentation/crypto-authentication</a></p>
+                                <p>For more info, visit <a class="link" href="https://www.wifistepper.com/crypto-authentication.html" target="_blank">wifistepper.com/documentation/crypto-authentication</a></p>
                             </div>
                             <hr />
                             <div class="has-text-centered">
@@ -510,7 +510,7 @@ layout: default
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
                 <div class="notification has-text-centered" style="padding: 10px; background-color: #666;">
                     <p v-if="service.security == 'none'">To view security recommendations choose the desired security level.</p>
-                    <p v-if="service.security == 'medium'">With <strong>Medium</strong> security, you require some level of authentication, however the device is not in a hostile environment with potential attackers present.</p>
+                    <p v-if="service.security == 'medium'">With <strong>Medium</strong> security, you require some level of authentication, however the device is not in a hostile environment with potential attackers present or in a security-critical application.</p>
                     <p v-if="service.security == 'high'">Under <strong>High</strong> security, only authorized clients with proper credentials can send commands. Even if an attacker could gain physical access and compromise a device, the keys cannot be read from that device. The attack is isolated to the device and other units using the same key are not compromised.</p>
                 </div>
                 <div class="field is-horizontal is-spaced-mobile">

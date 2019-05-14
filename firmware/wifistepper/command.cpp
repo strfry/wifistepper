@@ -6,10 +6,9 @@
 
 //#define CMD_DEBUG
 
-#define CTO_UPDATE      (10)
-
-
 extern StaticJsonBuffer<2048> jsonbuf;
+
+#define CTO_UPDATE      (10)
 
 #define Q0_SIZE       (1024)
 #define Q1_SIZE       (128)
@@ -168,6 +167,7 @@ void cmd_loop(unsigned long now) {
         size_t ldata = strlen(data);
         bool save = false;
         if (ldata > 0) {
+          cmd_debug(head->id, head->opcode, data);
           JsonObject& root = jsonbuf.parseObject(data);
           if (root.containsKey("mode"))       config.motor.mode = parse_motormode(root["mode"], config.motor.mode);
           if (root.containsKey("stepsize"))   config.motor.stepsize = parse_stepsize(root["stepsize"].as<int>(), config.motor.stepsize);

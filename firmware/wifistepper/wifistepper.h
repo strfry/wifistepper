@@ -445,7 +445,7 @@ bool cmd_waitms(queue_t * q, id_t id, uint32_t ms);
 bool cmd_waitswitch(queue_t * q, id_t id, bool state);
 
 void cmdq_read(JsonArray& arr, uint8_t target, uint8_t queue);
-void cmdq_read(JsonArray& arr, uint8_t queue);
+void cmdq_read(JsonArray& arr, uint8_t target);
 void cmdq_read(JsonArray& arr);
 void cmdq_write(JsonArray& arr, queue_t * queue);
 bool cmdq_empty(queue_t * q, id_t id);

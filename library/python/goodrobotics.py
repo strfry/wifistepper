@@ -17,6 +17,21 @@ class Closed(Exception):
     def __init__(self): pass
     def __str__(self): return "Connection closed or not connected."
 
+class RPM:
+    def __init__(self, steps_per_revolution=200): self.coeff = float(steps_per_revolution) / 60.0
+    def __call__(self, rpm): return float(rpm) * self.coeff
+    def fromStepss(self, stepss): return float(stepss) / self.coeff
+
+class Angle:
+    def __init__(self, stepsize, steps_per_revolution=200): self.coeff = float(steps_per_revolution) * float(stepsize) / 360.0
+    def __call__(self, angle): return float(angle) * self.coeff
+    def fromPos(self, pos): return float(pos) / self.coeff
+
+
+def _ascii_encode_dict(data):
+    ascii_encode = lambda x: x.encode('ascii') if isinstance(x, unicode) else x 
+    return dict(map(ascii_encode, pair) for pair in data.items())
+
 class _ComCommon:
     _L_MAGIC_1 = (0xAE)
     _L_MAGIC_2 = (0x7B11)
@@ -65,6 +80,7 @@ class _ComCommon:
     _SUBCODE_NACK = (0x00)
     _SUBCODE_ACK = (0x01)
     _SUBCODE_CMD = (0x02)
+    _SUBCODE_REPLY = (0x03)
 
     _LTO_PING = (3000)
     _LTO_ACK = (2000)
@@ -90,13 +106,13 @@ class _ComCommon:
     def _checkconnected(self):
         if not self.connected: raise Closed()
 
-    def _waitack(self, packetid):
+    def _waitreply(self, packetid, subcode):
         q = waitqueue.Queue(1)
         self.wait_dict[packetid] = q
         try:
             r = q.get(True, self._LTO_ACK / 1000.0)
-            if r.type == self._SUBCODE_ACK:     return r.data
-            elif r.type == self._SUBCODE_NACK:  raise Nack(r.data)
+            if r.type == subcode: return r.data
+            elif r.type == self._SUBCODE_NACK: raise Nack(r.data)
             else: return None
         except waitqueue.Empty: return None
         finally: del self.wait_dict[packetid]
@@ -130,14 +146,22 @@ class _ComCommon:
 
             elif p_type == self._TYPE_STD:
                 (h_opcode, h_subcode, h_target, h_queue, h_packetid, h_length) = struct.unpack(self._PACK_STD, self.sock.recv(struct.calcsize(self._PACK_STD)))
-                data = '' if h_length == 0 else self.sock.recv(h_length)
-                self._recv_std(h_opcode, h_subcode, h_target, h_queue, h_packetid, data)
+                (d_remaining, d_data) = (h_length, '')
+                while d_remaining > 0:
+                    d_read = self.sock.recv(d_remaining)
+                    d_data += d_read
+                    d_remaining -= len(d_read)
+                self._recv_std(h_opcode, h_subcode, h_target, h_queue, h_packetid, d_data)
 
             elif p_type == self._TYPE_CRYPTO:
                 mac = self.sock.recv(32)
                 (h_opcode, h_subcode, h_target, h_queue, h_packetid, h_length) = struct.unpack(self._PACK_STD, self.sock.recv(struct.calcsize(self._PACK_STD)))
-                data = '' if h_length == 0 else self.sock.recv(h_length)
-                self._recv_crypto(mac, h_opcode, h_subcode, h_target, h_queue, h_packetid, data)
+                (d_remaining, d_data) = (h_length, '')
+                while d_remaining > 0:
+                    d_read = self.sock.recv(d_remaining)
+                    d_data += d_read
+                    d_remaining -= len(d_read)
+                self._recv_crypto(mac, h_opcode, h_subcode, h_target, h_queue, h_packetid, d_data)
 
     def _txworker(self):
         while self.connected:
@@ -184,124 +208,123 @@ class _ComCommon:
         self._checkconnected()
         b_hiz = 0x01 if hiz else 0x00
         b_soft = 0x01 if soft else 0x00
-        return self._waitack(self._send(self._OPCODE_ESTOP, self._SUBCODE_CMD, target, 0, struct.pack('<BB', b_hiz, b_soft)))
+        return self._waitreply(self._send(self._OPCODE_ESTOP, self._SUBCODE_CMD, target, 0, struct.pack('<BB', b_hiz, b_soft)), self._SUBCODE_ACK)
 
     def cmd_ping(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_PING, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_PING, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_clearerror(self, target):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_CLEARERROR, self._SUBCODE_CMD, target, 0))
+        return self._waitreply(self._send(self._OPCODE_CLEARERROR, self._SUBCODE_CMD, target, 0), self._SUBCODE_ACK)
 
     def cmd_setconfig(self, target, queue, config):
         self._checkconnected()
-        data = json.dumps(config, separators=(',', ':'))
-        return self._waitack(self._send(self._OPCODE_SETCONFIG, self._SUBCODE_CMD, target, queue, data + struct.pack('x')))
+        return self._waitreply(self._send(self._OPCODE_SETCONFIG, self._SUBCODE_CMD, target, queue, config + struct.pack('x')), self._SUBCODE_ACK)
 
     def cmd_getconfig(self, target):
         self._checkconnected()
-        pass
+        return self._waitreply(self._send(self._OPCODE_GETCONFIG, self._SUBCODE_CMD, target, 0), self._SUBCODE_REPLY).rstrip('\x00')
 
     def cmd_runqueue(self, target, queue, targetqueue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)))
+        return self._waitreply(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)), self._SUBCODE_ACK)
 
     def cmd_lastwill(self, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_LASTWILL, self._SUBCODE_CMD, 0, 0, struct.pack('<B', queue)))
+        return self._waitreply(self._send(self._OPCODE_LASTWILL, self._SUBCODE_CMD, 0, 0, struct.pack('<B', queue)), self._SUBCODE_ACK)
 
     def cmd_stop(self, target, queue, hiz, soft):
         self._checkconnected()
         b_hiz = 0x01 if hiz else 0x00
         b_soft = 0x01 if soft else 0x00
-        return self._waitack(self._send(self._OPCODE_STOP, self._SUBCODE_CMD, target, queue, struct.pack('<BB', b_hiz, b_soft)))
+        return self._waitreply(self._send(self._OPCODE_STOP, self._SUBCODE_CMD, target, queue, struct.pack('<BB', b_hiz, b_soft)), self._SUBCODE_ACK)
 
     def cmd_run(self, target, queue, dir, stepss):
         self._checkconnected()
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_RUN, self._SUBCODE_CMD, target, queue, struct.pack('<Bf', b_dir, stepss)))
+        return self._waitreply(self._send(self._OPCODE_RUN, self._SUBCODE_CMD, target, queue, struct.pack('<Bf', b_dir, stepss)), self._SUBCODE_ACK)
 
     def cmd_stepclock(self, target, queue, dir):
         self._checkconnected()
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_STEPCLOCK, self._SUBCODE_CMD, target, queue, struct.pack('<B', b_dir)))
+        return self._waitreply(self._send(self._OPCODE_STEPCLOCK, self._SUBCODE_CMD, target, queue, struct.pack('<B', b_dir)), self._SUBCODE_ACK)
 
     def cmd_move(self, target, queue, dir, microsteps):
         self._checkconnected()
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_MOVE, self._SUBCODE_CMD, target, queue, struct.pack('<BI', b_dir, microsteps)))
+        return self._waitreply(self._send(self._OPCODE_MOVE, self._SUBCODE_CMD, target, queue, struct.pack('<BI', b_dir, microsteps)), self._SUBCODE_ACK)
 
     def cmd_goto(self, target, queue, hasdir, dir, pos):
         self._checkconnected()
         b_hasdir = 0x01 if hasdir else 0x00
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_GOTO, self._SUBCODE_CMD, target, queue, struct.pack('<BBi', b_hasdir, b_dir, pos)))
+        return self._waitreply(self._send(self._OPCODE_GOTO, self._SUBCODE_CMD, target, queue, struct.pack('<BBi', b_hasdir, b_dir, pos)), self._SUBCODE_ACK)
 
     def cmd_gountil(self, target, queue, action, dir, stepss):
         self._checkconnected()
         b_action = 0x01 if action else 0x00
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_GOUNTIL, self._SUBCODE_CMD, target, queue, struct.pack('<BBf', b_action, b_dir, stepss)))
+        return self._waitreply(self._send(self._OPCODE_GOUNTIL, self._SUBCODE_CMD, target, queue, struct.pack('<BBf', b_action, b_dir, stepss)), self._SUBCODE_ACK)
     
     def cmd_releasesw(self, target, queue, action, dir):
         self._checkconnected()
         b_action = 0x01 if action else 0x00
         b_dir = 0x01 if dir else 0x00
-        return self._waitack(self._send(self._OPCODE_RELEASESW, self._SUBCODE_CMD, target, queue, struct.pack('<BB', b_action, b_dir)))
+        return self._waitreply(self._send(self._OPCODE_RELEASESW, self._SUBCODE_CMD, target, queue, struct.pack('<BB', b_action, b_dir)), self._SUBCODE_ACK)
 
     def cmd_gohome(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_GOHOME, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_GOHOME, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_gomark(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_GOMARK, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_GOMARK, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_resetpos(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_RESETPOS, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_RESETPOS, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_setpos(self, target, queue, pos):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_SETPOS, self._SUBCODE_CMD, target, queue, struct.pack('<i', pos)))
+        return self._waitreply(self._send(self._OPCODE_SETPOS, self._SUBCODE_CMD, target, queue, struct.pack('<i', pos)), self._SUBCODE_ACK)
 
     def cmd_setmark(self, target, queue, mark):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_SETMARK, self._SUBCODE_CMD, target, queue, struct.pack('<i', pos)))
+        return self._waitreply(self._send(self._OPCODE_SETMARK, self._SUBCODE_CMD, target, queue, struct.pack('<i', pos)), self._SUBCODE_ACK)
 
     def cmd_waitbusy(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_WAITBUSY, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_WAITBUSY, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_waitrunning(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_WAITRUNNING, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_WAITRUNNING, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_waitms(self, target, queue, ms):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_WAITMS, self._SUBCODE_CMD, target, queue, struct.pack('<I', ms)))
+        return self._waitreply(self._send(self._OPCODE_WAITMS, self._SUBCODE_CMD, target, queue, struct.pack('<I', ms)), self._SUBCODE_ACK)
 
     def cmd_waitswitch(self, target, queue, state):
         self._checkconnected()
         b_state = 0x01 if state else 0x00
-        return self._waitack(self._send(self._OPCODE_WAITSWITCH, self._SUBCODE_CMD, target, queue, struct.pack('<B', b_state)))
+        return self._waitreply(self._send(self._OPCODE_WAITSWITCH, self._SUBCODE_CMD, target, queue, struct.pack('<B', b_state)), self._SUBCODE_ACK)
 
     def cmd_emptyqueue(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_EMPTYQUEUE, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_EMPTYQUEUE, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_savequeue(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_SAVEQUEUE, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_SAVEQUEUE, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_loadqueue(self, target, queue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_LOADQUEUE, self._SUBCODE_CMD, target, queue))
+        return self._waitreply(self._send(self._OPCODE_LOADQUEUE, self._SUBCODE_CMD, target, queue), self._SUBCODE_ACK)
 
     def cmd_copyqueue(self, target, queue, sourcequeue):
         self._checkconnected()
-        return self._waitack(self._send(self._OPCODE_COPYQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', sourcequeue)))
+        return self._waitreply(self._send(self._OPCODE_COPYQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', sourcequeue)), self._SUBCODE_ACK)
 
 
 class ComStandard(_ComCommon):
@@ -317,8 +340,9 @@ class ComStandard(_ComCommon):
         pass
 
     def _recv_std(self, opcode, subcode, target, queue, packetid, data):
-        if subcode in [self._SUBCODE_ACK, self._SUBCODE_NACK]:
+        if subcode in [self._SUBCODE_ACK, self._SUBCODE_NACK, self._SUBCODE_REPLY]:
             if subcode == self._SUBCODE_ACK: (data,) = struct.unpack('<I', data)
+            if subcode == self._SUBCODE_NACK: (data,) = data.rstrip('\x00')
             if packetid in self.wait_dict:
                 try: self.wait_dict[packetid].put(self.Response(subcode, data), False)
                 except waitqueue.Full: pass
@@ -344,6 +368,7 @@ class ComCrypto(_ComCommon):
 
     def _recv_std(self, opcode, subcode, target, queue, packetid, data):
         if subcode == self._SUBCODE_NACK:
+            data = data.rstrip('\x00')
             if packetid in self.wait_dict:
                 try: self.wait_dict[packetid].put(self.Response(subcode, data), False)
                 except waitqueue.Full: pass
@@ -352,8 +377,9 @@ class ComCrypto(_ComCommon):
         calcmac = hmac.new(self.__key, struct.pack('<I', self.nonce) + self._header(opcode, subcode, target, queue, packetid, len(data)) + data, hashlib.sha256).digest()
         verified = mac == calcmac
 
-        if subcode in [self._SUBCODE_ACK, self._SUBCODE_NACK]:
+        if subcode in [self._SUBCODE_ACK, self._SUBCODE_NACK, self._SUBCODE_REPLY]:
             if subcode == self._SUBCODE_ACK: (data,) = struct.unpack('<I', data)
+            if subcode == self._SUBCODE_NACK: data = data.rstrip('\x00')
             if packetid in self.wait_dict:
                 resp = self.Response(subcode, data)
                 if not verified: resp = self.Response(self._SUBCODE_NACK, "Bad hmac signature in response (Key error)")
@@ -384,13 +410,6 @@ class WifiStepper:
     CLOSED = True
     OPEN = False
 
-    class Config:
-        def __init__(self):
-            pass
-
-        def tojson(self):
-            return ''
-
     def _target(self, t):
         return t if t is not None else self.__target
 
@@ -417,10 +436,10 @@ class WifiStepper:
         return self.__comm.cmd_clearerror(self._target(target))
 
     def setconfig(self, config, target = None, queue = 0):
-        return self.__comm.cmd_setconfig(self._target(target), queue, config.tojson())
+        return self.__comm.cmd_setconfig(self._target(target), queue, json.dumps(config, separators=(',',':')))
 
-    def getconfig(self):
-        pass
+    def getconfig(self, target = None):
+        return json.loads(self.__comm.cmd_getconfig(self._target(target)), object_hook=_ascii_encode_dict)
 
     def runqueue(self, targetqueue, target = None, queue = 0):
         return self.__comm.cmd_runqueue(self._target(target), queue, targetqueue)

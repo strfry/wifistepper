@@ -656,6 +656,7 @@ bool ecc_provision(const char * master, const char * newpass) {
 
   // Handle success notify
   {
+    sketch.service.crypto.mark = 0;
     ecc_alloc(ECMD_MARK_SUCCESS, WAIT_CHECK, 0, 0);
   }
   
@@ -732,6 +733,7 @@ bool ecc_setpassword(const char * master, const char * newpass) {
 
   // Handle success notify
   {
+    sketch.service.crypto.mark = 0;
     ecc_alloc(ECMD_MARK_SUCCESS, WAIT_CHECK, 0, 0);
   }
   

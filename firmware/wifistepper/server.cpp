@@ -679,7 +679,7 @@ void api_init() {
     JsonObject& obj = jsonbuf.createObject();
     obj["fault"] = state.service.crypto.fault;
     obj["probed"] = state.service.crypto.probed;
-    obj["available"] = state.service.crypto.available;
+    obj["available"] = !state.service.crypto.fault && state.service.crypto.available;
     obj["provisioned"] = state.service.crypto.provisioned;
     obj["status"] = "ok";
     JsonVariant v = obj;

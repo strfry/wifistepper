@@ -27,7 +27,6 @@ ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
 
 StaticJsonBuffer<2048> jsonbuf;
-StaticJsonBuffer<1024> configbuf;
 
 volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
@@ -678,9 +677,7 @@ void setup() {
       //dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
     }
 
-    if (config.service.mqtt.enabled) {
-      mqtt_init();
-    }
+    mqtt_init();
   }
 
   // Initialize SPI and Stepper Motor config
@@ -728,9 +725,7 @@ void loop() {
 
   HANDLE_LOOPS();
 
-  if (config.service.mqtt.enabled) {
-    mqtt_loop(now);
-  }
+  mqtt_loop(now);
 
   HANDLE_LOOPS();
 

@@ -201,10 +201,10 @@ void cmdq_read(JsonArray& arr, uint8_t target, uint8_t queue) {
   }
 }
 
-void cmdq_read(JsonArray& arr, uint8_t queue) {
+void cmdq_read(JsonArray& arr, uint8_t target) {
   for (auto value : arr) {
     JsonObject& entry = value.as<JsonObject>();
-    uint8_t target = entry["target"].as<uint8_t>();
+    uint8_t queue = entry["queue"].as<uint8_t>();
     cmdq_parse(entry, target, queue);
   }
 }

@@ -1,6 +1,6 @@
 import goodrobotics as gr
 
-s = gr.WifiStepper(host='wsx200.local')
+s = gr.WifiStepper(host='wsx100.local')
 s.connect()
 
 
