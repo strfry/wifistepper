@@ -92,13 +92,12 @@ p:not(:first-of-type) {
     fill: $text;
 }
 
-/*.content {
-    p { margin-left: 2rem; }
-    ol {
-        margin-left: 4rem;
-        li { padding-left: 1rem; }
+.headshot {
+    img {
+        border-radius: 5px;
+        border: 2px #ccc solid;
     }
-}*/
+}
 
 @include mobile {
     .is-spaced-mobile {

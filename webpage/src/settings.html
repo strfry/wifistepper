@@ -202,17 +202,6 @@ layout: default
                         </div>
                     </div>
                 </div>
-                <!--<div class="field is-horizontal is-spaced-mobile">
-                    <div class="field-label is-normal"><label class="label">HTTPS</label></div>
-                    <div class="field-body">
-                        <div class="field">
-                            <span class="control">
-                                <input class="is-checkradio has-background-color is-white" id="service-https-enable" type="checkbox" v-model="service.https_enabled" />
-                                <label class="is-checkradio-enable" for="service-https-enable"><strong>Enabled</strong></label>
-                            </span>
-                        </div>
-                    </div>
-                </div>-->
                 <div class="field is-horizontal is-spaced-mobile">
                     <div class="field-label is-normal"><label class="label">HTTP Auth</label></div>
                     <div class="field-body">
@@ -372,13 +361,18 @@ layout: default
         <div class="message-header"><span class="title is-5">{% mdicon lan %}Daisy Chaining</span></div>
         <div class="message-body">
             <div style="margin-left: auto; margin-right: auto; max-width: 700px;">
+                <div class="notification has-text-centered" style="padding: 10px; background-color: #666;">
+                    <p><strong>Daisy Chaining</strong> allows you to connect multiple boards together over high speed serial bus and control them through a single interface. See <a class="link" href="/documentation#daisy-chain"><strong>Daisy Chain Documentation</strong></a> for more information and how to connect the serial cables.</p>
+                </div>
                 <div class="field is-horizontal">
                     <div class="field-label is-normal"></div>
                     <div class="field-body">
-                        <span class="control">
+                        <div class="field">
+                            <span class="control">
                                 <input class="is-checkradio has-background-color is-white" id="daisy-enable" type="checkbox" v-model="daisy.enabled" />
                                 <label class="is-checkradio-enable" for="daisy-enable"><strong>Enabled</strong></label>
                             </span>
+                        </div>
                     </div>
                 </div>
                 <div class="field is-horizontal is-spaced-mobile">
@@ -387,12 +381,27 @@ layout: default
                         <div class="field has-addons">
                             <span class="control">
                                 <span class="button is-label">
+                                    <input class="switch is-rtl" id="daisy-master" type="checkbox" v-model="daisy.master" />
+                                    <label class="is-switch-label" for="daisy-master" style="padding-right: 70px;">Master</label>
+                                </span>
+                            </span>
+                            <span class="control">
+                                <span class="button is-label" style="border-left-width: 0px;">
                                     <label class="is-switch-label" for="daisy-master">Slave</label>
-                                    <input class="switch" id="daisy-master" type="checkbox" v-model="daisy.master" />
-                                    <label class="is-switch-label" for="daisy-master">Master</label>
                                 </span>
                             </span>
                             <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_daisy }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal"></div>
+                    <div class="field-body">
+                        <div class="field">
+                            <span class="control">
+                                <input class="is-checkradio has-background-color is-white" id="daisy-slavewifioff" type="checkbox" v-model="daisy.slavewifioff" />
+                                <label class="is-checkradio-enable" for="daisy-slavewifioff"><strong>Turn off Slave Wifi</strong></label>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -480,7 +489,7 @@ layout: default
                                 <p>The <strong style="color: #fff;">Auth Key</strong> is then locked behind the Master Key and may only be changed by knowing the Master Key. During runtime operation, the <strong style="color: #fff;">Auth Key</strong> is used to authenticate connected clients.</p>
                                 <p>In order to have a truly secured device, you must additionally disable the services <strong style="color: #fff;">HTTP</strong>, <strong style="color: #fff;">MQTT</strong>,  <strong style="color: #fff;">Arduino OTA</strong>, and any other unsecured connection/programming method (as it would still be possible to connect using these unsecured methods).</p>
                                 <p>Crypto Authentication only validates clients ability to send commands (it does <strong style="color: #fff;">not</strong> encrypt communication). With physical access to the device, an attacker could still reprogram or reconfigure the device to bypass security features. When undergoing a <strong>Factory Reset</strong> (either by software or hardware pushbutton on the device), the Crypto Chip will remain provisioned and Master Key and Auth Key will remain inaccessible.</p>
-                                <p>For more info, visit <a class="link" href="https://www.wifistepper.com/crypto-authentication.html" target="_blank">wifistepper.com/documentation/crypto-authentication</a></p>
+                                <p>For more info, visit <a class="link" href="https://www.wifistepper.com/crypto-authentication.html" target="_blank">wifistepper.com/crypto-authentication.html</a></p>
                             </div>
                             <hr />
                             <div class="has-text-centered">
@@ -1068,7 +1077,7 @@ layout: default
             });
             axios.get("{{ site.apiurl }}/api/daisy/get").then(function(r) {
                 if (r.data.status == 'ok') {
-                    merge(app.daisy, r.data, ['enabled', 'master']);
+                    merge(app.daisy, r.data, ['enabled', 'master', 'slavewifioff']);
                 }
             });
             axios.get("{{ site.apiurl }}/api/crypto/get").then(function(r) {

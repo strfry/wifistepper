@@ -43,12 +43,12 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      .ssid = {'B','D','F','i','r','e',0},
-      .password = {'m','c','d','e','r','m','o','t','t',0},
+      //.ssid = {'B','D','F','i','r','e',0},
+      //.password = {'m','c','d','e','r','m','o','t','t',0},
       //.ssid = {'A','T','T','5','4','9',0},
       //.password = {'9','0','7','1','9','1','8','6','0','1',0},
-      //.ssid = {'H','o','m','e','2','1','9','A',0},
-      //.password = {'d','r','e','a','m','s','3','7','3','2','6','7',0},
+      .ssid = {'B','i','l','l','W','i','T','h','e','S','c','i','e','n','c','e','F','i',0},
+      .password = {'p','i','n','e','a','p','p','l','e','1','2','3',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
@@ -163,6 +163,8 @@ void seterror(uint8_t subsystem, id_t onid, int type, int8_t arg) {
     state.error.id = onid;
     state.error.type = type;
     state.error.arg = arg;
+
+    lowcom_senderror(&state.error);
   }
 }
 
@@ -182,23 +184,27 @@ void wificfg_read(wifi_config * cfg) {
   File fp = SPIFFS.open(FNAME_WIFICFG, "r");
   if (fp) {
     size_t size = fp.size();
-    std::unique_ptr<char[]> buf(new char[size]);
-    fp.readBytes(buf.get(), size);
-    JsonObject& root = jsonbuf.parseObject(buf.get());
-    if (root.containsKey("mode"))                   cfg->mode = parse_wifimode(root["mode"].as<char *>());
-    if (root.containsKey("accesspoint_ssid"))       strlcpy(cfg->accesspoint.ssid, root["accesspoint_ssid"].as<char *>(), LEN_SSID);
-    if (root.containsKey("accesspoint_password"))   strlcpy(cfg->accesspoint.password, root["accesspoint_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("accesspoint_encryption")) cfg->accesspoint.encryption = root["accesspoint_encryption"].as<bool>();
-    if (root.containsKey("accesspoint_channel"))    cfg->accesspoint.channel = root["accesspoint_channel"].as<int>();
-    if (root.containsKey("accesspoint_hidden"))     cfg->accesspoint.hidden = root["accesspoint_hidden"].as<bool>();
-    if (root.containsKey("station_ssid"))           strlcpy(cfg->station.ssid, root["station_ssid"].as<char *>(), LEN_SSID);
-    if (root.containsKey("station_password"))       strlcpy(cfg->station.password, root["station_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("station_encryption"))     cfg->station.encryption = root["station_encryption"].as<bool>();
-    if (root.containsKey("station_forceip"))        strlcpy(cfg->station.forceip, root["station_forceip"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_forcesubnet"))    strlcpy(cfg->station.forcesubnet, root["station_forcesubnet"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_forcegateway"))   strlcpy(cfg->station.forcegateway, root["station_forcegateway"].as<char *>(), LEN_IP);
-    if (root.containsKey("station_revertap"))       cfg->station.revertap = root["station_revertap"].as<bool>();
-    jsonbuf.clear();
+    if (size <= FILE_MAXSIZE) {
+      char buf[size+1];
+      fp.readBytes(buf, size);
+      buf[size] = 0;
+      
+      JsonObject& root = jsonbuf.parseObject(buf);
+      if (root.containsKey("mode"))                   cfg->mode = parse_wifimode(root["mode"].as<char *>());
+      if (root.containsKey("accesspoint_ssid"))       strlcpy(cfg->accesspoint.ssid, root["accesspoint_ssid"].as<char *>(), LEN_SSID);
+      if (root.containsKey("accesspoint_password"))   strlcpy(cfg->accesspoint.password, root["accesspoint_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("accesspoint_encryption")) cfg->accesspoint.encryption = root["accesspoint_encryption"].as<bool>();
+      if (root.containsKey("accesspoint_channel"))    cfg->accesspoint.channel = root["accesspoint_channel"].as<int>();
+      if (root.containsKey("accesspoint_hidden"))     cfg->accesspoint.hidden = root["accesspoint_hidden"].as<bool>();
+      if (root.containsKey("station_ssid"))           strlcpy(cfg->station.ssid, root["station_ssid"].as<char *>(), LEN_SSID);
+      if (root.containsKey("station_password"))       strlcpy(cfg->station.password, root["station_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("station_encryption"))     cfg->station.encryption = root["station_encryption"].as<bool>();
+      if (root.containsKey("station_forceip"))        strlcpy(cfg->station.forceip, root["station_forceip"].as<char *>(), LEN_IP);
+      if (root.containsKey("station_forcesubnet"))    strlcpy(cfg->station.forcesubnet, root["station_forcesubnet"].as<char *>(), LEN_IP);
+      if (root.containsKey("station_forcegateway"))   strlcpy(cfg->station.forcegateway, root["station_forcegateway"].as<char *>(), LEN_IP);
+      if (root.containsKey("station_revertap"))       cfg->station.revertap = root["station_revertap"].as<bool>();
+      jsonbuf.clear();
+    }
     fp.close();
   }
 }
@@ -230,6 +236,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
     case M_ACCESSPOINT: {
       WiFi.mode(WIFI_AP);
       WiFi.softAPConfig(AP_IP, AP_IP, AP_MASK);
+      //Serial.printf("\nAP mode. SSID=%s, PSWD=%s, CH=%d, H=%d\n", cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
       success = WiFi.softAP(cfg->accesspoint.ssid, cfg->accesspoint.password, cfg->accesspoint.channel, cfg->accesspoint.hidden);
       state.wifi.ip = WiFi.softAPIP();
       state.wifi.mode = M_ACCESSPOINT;
@@ -266,11 +273,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
   }
 
   Serial.println();
-  Serial.print("Wifi Config: ");
-  Serial.print(mode);
-  Serial.print(" success=");
-  Serial.print(success);
-  Serial.print(", ip=");
+  Serial.printf("\nWifi Config: %d, success=%d, ip=", mode, success);
   Serial.print(IPAddress(state.wifi.ip).toString());
   Serial.println();
   
@@ -306,28 +309,33 @@ void servicecfg_read(service_config * cfg) {
   File fp = SPIFFS.open(FNAME_SERVICECFG, "r");
   if (fp) {
     size_t size = fp.size();
-    std::unique_ptr<char[]> buf(new char[size]);
-    fp.readBytes(buf.get(), size);
-    JsonObject& root = jsonbuf.parseObject(buf.get());
-    if (root.containsKey("hostname"))       strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
-    if (root.containsKey("security"))       strlcpy(cfg->security, root["security"].as<char *>(), LEN_INFO);
-    if (root.containsKey("mdns_enabled"))   cfg->mdns.enabled = root["mdns_enabled"].as<bool>();
-    if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
-    if (root.containsKey("auth_enabled"))   cfg->auth.enabled = root["auth_enabled"].as<bool>();
-    if (root.containsKey("auth_username"))  strlcpy(cfg->auth.username, root["auth_username"].as<char *>(), LEN_USERNAME);
-    if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("mqtt_enabled"))   cfg->mqtt.enabled = root["mqtt_enabled"].as<bool>();
-    if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
-    if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
-    if (root.containsKey("mqtt_auth_enabled")) cfg->mqtt.auth_enabled = root["mqtt_auth_enabled"].as<bool>();
-    if (root.containsKey("mqtt_username"))  strlcpy(cfg->mqtt.username, root["mqtt_username"].as<char *>(), LEN_USERNAME);
-    if (root.containsKey("mqtt_password"))  strlcpy(cfg->mqtt.password, root["mqtt_password"].as<char *>(), LEN_PASSWORD);
-    if (root.containsKey("mqtt_state_topic")) strlcpy(cfg->mqtt.state_topic, root["mqtt_state_topic"].as<char *>(), LEN_URL);
-    if (root.containsKey("mqtt_state_publish_period")) cfg->mqtt.state_publish_period = root["mqtt_state_publish_period"].as<float>();
-    if (root.containsKey("mqtt_command_topic")) strlcpy(cfg->mqtt.command_topic, root["mqtt_command_topic"].as<char *>(), LEN_URL);
-    if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
-    if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
-    jsonbuf.clear();
+    if (size <= FILE_MAXSIZE) {
+      char buf[size+1];
+      fp.readBytes(buf, size);
+      buf[size] = 0;
+      
+      fp.readBytes(buf, size);
+      JsonObject& root = jsonbuf.parseObject(buf);
+      if (root.containsKey("hostname"))       strlcpy(cfg->hostname, root["hostname"].as<char *>(), LEN_HOSTNAME);
+      if (root.containsKey("security"))       strlcpy(cfg->security, root["security"].as<char *>(), LEN_INFO);
+      if (root.containsKey("mdns_enabled"))   cfg->mdns.enabled = root["mdns_enabled"].as<bool>();
+      if (root.containsKey("http_enabled"))   cfg->http.enabled = root["http_enabled"].as<bool>();
+      if (root.containsKey("auth_enabled"))   cfg->auth.enabled = root["auth_enabled"].as<bool>();
+      if (root.containsKey("auth_username"))  strlcpy(cfg->auth.username, root["auth_username"].as<char *>(), LEN_USERNAME);
+      if (root.containsKey("auth_password"))  strlcpy(cfg->auth.password, root["auth_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("mqtt_enabled"))   cfg->mqtt.enabled = root["mqtt_enabled"].as<bool>();
+      if (root.containsKey("mqtt_server"))    strlcpy(cfg->mqtt.server, root["mqtt_server"].as<char *>(), LEN_URL);
+      if (root.containsKey("mqtt_port"))      cfg->mqtt.port = root["mqtt_port"].as<int>();
+      if (root.containsKey("mqtt_auth_enabled")) cfg->mqtt.auth_enabled = root["mqtt_auth_enabled"].as<bool>();
+      if (root.containsKey("mqtt_username"))  strlcpy(cfg->mqtt.username, root["mqtt_username"].as<char *>(), LEN_USERNAME);
+      if (root.containsKey("mqtt_password"))  strlcpy(cfg->mqtt.password, root["mqtt_password"].as<char *>(), LEN_PASSWORD);
+      if (root.containsKey("mqtt_state_topic")) strlcpy(cfg->mqtt.state_topic, root["mqtt_state_topic"].as<char *>(), LEN_URL);
+      if (root.containsKey("mqtt_state_publish_period")) cfg->mqtt.state_publish_period = root["mqtt_state_publish_period"].as<float>();
+      if (root.containsKey("mqtt_command_topic")) strlcpy(cfg->mqtt.command_topic, root["mqtt_command_topic"].as<char *>(), LEN_URL);
+      if (root.containsKey("ota_enabled"))    cfg->ota.enabled = root["ota_enabled"].as<bool>();
+      if (root.containsKey("ota_password"))   strlcpy(cfg->ota.password, root["ota_password"].as<char *>(), LEN_PASSWORD);
+      jsonbuf.clear();
+    }
     fp.close();
   }
 }
@@ -362,12 +370,18 @@ void daisycfg_read(daisy_config * cfg) {
   File fp = SPIFFS.open(FNAME_DAISYCFG, "r");
   if (fp) {
     size_t size = fp.size();
-    std::unique_ptr<char[]> buf(new char[size]);
-    fp.readBytes(buf.get(), size);
-    JsonObject& root = jsonbuf.parseObject(buf.get());
-    if (root.containsKey("enabled"))  cfg->enabled = root["enabled"].as<bool>();
-    if (root.containsKey("master"))   cfg->master = root["master"].as<bool>();
-    jsonbuf.clear();
+    if (size <= FILE_MAXSIZE) {
+      char buf[size+1];
+      fp.readBytes(buf, size);
+      buf[size] = 0;
+      
+      fp.readBytes(buf, size);
+      JsonObject& root = jsonbuf.parseObject(buf);
+      if (root.containsKey("enabled"))  cfg->enabled = root["enabled"].as<bool>();
+      if (root.containsKey("master"))   cfg->master = root["master"].as<bool>();
+      if (root.containsKey("slavewifioff")) cfg->slavewifioff = root["slavewifioff"].as<bool>();
+      jsonbuf.clear();
+    }
     fp.close();
   }
 }
@@ -376,6 +390,7 @@ void daisycfg_write(daisy_config * const cfg) {
   JsonObject& root = jsonbuf.createObject();
   root["enabled"] = cfg->enabled;
   root["master"] = cfg->master;
+  root["slavewifioff"] = cfg->slavewifioff;
   File fp = SPIFFS.open(FNAME_DAISYCFG, "w");
   root.printTo(fp);
   fp.close();
@@ -390,15 +405,23 @@ bool queuecfg_read(uint8_t qid) {
     // TODO set error
     return false;
   }
+
+  bool success = false;
   size_t size = fp.size();
-  std::unique_ptr<char[]> buf(new char[size]);
-  fp.readBytes(buf.get(), size);
-  JsonArray& arr = jsonbuf.parseArray(buf.get());
-  cmdq_empty(queue_get(qid), nextid());
-  cmdq_read(arr, 0, qid);
-  jsonbuf.clear();
+  if (size <= FILE_MAXSIZE) {
+    char buf[size+1];
+    fp.readBytes(buf, size);
+    buf[size] = 0;
+    
+    fp.readBytes(buf, size);
+    JsonArray& arr = jsonbuf.parseArray(buf);
+    cmdq_empty(queue_get(qid), nextid());
+    cmdq_read(arr, 0, qid);
+    jsonbuf.clear();
+    success = true;
+  }
   fp.close();
-  return true;
+  return success;
 }
 
 bool queuecfg_write(uint8_t qid) {
@@ -649,13 +672,25 @@ void setup() {
     }
   }
 
+  // Read configuration
+  /*{
+    servicecfg_read(&config.service);
+    daisycfg_read(&config.daisy);
+
+    // Load queues
+    for (int i = 1; i < QS_SIZE; i++) {
+      queuecfg_read(i);
+    }
+  }*/
+
   // Initialize web services
   {
     lowcom_init();
     
     if (config.service.mdns.enabled) {
       MDNS.begin(config.service.hostname);
-      // TODO - add services eg: MDNS.addService("https", "tcp", 443);
+      if (config.service.http.enabled) MDNS.addService("http", "tcp", PORT_HTTP);
+      if (config.service.lowcom.enabled) MDNS.addService("lowcom", "tcp", PORT_LOWCOM);
     }
 
     if (config.service.ota.enabled) {
@@ -665,19 +700,16 @@ void setup() {
       ArduinoOTA.begin();
     }
 
-    if (config.service.http.enabled) {
-      api_init();
-      static_init();
-      update_init();
-      server.begin();
-      websocket_init();
-
-      //dns.setTTL(300);
-      //dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
-      //dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
-    }
-
+    api_init();
+    static_init();
+    update_init();
+    server.begin();
+    websocket_init();
     mqtt_init();
+
+    //dns.setTTL(300);
+    //dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
+    //dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
   }
 
   // Initialize SPI and Stepper Motor config
@@ -688,9 +720,14 @@ void setup() {
     File fp = SPIFFS.open(FNAME_MOTORCFG, "r");
     if (fp) {
       size_t size = fp.size();
-      std::unique_ptr<char[]> buf(new char[size]);
-      fp.readBytes(buf.get(), size);
-      cmd_setconfig(Q0, nextid(), buf.get());
+      if (size <= FILE_MAXSIZE) {
+        char buf[size+1];
+        fp.readBytes(buf, size);
+        buf[size] = 0;
+        
+        fp.readBytes(buf, size);
+        cmd_setconfig(Q0, nextid(), buf);
+      }
       fp.close();
       
     } else {

@@ -1458,7 +1458,7 @@ state = MOTOR.getState()
         },
         filters: {
             capitalize: function(s) {
-                return s.charAt(0).toUpperCase() + s.slice(1);
+                return s? (s.charAt(0).toUpperCase() + s.slice(1)) : '';
             },
             pybool: function(v) {
                 if (v.toString() == 'true') return 'True';

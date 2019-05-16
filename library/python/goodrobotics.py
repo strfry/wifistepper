@@ -46,10 +46,12 @@ class _ComCommon:
     _OPCODE_ESTOP = (0x00)
     _OPCODE_PING = (0x01)
     _OPCODE_CLEARERROR = (0x02)
-    _OPCODE_SETCONFIG = (0x03)
-    _OPCODE_GETCONFIG = (0x04)
+    _OPCODE_LASTWILL = (0x03)
+    _OPCODE_SETHTTP = (0x04)
     _OPCODE_RUNQUEUE = (0x05)
-    _OPCODE_LASTWILL = (0x06)
+    _OPCODE_SETCONFIG = (0x06)
+    _OPCODE_GETCONFIG = (0x07)
+    _OPCODE_GETSTATE = (0x08)
 
     _OPCODE_STOP = (0x11)
     _OPCODE_RUN = (0x12)
@@ -87,6 +89,7 @@ class _ComCommon:
 
     _PACK_HELLO = '<36s36s36sH24sIBBI'
     _PACK_STD = '<BBBBHH'
+    _PACK_ERRORSTATE = '<BLBIib'
 
     class Response:
         def __init__(self, t, d):
@@ -130,7 +133,9 @@ class _ComCommon:
             except: continue
 
             if p_type == self._TYPE_ERROR:
-                pass
+                (d_errored, d_when, d_subsystem, d_id, d_type, d_arg) = struct.unpack(self._PACK_ERRORSTATE, self.sock.recv(struct.calcsize(self._PACK_ERRORSTATE)))
+                self.error_last = {'id':d_id, 'subsystem':d_subsystem, 'type':d_type, 'arg':d_arg, 'when':d_when} if d_errored else None
+                if self.error_callback is not None: self.error_callback(id=d_id, subsystem=d_subsystem, type=d_type, arg=d_arg, when=d_when)
 
             elif p_type == self._TYPE_HELLO:
                 (d_product, d_model, d_branch, d_version, d_hostname, d_chipid, self.enabled_std, self.enabled_crypto, self.nonce) = struct.unpack(self._PACK_HELLO, self.sock.recv(struct.calcsize(self._PACK_HELLO)))
@@ -168,7 +173,7 @@ class _ComCommon:
             self.sock.send(self._preamble(self._TYPE_PING))
             time.sleep(self._LTO_PING / (1000.0 * 4.0))
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, error_callback):
         self.connected = False
         self.meta = dict()
         self.wait_dict = dict()
@@ -177,6 +182,9 @@ class _ComCommon:
         self.nonce = 0
         self.last_id = 0
         self.last_ping = 0
+
+        self.error_callback = error_callback
+        self.error_last = None
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.host = host
@@ -204,6 +212,9 @@ class _ComCommon:
         self.connected = False
         self.sock.close()
 
+    def error(self):
+        return self.error_last
+
     def cmd_estop(self, target, hiz, soft):
         self._checkconnected()
         b_hiz = 0x01 if hiz else 0x00
@@ -216,7 +227,21 @@ class _ComCommon:
 
     def cmd_clearerror(self, target):
         self._checkconnected()
+        self.error_last = None
         return self._waitreply(self._send(self._OPCODE_CLEARERROR, self._SUBCODE_CMD, target, 0), self._SUBCODE_ACK)
+
+    def cmd_lastwill(self, queue):
+        self._checkconnected()
+        return self._waitreply(self._send(self._OPCODE_LASTWILL, self._SUBCODE_CMD, 0, queue), self._SUBCODE_ACK)
+
+    def cmd_sethttp(self, active):
+        self._checkconnected()
+        b_active = 0x01 if active else 0x00
+        return self._waitreply(self._self(self._OPCODE_SETHTTP, self._SUBCODE_CMD, 0, 0, struct.pack('<B', b_active)), self._SUBCODE_ACK)
+
+    def cmd_runqueue(self, target, queue, targetqueue):
+        self._checkconnected()
+        return self._waitreply(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)), self._SUBCODE_ACK)
 
     def cmd_setconfig(self, target, queue, config):
         self._checkconnected()
@@ -226,13 +251,9 @@ class _ComCommon:
         self._checkconnected()
         return self._waitreply(self._send(self._OPCODE_GETCONFIG, self._SUBCODE_CMD, target, 0), self._SUBCODE_REPLY).rstrip('\x00')
 
-    def cmd_runqueue(self, target, queue, targetqueue):
+    def cmd_getstate(self, target):
         self._checkconnected()
-        return self._waitreply(self._send(self._OPCODE_RUNQUEUE, self._SUBCODE_CMD, target, queue, struct.pack('<B', targetqueue)), self._SUBCODE_ACK)
-
-    def cmd_lastwill(self, queue):
-        self._checkconnected()
-        return self._waitreply(self._send(self._OPCODE_LASTWILL, self._SUBCODE_CMD, 0, 0, struct.pack('<B', queue)), self._SUBCODE_ACK)
+        return self._waitreply(self._send(self._OPCODE_GETSTATE, self._SUBCODE_CMD, target, 0), self._SUBCODE_REPLY).rstrip('\x00')
 
     def cmd_stop(self, target, queue, hiz, soft):
         self._checkconnected()
@@ -328,8 +349,8 @@ class _ComCommon:
 
 
 class ComStandard(_ComCommon):
-    def __init__(self, host, port, **kwargs):
-        _ComCommon.__init__(self, host, port)
+    def __init__(self, host, port, error_callback, **kwargs):
+        _ComCommon.__init__(self, host, port, error_callback)
 
     def _send(self, opcode, subcode, target, queue, data = ''):
         packetid = self._nextid()
@@ -342,7 +363,7 @@ class ComStandard(_ComCommon):
     def _recv_std(self, opcode, subcode, target, queue, packetid, data):
         if subcode in [self._SUBCODE_ACK, self._SUBCODE_NACK, self._SUBCODE_REPLY]:
             if subcode == self._SUBCODE_ACK: (data,) = struct.unpack('<I', data)
-            if subcode == self._SUBCODE_NACK: (data,) = data.rstrip('\x00')
+            if subcode == self._SUBCODE_NACK: data = data.rstrip('\x00')
             if packetid in self.wait_dict:
                 try: self.wait_dict[packetid].put(self.Response(subcode, data), False)
                 except waitqueue.Full: pass
@@ -352,8 +373,8 @@ class ComStandard(_ComCommon):
 
 
 class ComCrypto(_ComCommon):
-    def __init__(self, host, port, key, **kwargs):
-        _ComCommon.__init__(self, host, port)
+    def __init__(self, host, port, key, error_callback, **kwargs):
+        _ComCommon.__init__(self, host, port, error_callback)
         self.__key = hashlib.sha256(key).digest()
 
     def _send(self, opcode, subcode, target, queue, data = ''):
@@ -413,8 +434,9 @@ class WifiStepper:
     def _target(self, t):
         return t if t is not None else self.__target
 
-    def __init__(self, proto=ComStandard, host=None, port=1000, target=0, key=None, comm=None):
-        self.__comm = comm if comm is not None else proto(**{'host': host, 'port': port, 'key': key})
+    def __init__(self, proto=ComStandard, host=None, port=1000, target=0, key=None, comm=None, error_callback=None):
+        self.__comm = comm if comm is not None else proto(**{'host': host, 'port': port, 'key': key, 'error_callback': error_callback})
+        self.__target = target
 
     def connect(self):
         return self.__comm.connect()
@@ -432,8 +454,20 @@ class WifiStepper:
     def ping(self, target = None, queue = 0):
         return self.__comm.cmd_ping(self._target(target), queue)
 
+    def geterror(self):
+        return self.__comm.error()
+
     def clearerror(self, target = None):
         return self.__comm.cmd_clearerror(self._target(target))
+
+    def lastwill(self, queue):
+        return self.__comm.cmd_lastwill(queue)
+
+    def sethttp(self, active):
+        return self.__comm.cmd_sethttp(active)
+
+    def runqueue(self, targetqueue, target = None, queue = 0):
+        return self.__comm.cmd_runqueue(self._target(target), queue, targetqueue)
 
     def setconfig(self, config, target = None, queue = 0):
         return self.__comm.cmd_setconfig(self._target(target), queue, json.dumps(config, separators=(',',':')))
@@ -441,11 +475,14 @@ class WifiStepper:
     def getconfig(self, target = None):
         return json.loads(self.__comm.cmd_getconfig(self._target(target)), object_hook=_ascii_encode_dict)
 
-    def runqueue(self, targetqueue, target = None, queue = 0):
-        return self.__comm.cmd_runqueue(self._target(target), queue, targetqueue)
+    def getstate(self, target = None):
+        return json.loads(self.__comm.cmd_getstate(self._target(target)), object_hook=_ascii_encode_dict)
 
-    def lastwill(self, queue):
-        return self.__comm.cmd_lastwill(queue)
+    def busy(self, target = None):
+        return self.getstate(target).get('busy', None)
+
+    def hiz(self, target = None):
+        return self.getstate(target).get('hiz', None)
 
     def stop(self, hiz = True, soft = True, target = None, queue = 0):
         return self.__comm.cmd_stop(self._target(target), queue, hiz, soft)

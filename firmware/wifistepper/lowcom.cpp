@@ -11,7 +11,6 @@ extern StaticJsonBuffer<2048> jsonbuf;
 extern volatile bool flag_reboot;
 
 #define LTC_SIZE      (2)
-#define LTC_PORT      (1000)
 
 #define LTCB_ISIZE    (1024)
 #define LTCB_OSIZE    (LTCB_ISIZE / 4)
@@ -73,10 +72,13 @@ typedef struct ispacked {
 #define OPCODE_ESTOP        (0x00)
 #define OPCODE_PING         (0x01)
 #define OPCODE_CLEARERROR   (0x02)
-#define OPCODE_SETCONFIG    (0x03)
-#define OPCODE_GETCONFIG    (0x04)
+#define OPCODE_LASTWILL     (0x03)
+#define OPCODE_SETHTTP      (0x04)
 #define OPCODE_RUNQUEUE     (0x05)
-#define OPCODE_LASTWILL     (0x06)
+#define OPCODE_SETCONFIG    (0x06)
+#define OPCODE_GETCONFIG    (0x07)
+#define OPCODE_GETSTATE     (0x08)
+
 
 #define OPCODE_STOP         (0x11)
 #define OPCODE_RUN          (0x12)
@@ -192,7 +194,7 @@ void lc_debug(const char * name, uint8_t * sha) {
 #define lc_debug(...)
 #endif
 
-WiFiServer lowcom_server(LTC_PORT);
+WiFiServer lowcom_server(PORT_LOWCOM);
 struct {
   WiFiClient sock;
   uint8_t I[LTCB_ISIZE];
@@ -317,6 +319,27 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       lc_replyack(client, mode, opcode, target, queue, packetid, id);
       break;
     }
+    case OPCODE_LASTWILL: {
+      lc_expectlen(0);
+      lc_debug("CMD lastwill", queue);
+      lowcom_client[client].lastwill = queue;
+      lc_replyack(client, mode, opcode, 0, queue, packetid, id);
+      break;
+    }
+    case OPCODE_SETHTTP: {
+      lc_expectlen(sizeof(uint8_t));
+      lc_debug("CMD sethttp", data[0]);
+      config.service.http.enabled = data[0]? true : false;
+      lc_replyack(client, mode, opcode, 0, 0, packetid, id);
+      break;
+    }
+    case OPCODE_RUNQUEUE: {
+      lc_expectlen(sizeof(uint8_t));
+      lc_debug("CMD runqueue", data[0]);
+      m_runqueue(target, queue, id, data[0]);
+      lc_replyack(client, mode, opcode, target, queue, packetid, id);
+      break;
+    }
     case OPCODE_SETCONFIG: {
       if (len == 0 || data[len-1] != 0) {
         lc_replynack(client, mode, opcode, target, queue, packetid, "Bad config data");
@@ -374,18 +397,37 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       jsonbuf.clear();
       break;
     }
-    case OPCODE_RUNQUEUE: {
-      lc_expectlen(sizeof(uint8_t));
-      lc_debug("CMD runqueue", data[0]);
-      m_runqueue(target, queue, id, data[0]);
-      lc_replyack(client, mode, opcode, target, queue, packetid, id);
-      break;
-    }
-    case OPCODE_LASTWILL: {
+    case OPCODE_GETSTATE: {
       lc_expectlen(0);
-      lc_debug("CMD lastwill", queue);
-      lowcom_client[client].lastwill = queue;
-      lc_replyack(client, mode, opcode, 0, queue, packetid, id);
+      lc_debug("CMD getstate");
+      if (target < 0 || target > state.daisy.slaves) {
+        lc_replynack(client, mode, opcode, target, queue, packetid, "Invalid target");
+        return;
+      }
+      motor_state * st = target == 0? &state.motor : &sketch.daisy.slave[target - 1].state.motor;
+      JsonObject& root = jsonbuf.createObject();
+      root["stepss"] = st->stepss;
+      root["pos"] = st->pos;
+      root["mark"] = st->mark;
+      root["adc"] = st->adc;
+      root["dir"] = json_serialize(st->status.direction);
+      root["movement"] = json_serialize(st->status.movement);
+      root["hiz"] = st->status.hiz;
+      root["busy"] = st->status.busy;
+      root["switch"] = st->status.user_switch;
+      root["stepclock"] = st->status.step_clock;
+      JsonObject& alarms = root.createNestedObject("alarms");
+      alarms["commanderror"] = st->status.alarms.command_error;
+      alarms["overcurrent"] = st->status.alarms.overcurrent;
+      alarms["undervoltage"] = st->status.alarms.undervoltage;
+      alarms["thermalshutdown"] = st->status.alarms.thermal_shutdown;
+      alarms["thermalwarning"] = st->status.alarms.thermal_warning;
+      alarms["stalldetect"] = st->status.alarms.stall_detect;
+      alarms["switch"] = st->status.alarms.user_switch;
+      JsonVariant v = root;
+      String reply = v.as<String>();
+      lc_reply(client, mode, opcode, SUBCODE_REPLY, target, queue, packetid, (uint8_t *)reply.c_str(), reply.length()+1);
+      jsonbuf.clear();
       break;
     }
     
@@ -858,6 +900,27 @@ void lowcom_update(unsigned long now) {
         }
         state.service.lowcom.clients += 1;
       }
+    }
+  }
+}
+
+void lowcom_senderror(error_state * e) {
+  for (size_t i = 0; i < LTC_SIZE; i++) {
+    if (lowcom_client[i].active) {
+      lc_debug("ERROR client", i);
+
+      uint8_t packet[sizeof(lc_preamble) + sizeof(error_state)] = {0};
+      lc_preamble * preamble = (lc_preamble *)&packet[0];
+      error_state * error = (error_state *)&preamble[1];
+      
+      lc_packpreamble(preamble, TYPE_ERROR);
+      memcpy(error, e, sizeof(error_state));
+      
+      if (lowcom_client[i].sock.availableForWrite() >= sizeof(packet)) {
+        lc_debug("ERROR client write", i);
+        lowcom_client[i].sock.write(packet, sizeof(packet));
+      }
+      state.service.lowcom.clients += 1;
     }
   }
 }

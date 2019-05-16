@@ -18,15 +18,16 @@
 #define MOTOR_ADCCOEFF    (2.65625)
 #define MOTOR_CLOCK       (CLK_INT16)
 
+#define FILE_MAXSIZE      (512)
 #define FNAME_WIFICFG     "/wificfg.json"
 #define FNAME_SERVICECFG  "/servicecfg.json"
 #define FNAME_DAISYCFG    "/daisycfg.json"
 #define FNAME_MOTORCFG    "/motorcfg.json"
 #define FNAME_QUEUECFG    "/queue%dcfg.json"
 
-#define PORT_DNS          (53)
 #define PORT_HTTP         (80)
 #define PORT_HTTPWS       (81)
+#define PORT_LOWCOM       (1000)
 
 #define AP_IP             (IPAddress(192, 168, 4, 1))
 #define AP_MASK           (IPAddress(255, 255, 255, 0))
@@ -491,6 +492,7 @@ void lowcom_init();
 void lowcom_loop(unsigned long now);
 void lowcom_update(unsigned long now);
 void lowcom_ecc_hmacend(uint8_t * sha, uint8_t * data, size_t datalen);
+void lowcom_senderror(error_state * e);
 
 void resetcfg();
 

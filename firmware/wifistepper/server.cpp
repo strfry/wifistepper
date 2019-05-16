@@ -10,8 +10,6 @@ extern StaticJsonBuffer<2048> jsonbuf;
 extern volatile bool flag_reboot;
 
 #define json_ok()         "{\"status\":\"ok\"}"
-// TODO - populate reply with id
-#define json_okid(id)     "{\"status\":\"ok\",\"id\":" "-1" "}"
 #define json_error(msg)   "{\"status\":\"error\",\"message\":\"" msg "\"}"
 
 #define get_target() \
@@ -37,6 +35,10 @@ extern volatile bool flag_reboot;
       return; \
     } \
   }
+
+static String json_okid(id_t id) {
+  return String("{\"status\":\"ok\",\"id\":") + id + "}";
+}
 
 
 void api_initwifi() {
@@ -546,7 +548,7 @@ void api_initmotor() {
     JsonArray& arr = jsonbuf.parseArray(server.arg("plain"));
     cmdq_read(arr);
     jsonbuf.clear();
-    server.send(200, "application/json", json_okid(id));
+    server.send(200, "application/json", json_okid(nextid()));
   });
   server.on("/api/motor/queue/run", HTTP_GET, [](){
     add_headers()
@@ -671,7 +673,7 @@ void api_init() {
         daisy_clearerror(i, nextid());
       }
     }
-    server.send(200, "application/json", json_okid(id));
+    server.send(200, "application/json", json_okid(nextid()));
   });
   server.on("/api/crypto/get", HTTP_GET, [](){
     add_headers()
