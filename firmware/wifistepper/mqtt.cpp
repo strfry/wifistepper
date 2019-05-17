@@ -10,7 +10,7 @@
 WiFiClient mqtt_conn;
 PubSubClient mqtt_client(mqtt_conn);
 
-extern StaticJsonBuffer<2048> jsonbuf;
+extern StaticJsonBuffer<2560> jsonbuf;
 
 #ifdef MQTT_DEBUG
 void mqtt_debug(String msg) {
@@ -95,7 +95,7 @@ void mqtt_loop(unsigned long now) {
     root["stepss"] = st->stepss;
     root["pos"] = st->pos;
     root["mark"] = st->mark;
-    root["adc"] = st->adc;
+    root["vin"] = st->vin;
     root["dir"] = json_serialize(st->status.direction);
     root["movement"] = json_serialize(st->status.movement);
     root["hiz"] = st->status.hiz;

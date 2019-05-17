@@ -15,7 +15,7 @@ layout: default
 <div id="app" v-cloak>
     <div class="box properties">
         <div class="level">
-            <div class="level-item">
+            <div class="level-item" v-if="mode != 'voltage' || !vm_volt_comp">
                 <span><span class="entry">Input Voltage:</span> {% raw %}<span class="value" style="color: #c00;">~{{ voltage }} V</span>{% endraw %} <span style="font-size: 0.7rem; color: #666;">(&plusmn; 3 V)</span></span>
             </div>
             <div class="level-item">
@@ -27,9 +27,9 @@ layout: default
             <div class="level-item">
                 <span><span class="entry">Bridge State:</span> <span v-if="hiz" class="value" style="color: #f93;">High Z</span><span v-else class="value">Active</span></span>
             </div>
-            <!--<div class="level-item">
-                <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ adc }} V</span>{% endraw %}</span>
-            </div>-->
+            <div class="level-item">
+                <span><span class="entry">ADC:</span> {% raw %}<span class="value">{{ cpuadc }} V</span>{% endraw %}</span>
+            </div>
             <div class="level-item">
                 <span><span class="entry">Switch:</span> {% raw %}<span class="value" v-bind:style="this.switch? {'color': '#09f'} : {}">{{ this.switch? 'Closed' : 'Open' }}</span>{% endraw %}</span>
             </div>
@@ -62,11 +62,11 @@ layout: default
                     <option value="nema-11">NEMA 11</option>
                     <option value="nema-17">NEMA 17</option>
                     <option value="nema-23">NEMA 23</option>
-                    <option value="nema-34">NEMA 34</option>
+                    <option value="nema-34">NEMA 34+</option>
                 </select>
             </span>
         </span>
-        <span class="nobreak">
+        <span class="nobreak" v-if="mode != 'voltage' || !vm_volt_comp">
             with
             <span class="select">
                 <select v-model="preset.voltage" v-on:change="updatepreset" v-bind:disabled="!hiz">
@@ -302,15 +302,6 @@ layout: default
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_hizstop }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
-                <!--<div class="field has-addons">
-                    <span class="control">
-                        <span class="button is-label">
-                            <input class="is-checkradio is-white" id="stopswitch-enable" type="checkbox" v-model="speed.stopswitch" v-bind:disabled="!hiz" />
-                            <label class="is-checkradio-label" for="stopswitch-enable">Stop on switch</label>
-                        </span>
-                    </span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stopsw }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                </div>-->
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
@@ -390,21 +381,12 @@ layout: default
                     <span class="control">
                         <span class="button is-label">
                             <label class="is-switch-label" for="extstepclock-direction">Forward</label>
-                            <input class="switch" id="extstepclock-direction" type="checkbox" v-model="extstepclock.stepreverse" v-bind:disabled="!hiz" />
+                            <input class="switch" id="extstepclock-direction" type="checkbox" v-bind:checked="setdirection == 'reverse'" v-on:change="setdirection = ($event.target.checked? 'reverse' : 'forward')" v-bind:disabled="!hiz" />
                             <label class="is-switch-label" for="extstepclock-direction">Reverse</label>
                         </span>
                     </span>
                     <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_stepclockdir }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                 </div>
-                <!--<div class="field has-addons">
-                    <span class="control" style="margin-right: 0px;">
-                        <span class="button is-label">
-                            <input class="is-checkradio is-white" id="directionsw-enable" type="checkbox" v-model="extstepclock.directionsw" v-bind:disabled="!hiz" />
-                            <label class="is-checkradio-label" for="directionsw-enable">Direction on SW</label>
-                        </span>
-                    </span>
-                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_directionsw }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                </div>-->
                 <div class="field has-addons">
                     <span class="control" style="margin-right: 0px;">
                         <span class="button" style="background-color: #66f;">
@@ -536,26 +518,6 @@ layout: default
                 </div>
             </div>
             <hr />
-            <!--<div class="columns is-multiline">
-                <div class="column is-half">
-                    <div class="field is-horizontal">
-                        <div class="field-label is-normal"><label class="label">Drive Mode:</label></div>
-                        <div class="field-body">
-                            <div class="field has-addons">
-                                <span class="control is-expanded">
-                                    <span class="select is-fullwidth">
-                                        <select v-model="mode">
-                                            <option value="current">Current</option>
-                                            <option value="voltage">Voltage</option>
-                                        </select>
-                                    </span>
-                                </span>
-                                <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_mode }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>-->
             <div class="columns is-multiline" v-if="mode == 'current'">
                 <!-- Current Mode KT Vals -->
                 <div class="column is-half">
@@ -807,6 +769,24 @@ layout: default
                             </div>
                         </div>
                     </div>
+
+                    <!-- Voltage compensation -->
+                    <div class="column is-half">
+                        <div class="field is-horizontal">
+                            <div class="field-label is-normal"><label class="label">Volt Comp:</label></div>
+                            <div class="field-body">
+                                <div class="field has-addons">
+                                    <span class="control">
+                                        <span class="button is-label">
+                                            <input class="is-checkradio is-white" id="voltcomp-enable" type="checkbox" v-model="vm_volt_comp" />
+                                        <label class="is-checkradio-label" for="voltcomp-enable"><strong>Enabled</strong> (<a class="link" href="/documentation#mode" target="_blank">see doc</a>)</label>
+                                        </span>
+                                    </span>
+                                    <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_vm_voltcomp }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="subtitle is-5" style="padding-left: 1rem;">Back EMF Adjustment:</div>
                 <div class="columns is-multiline">
@@ -895,13 +875,15 @@ layout: default
         </div>
         <div class="message-body" style="position: relative;">
 <pre style="display: none;" id="code-bash">{% raw %}
-# ============= EXAMPLE CODE =============
+# ================ EXAMPLE BASH CODE - Use chunks as needed ================
+# For full documentation see https://www.wifistepper.com/interfaces
+
 # Uses curl for network and jq for json parsing
-HOST="{{ service.hostname }}.local"  # or "{{ wifi.ip }}"
-PROTOCOL="http"  # or https
+HOST="{{ service.hostname }}.local"  # or "{{ wifi.ip }}"<template v-if="master">
+TARGET="{{ target }}"  # Daisy chain support</template>
 
 # Ping motor api
-curl -sS "${PROTOCOL}://${HOST}/api/ping" | jq
+curl -sS "http://${HOST}/api/ping" | jq
 # All successful api calls will return 'status: ok'. This means
 #  that the command was successfully interpreted and executed.
 #  However, errors may still be thrown during execution.
@@ -915,130 +897,132 @@ MAXSPEED="{{ maxspeed }}"
 MINSPEED="{{ minspeed }}"
 ACCEL="{{ accel }}"
 DECEL="{{ decel }}"
-CM_KTHOLD="{{ cm_kthold }}"
+<template v-if="mode == 'current'">CM_KTHOLD="{{ cm_kthold }}"
 CM_KTRUN="{{ cm_ktrun }}"
 CM_KTACCEL="{{ cm_ktaccel }}"
-CM_KTDECEL="{{ cm_ktdecel }}"
-VM_KTHOLD="{{ vm_kthold }}"
+CM_KTDECEL="{{ cm_ktdecel }}"</template><template v-if="mode == 'voltage'">VM_KTHOLD="{{ vm_kthold }}"
 VM_KTRUN="{{ vm_ktrun }}"
 VM_KTACCEL="{{ vm_ktaccel }}"
-VM_KTDECEL="{{ vm_ktdecel }}"
+VM_KTDECEL="{{ vm_ktdecel }}"</template>
 FSSPEED="{{ fsspeed }}"
 FSBOOST="{{ fsboost }}"
 REVERSE="{{ reverse }}"
 SAVE_EEPROM="{{ save }}"
 
 # Advanced configuration settings
-CM_SWITCHPERIOD="{{ cm_switchperiod }}"
+<template v-if="mode == 'current'">CM_SWITCHPERIOD="{{ cm_switchperiod }}"
 CM_PREDICT="{{ cm_predict }}"
 CM_MINON="{{ cm_minon }}"
 CM_MINOFF="{{ cm_minoff }}"
 CM_FASTOFF="{{ cm_fastoff }}"
-CM_FASTSTEP="{{ cm_faststep }}"
-VM_PWMFREQ="{{ vm_pwmfreq }}"
+CM_FASTSTEP="{{ cm_faststep }}"</template><template v-if="mode == 'voltage'">VM_PWMFREQ="{{ vm_pwmfreq }}"
 VM_STALL="{{ vm_stall }}"
-VM_BMEF_SLOPEL="{{ vm_bemf_slopel }}"
-VM_BMEF_SPEEDCO="{{ vm_bemf_speedco }}"
-VM_BMEF_SLOPEHACC="{{ vm_bemf_slopehacc }}"
-VM_BMEF_SLOPEHDEC="{{ vm_bemf_slopehdec }}"
+VM_VOLT_COMP="{{ vm_volt_comp }}"
+VM_BEMF_SLOPEL="{{ vm_bemf_slopel }}"
+VM_BEMF_SPEEDCO="{{ vm_bemf_speedco }}"
+VM_BEMF_SLOPEHACC="{{ vm_bemf_slopehacc }}"
+VM_BEMF_SLOPEHDEC="{{ vm_bemf_slopehdec }}"</template>
 
-curl -sS "${PROTOCOL}://${HOST}/api/motor/set?\
+curl -sS "http://${HOST}/api/motor/set?\
 mode=${MODE}&stepsize=${STEPSIZE}&\
 ocd=${OCD}&ocdshutdown=${OCDSHUTDOWN}&\
 maxspeed=${MAXSPEED}&minspeed=${MINSPEED}&accel=${ACCEL}&decel=${DECEL}&\
-cm_kthold=${CM_KTHOLD}&cm_ktrun=${CM_KTRUN}&cm_ktaccel=${CM_KTACCEL}&cm_ktdecel=${CM_KTDECEL}&\
-vm_kthold=${VM_KTHOLD}&vm_ktrun=${VM_KTRUN}&vm_ktaccel=${VM_KTACCEL}&vm_ktdecel=${VM_KTDECEL}&\
+<template v-if="mode == 'current'">cm_kthold=${CM_KTHOLD}&cm_ktrun=${CM_KTRUN}&cm_ktaccel=${CM_KTACCEL}&cm_ktdecel=${CM_KTDECEL}&\</template><template v-if="mode == 'voltage'">vm_kthold=${VM_KTHOLD}&vm_ktrun=${VM_KTRUN}&vm_ktaccel=${VM_KTACCEL}&vm_ktdecel=${VM_KTDECEL}&\</template>
 fsspeed=${FSSPEED}&fsboost=${FSBOOST}&\
-cm_switchperiod=${CM_SWITCHPERIOD}&cm_predict=${CM_PREDICT}&\
-cm_minon=${CM_MINON}&cm_minoff=${CM_MINOFF}&cm_fastoff=${CM_FASTOFF}&cm_faststep=${CM_FASTSTEP}&\
-vm_pwmfreq=${VM_PWMFREQ}&vm_stall=${VM_STALL}&\
-vm_bmef_slopel=${VM_BMEF_SLOPEL}&vm_bmef_speedco=${VM_BMEF_SPEEDCO}&\
-vm_bmef_slopehacc=${VM_BMEF_SLOPEHACC}&vm_bmef_slopehdec=${VM_BMEF_SLOPEHDEC}&\
-reverse=${REVERSE}&save=${SAVE_EEPROM}" | jq
+<template v-if="mode == 'current'">cm_switchperiod=${CM_SWITCHPERIOD}&cm_predict=${CM_PREDICT}&\
+cm_minon=${CM_MINON}&cm_minoff=${CM_MINOFF}&cm_fastoff=${CM_FASTOFF}&cm_faststep=${CM_FASTSTEP}&\</template><template v-if="mode == 'voltage'">vm_pwmfreq=${VM_PWMFREQ}&vm_stall=${VM_STALL}&vm_volt_comp=${VM_VOLT_COMP}&\
+vm_bemf_slopel=${VM_BEMF_SLOPEL}&vm_bemf_speedco=${VM_BEMF_SPEEDCO}&\
+vm_bemf_slopehacc=${VM_BEMF_SLOPEHACC}&vm_bemf_slopehdec=${VM_BEMF_SLOPEHDEC}&\</template>
+reverse=${REVERSE}&save=${SAVE_EEPROM}<template v-if="master">&target=${TARGET}</template>" | jq
 
 # Read motor configuration
-curl -sS "${PROTOCOL}://${HOST}/api/motor/get" | jq
+curl -sS "http://${HOST}/api/motor/get<template v-if="master">?target=${TARGET}</template>" | jq
 # Returns object with configuration map
-
+<template v-if="profile == 'servo'">
 # Zero position
-curl -sS "${PROTOCOL}://${HOST}/api/motor/pos/reset" | jq
+curl -sS "http://${HOST}/api/motor/pos/reset<template v-if="master">?target=${TARGET}</template>" | jq
 
 # Send servo command
 POSITION="{{ setpos }}"  # ANGLE / 360 * 200 * STEPSIZE; ANGLE={{ setangle }}, STEPSIZE={{ stepsize }}
-curl -sS "${PROTOCOL}://${HOST}/api/motor/goto?position=${POSITION}" | jq
-
+curl -sS "http://${HOST}/api/motor/goto?pos=${POSITION}<template v-if="master">&target=${TARGET}</template>" | jq
+</template><template v-if="profile == 'speed'">
 # Send speed command
 STEPS_PER_SEC="{{ setstepss }}"  # RPM / 60 * 200; RPM={{ setrpm }}
 DIRECTION="{{ setdirection }}"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/run?stepss=${STEPS_PER_SEC}&direction=${DIRECTION}" | jq
-
+curl -sS "http://${HOST}/api/motor/run?stepss=${STEPS_PER_SEC}&dir=${DIRECTION}<template v-if="master">&target=${TARGET}</template>" | jq
+</template><template v-if="profile == 'extstepclock'">
 # Send stepclock command
 DIRECTION="{{ setdirection }}"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/stepclock?direction=${DIRECTION}" | jq
-
-# Stop
+curl -sS "http://${HOST}/api/motor/stepclock?dir=${DIRECTION}<template v-if="master">&target=${TARGET}</template>" | jq
+</template>
+# Emergency Stop
 STOP_HIZ="{{ speed.hiz }}"
 STOP_SOFT="true"
-curl -sS "${PROTOCOL}://${HOST}/api/motor/stop?hiz=${STOP_HIZ}&soft=${STOP_SOFT}" | jq
+curl -sS "http://${HOST}/api/motor/estop?hiz=${STOP_HIZ}&soft=${STOP_SOFT}<template v-if="master">&target=${TARGET}</template>" | jq
 
 # Read state
-curl -sS "${PROTOCOL}://${HOST}/api/motor/state" | jq
-# Returns object with keys: stepss, position, mark, adc, direction, movement, hiz, busy, switch, stepclock,
-#   flags:{ switch, commanderror, overcurrent, undervoltage, thermalwarning,
+curl -sS "http://${HOST}/api/motor/state<template v-if="master">?target=${TARGET}</template>" | jq
+# Returns object with keys: busy, stepss, hiz, vin, pos, mark, dir, movement, stepclock, switch,
+#   flags: { switch, commanderror, overcurrent, undervoltage, thermalwarning,
 #   thermalshutdown, stalldetect }
 
 {% endraw %}</pre>
 <pre style="display: none;" id="code-python">{% raw %}
-#
-# This pre-release version DOES NOT have a working Python library
-# Code shown here is still under development and will be changed.
-#
+# ================ EXAMPLE PYTHON CODE - Use chunks as needed ================
+# For full documentation see https://www.wifistepper.com/interfaces
+import goodrobotics as gr
 
-from goodrobotics import WSX100 as WifiStepper
+host = "{{ service.hostname }}.local"  # or "{{ wifi.ip }}"<template v-if="master">
+target={{ target }}  # Daisy chain support</template>
 
-host = "{{ service.hostname }}.local"  # or "{{ wifi.ip }}"
-protocol = WifiStepper.HTTP  # or HTTPS, CRYPTO, UDP
-username = None # Required when auth enabled
-password = None
-MOTOR = WifiStepper(host, protocol)
-if not MOTOR.connect(username, password):
-    raise Exception('Failed to connect')
+# Create motor object
+MOTOR = gr.WifiStepper(host=host)
+# MOTOR = gr.WifiStepper(proto=gr.ComCrypto, host=host, key="&lt;AUTH_KEY&gt;")  # For crypto auth
 
-# Write configuration
-MOTOR.writeConfig(
-    mode='{{ mode }}', stepsize={{ stepsize }},
-    maxspeed={{ maxspeed }}, minspeed={{ minspeed }}, accel={{ accel }}, decel={{ decel }},
-    cm_kthold={{ cm_kthold }}, cm_ktrun={{ cm_ktrun }}, cm_ktaccel={{ cm_ktaccel }}, cm_ktdecel={{ cm_ktdecel }},
-    fsseed={{ fsspeed }}, fsboost={{ fsboost | pybool }},
-    reverse={{ reverse | pybool }}, save={{ save | pybool }}
-)
+# Connect (will throw exception on failure)
+MOTOR.connect()
+
+# Write motor configuration
+MOTOR.setconfig({
+    'mode': "{{ mode }}", 'stepsize': {{ stepsize }},
+    'ocd': {{ ocd }}, 'ocdshutdown': {{ ocdshutdown | pybool }},
+    'maxspeed': {{ maxspeed }}, 'minspeed': {{ minspeed }}, 'accel': {{ accel }}, 'decel': {{ decel }},
+    <template v-if="mode == 'current'">'cm_kthold': {{ cm_kthold }}, 'cm_ktrun': {{ cm_ktrun }}, 'cm_ktaccel': {{ cm_ktaccel }}, 'cm_ktdecel': {{ cm_ktdecel }},</template><template v-if="mode == 'voltage'">'vm_kthold': {{ vm_kthold }}, 'vm_ktrun': {{ vm_ktrun }}, 'vm_ktaccel': {{ vm_ktaccel }}, 'vm_ktdecel': {{ vm_ktdecel }},</template>
+    'fsspeed': {{ fsspeed }}, 'fsboost': {{ fsboost | pybool }},
+    <template v-if="mode == 'current'">'cm_switchperiod': {{ cm_switchperiod }}, 'cm_predict': {{ cm_predict | pybool }},
+    'cm_minon': {{ cm_minon }}, 'cm_minoff': {{ cm_minoff }}, 'cm_fastoff': {{ cm_fastoff }}, 'cm_faststep': {{ cm_faststep }},</template><template v-if="mode == 'voltage'">'vm_pwmfreq': {{ vm_pwmfreq }}, 'vm_stall': {{ vm_stall }}, 'vm_volt_comp': {{ vm_volt_comp | pybool }},
+    'vm_bemf_slopel': {{ vm_bemf_slopel }}, 'vm_bemf_speedco': {{ vm_bemf_speedco }},
+    'vm_bemf_slopehacc': {{ vm_bemf_slopehacc }}, 'vm_bemf_slopehdec': {{ vm_bemf_slopehdec }},</template>
+    'reverse': {{ reverse | pybool }}, 'save': {{ save | pybool }}
+}<template v-if="master">, target=target</template>)
 
 # Read configuration
-config = MOTOR.readConfig()
-# config is a dict() with keys: mode, stepsize, maxspeed, minspeed, accel, decel,
-#   kthold, ktrun, ktaccel, ktdecel, fsspeed, fsboost, reverse
-
+config = MOTOR.getconfig(<template v-if="master">target=target</template>)
+# config is a dict() of configuration map
+<template v-if="profile == 'servo'">
 # Zero servo position
-
+MOTOR.resetpos(<template v-if="master">target=target</template>)
 
 # Send servo command
-
-
+stepsize = MOTOR.getconfig(<template v-if="master">target=target</template>)['stepsize']
+angle = gr.Angle(stepsize=stepsize)
+MOTOR.goto(pos=angle({{ setangle }})<template v-if="master">, target=target</template>)
+</template><template v-if="profile == 'speed'">
 # Send speed command
-
-
-# Stop motor
-MOTOR.stop(bridge={{ !speed.hiz | pybool }}, soft=True)
+rpm = gr.RPM()
+MOTOR.run(dir=MOTOR.{{ setdirection.toUpperCase() }}, stepss=rpm({{ setrpm }})<template v-if="master">, target=target</template>)
+</template><template v-if="profile == 'extstepclock'">
+# Send stepclock command
+MOTOR.stepclock(dir=MOTOR.{{ setdirection.toUpperCase() }}<template v-if="master">, target=target</template>)
+</template>
+# Emergency stop motor
+MOTOR.estop()
 
 # Read status
-status = MOTOR.getStatus()
-# status is a dict() with keys: direction, movement, hiz, busy, switch,
+state = MOTOR.getstate()
+# state is a dict() with keys: busy, stepss, hiz, vin, pos, mark, dir, movement, stepclock, switch,
 #   flags=dict( switch, commanderror, overcurrent, undervoltage, thermalwarning,
 #   thermalshutdown, stalldetect )
-
-# Read state
-state = MOTOR.getState()
-# state is a dict() with keys: [TODO LIST KEYS!]
 
 {% endraw %}</pre>
             <button class="button is-primary" id="code-copy" style="position: absolute; top: 35px; right: 50px;">{% mdicon content-copy, .baseline %}Copy</button>
@@ -1155,8 +1139,6 @@ state = MOTOR.getState()
                 hiz: true
             },
             extstepclock: {
-                stepreverse: false,
-                directionsw: false
             },
 
             master: false,
@@ -1198,6 +1180,7 @@ state = MOTOR.getState()
             vm_ktdecel: 0.0,
             vm_pwmfreq: 0,
             vm_stall: 0,
+            vm_volt_comp: false,
             vm_bemf_slopel: 0,
             vm_bemf_speedco: 0,
             vm_bemf_slopehacc: 0,
@@ -1211,10 +1194,10 @@ state = MOTOR.getState()
             switch: false,
             stepclock: false,
             voltage: '?',
-            adc: 0,
+            cpuadc: '?',
 
             code:  {
-                language: 'bash'
+                language: 'python'
             },
             service: {
                 hostname: '<hostname>'
@@ -1262,15 +1245,6 @@ state = MOTOR.getState()
             },
             reverse: function(newv) {
                 this.writemotor(['reverse'])
-            },
-            switch: function(newv) {
-                if (this.extstepclock.directionsw) {
-                    this.extstepclock.stepreverse = newv;
-
-                    if (this.profile == 'extstepclock' && !this.hiz) {
-                        this.writestepclock();
-                    }
-                }
             }
         },
         methods: {
@@ -1323,7 +1297,7 @@ state = MOTOR.getState()
                             app.getrpm = r.data.stepss * 60 / 200;
                             app.getangle = r.data.pos / 200 / app.stepsize * 360;
                             app.getdirection = r.data.dir;
-                            app.voltage = Math.round(r.data.adc);
+                            app.voltage = Math.round(r.data.vin);
                             merge(app, r.data, ['movement', 'hiz', 'busy', 'switch', 'stepclock']);
                             merge(app.flags, r.data.alarms, ['switch', 'commanderror', 'overcurrent', 'undervoltage', 'thermalwarning', 'thermalshutdown', 'stalldetect']);
                             if (initial) {
@@ -1336,12 +1310,19 @@ state = MOTOR.getState()
                     });
                 }
             },
+            readcpuadc: function() {
+                axios.get("{{ site.apiurl }}/api/cpu/adc", {params: {target: this.target}}).then(function (r) {
+                        if (r.data.status == 'ok') {
+                            app.cpuadc = Math.round(r.data.value * 10.0) / 10.0;
+                        }
+                    });
+            },
             readmotor: function() {
                 axios.get("{{ site.apiurl }}/api/motor/get", {params: {target: this.target}}).then(function (r) {
                     if (r.data.status == 'ok') {
                         merge(app, r.data,
-                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'cm_kthold', 'cm_ktrun', 'cm_ktaccel', 'cm_ktdecel', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
-                            [null, null, 20, null, 20, 20, 10, 10, 20, null, 0.1, 0.1, 0.1, 0.1, 4, null, 0.5, 0.5, 2, 2, 1, 1, 1, 1, 0.15, 0.5, 0.0015, 0.05, 0.0015, 0.0015, null]
+                            ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'cm_kthold', 'cm_ktrun', 'cm_ktaccel', 'cm_ktdecel', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_volt_comp', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec', 'reverse'],
+                            [null, null, 20, null, 20, 20, 10, 10, 20, null, 0.1, 0.1, 0.1, 0.1, 4, null, 0.5, 0.5, 2, 2, 1, 1, 1, 1, 0.15, 0.5, null, 0.0015, 0.05, 0.0015, 0.0015, null]
                         );
                         app.initialload = true;
                     }
@@ -1352,7 +1333,7 @@ state = MOTOR.getState()
                     if (this.stepsize > 16) this.stepsize = 16;
                     keys = keys || ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'cm_kthold', 'cm_ktrun', 'cm_ktaccel', 'cm_ktdecel', 'cm_switchperiod', 'cm_predict', 'cm_minon', 'cm_minoff', 'cm_fastoff', 'cm_faststep'];
                 } else if (this.mode == 'voltage') {
-                    keys = keys || ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
+                    keys = keys || ['mode', 'stepsize', 'ocd', 'ocdshutdown', 'maxspeed', 'minspeed', 'accel', 'decel', 'fsspeed', 'fsboost', 'vm_kthold', 'vm_ktrun', 'vm_ktaccel', 'vm_ktdecel', 'vm_pwmfreq', 'vm_stall', 'vm_volt_comp', 'vm_bemf_slopel', 'vm_bemf_speedco', 'vm_bemf_slopehacc', 'vm_bemf_slopehdec'];
                 } else {
                     return;
                 }
@@ -1435,8 +1416,6 @@ state = MOTOR.getState()
                 }
             }/*, 250, 100)*/,
             writestepclock: /*throttle(*/function() {
-                this.setdirection = this.extstepclock.stepreverse ? 'reverse' : 'forward';
-
                 if (this.protocol == 'ws') {
                     var ba = new ArrayBuffer(4);
                     var v = new DataView(ba);
@@ -1469,6 +1448,7 @@ state = MOTOR.getState()
         mounted: function () {
             var pollstate = function() {
                 this.readstate(false);
+                this.readcpuadc();
                 setTimeout(pollstate, 300);
             }.bind(this);
 

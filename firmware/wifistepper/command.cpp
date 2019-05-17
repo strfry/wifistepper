@@ -6,7 +6,7 @@
 
 //#define CMD_DEBUG
 
-extern StaticJsonBuffer<2048> jsonbuf;
+extern StaticJsonBuffer<2560> jsonbuf;
 
 #define CTO_UPDATE      (10)
 
@@ -48,7 +48,7 @@ static void cmd_updatestate() {
   state.motor.stepss = ps_getspeed();
   state.motor.pos = motorcfg_pos(ps_getpos());
   state.motor.mark = motorcfg_pos(ps_getmark());
-  state.motor.adc = (float)ps_readadc() * MOTOR_ADCCOEFF;
+  state.motor.vin = (config.motor.mode != MODE_VOLTAGE || !config.motor.vm.volt_comp)? ((float)ps_readadc() * MOTOR_ADCCOEFF) : 0;
 }
 
 void cmd_init() {

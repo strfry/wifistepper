@@ -237,7 +237,7 @@ class _ComCommon:
     def cmd_sethttp(self, active):
         self._checkconnected()
         b_active = 0x01 if active else 0x00
-        return self._waitreply(self._self(self._OPCODE_SETHTTP, self._SUBCODE_CMD, 0, 0, struct.pack('<B', b_active)), self._SUBCODE_ACK)
+        return self._waitreply(self._send(self._OPCODE_SETHTTP, self._SUBCODE_CMD, 0, 0, struct.pack('<B', b_active)), self._SUBCODE_ACK)
 
     def cmd_runqueue(self, target, queue, targetqueue):
         self._checkconnected()
@@ -422,8 +422,8 @@ class WifiStepper:
     __comm = None
     __target = 0
 
-    FWD = True
-    REV = False
+    FORWARD = True
+    REVERSE = False
 
     RESET = False
     COPYMARK = True

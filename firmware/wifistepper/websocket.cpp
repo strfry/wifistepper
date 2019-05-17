@@ -91,7 +91,7 @@ void ws_event(uint8_t num, WStype_t type, uint8_t * data, size_t len) {
           ws_packfloat(st->stepss, &buf[1]);
           ws_packint(st->pos, &buf[5]);
           ws_packint(st->mark, &buf[9]);
-          ws_packfloat(st->adc, &buf[13]);
+          ws_packfloat(st->vin, &buf[13]);
           buf[14] = st->status.direction == FWD? 'f' : 'r';
           buf[15] = movement;
           buf[16] = st->status.hiz? 0x1 : 0x0;

@@ -1,5 +1,4 @@
 #include <FS.h>
-//#include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WebSocketsServer.h>
 
@@ -22,11 +21,10 @@
 queue_t queue[QS_SIZE];
 volatile id_t _id = ID_START;
 
-//DNSServer dns;
 ESP8266WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
 
-StaticJsonBuffer<2048> jsonbuf;
+StaticJsonBuffer<2560> jsonbuf;
 
 volatile bool flag_reboot = false;
 volatile bool flag_wifiled = false;
@@ -43,12 +41,12 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      //.ssid = {'B','D','F','i','r','e',0},
-      //.password = {'m','c','d','e','r','m','o','t','t',0},
+      .ssid = {'B','D','F','i','r','e',0},
+      .password = {'m','c','d','e','r','m','o','t','t',0},
       //.ssid = {'A','T','T','5','4','9',0},
       //.password = {'9','0','7','1','9','1','8','6','0','1',0},
-      .ssid = {'B','i','l','l','W','i','T','h','e','S','c','i','e','n','c','e','F','i',0},
-      .password = {'p','i','n','e','a','p','p','l','e','1','2','3',0},
+      //.ssid = {'B','i','l','l','W','i','T','h','e','S','c','i','e','n','c','e','F','i',0},
+      //.password = {'p','i','n','e','a','p','p','l','e','1','2','3',0},
       .encryption = true,
       .forceip = {0},
       .forcesubnet = {0},
@@ -706,10 +704,6 @@ void setup() {
     server.begin();
     websocket_init();
     mqtt_init();
-
-    //dns.setTTL(300);
-    //dns.setErrorReplyCode(DNSReplyCode::ServerFailure);
-    //dns.start(PORT_DNS, String(config.service.hostname) + ".local", AP_IP);
   }
 
   // Initialize SPI and Stepper Motor config
@@ -748,16 +742,12 @@ void loop() {
 
   HANDLE_LOOPS();
 
-  if (config.service.http.enabled) {
+  if (state.wifi.mode != M_OFF && config.service.http.enabled) {
     if (!config.service.auth.enabled) {
       // Websockets aren't supported under auth, client must use http
       websocket.loop();
     }
     server.handleClient();
-
-    /*if (state.wifi.mode == M_ACCESSPOINT) {
-      dns.processNextRequest();
-    }*/
   }
 
   HANDLE_LOOPS();
@@ -766,11 +756,11 @@ void loop() {
 
   HANDLE_LOOPS();
 
-  if (config.service.mdns.enabled) {
+  if (state.wifi.mode != M_OFF && config.service.mdns.enabled) {
     MDNS.update();
   }
 
-  if (config.service.ota.enabled) {
+  if (state.wifi.mode != M_OFF && config.service.ota.enabled) {
     ArduinoOTA.handle();
   }
 

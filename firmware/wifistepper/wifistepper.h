@@ -18,7 +18,7 @@
 #define MOTOR_ADCCOEFF    (2.65625)
 #define MOTOR_CLOCK       (CLK_INT16)
 
-#define FILE_MAXSIZE      (512)
+#define FILE_MAXSIZE      (768)
 #define FNAME_WIFICFG     "/wificfg.json"
 #define FNAME_SERVICECFG  "/servicecfg.json"
 #define FNAME_DAISYCFG    "/daisycfg.json"
@@ -265,7 +265,7 @@ typedef struct ispacked {
   float stepss;
   int pos;
   int mark;
-  float adc;
+  float vin;
 } motor_state;
 
 typedef struct {

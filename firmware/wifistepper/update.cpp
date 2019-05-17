@@ -9,7 +9,7 @@
 //#define UP_DEBUG
 
 extern ESP8266WebServer server;
-extern StaticJsonBuffer<2048> jsonbuf;
+extern StaticJsonBuffer<2560> jsonbuf;
 
 extern volatile bool flag_reboot;
 

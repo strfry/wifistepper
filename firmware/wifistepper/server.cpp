@@ -5,7 +5,7 @@
 #include "ecc508a.h"
 
 extern ESP8266WebServer server;
-extern StaticJsonBuffer<2048> jsonbuf;
+extern StaticJsonBuffer<2560> jsonbuf;
 
 extern volatile bool flag_reboot;
 
@@ -346,6 +346,7 @@ void api_initmotor() {
     if (server.hasArg("vm_ktdecel")) root["vm_ktdecel"] = server.arg("vm_ktdecel").toFloat();
     if (server.hasArg("vm_pwmfreq")) root["vm_pwmfreq"] = server.arg("vm_pwmfreq").toFloat();
     if (server.hasArg("vm_stall"))  root["vm_stall"] = server.arg("vm_stall").toFloat();
+    if (server.hasArg("vm_volt_comp")) root["vm_volt_comp"] = server.arg("vm_volt_comp") == "true";
     if (server.hasArg("vm_bemf_slopel")) root["vm_bemf_slopel"] = server.arg("vm_bemf_slopel").toFloat();
     if (server.hasArg("vm_bemf_speedco")) root["vm_bemf_speedco"] = server.arg("vm_bemf_speedco").toFloat();
     if (server.hasArg("vm_bemf_slopehacc")) root["vm_bemf_slopehacc"] = server.arg("vm_bemf_slopehacc").toFloat();
@@ -368,7 +369,7 @@ void api_initmotor() {
     root["stepss"] = st->stepss;
     root["pos"] = st->pos;
     root["mark"] = st->mark;
-    root["adc"] = st->adc;
+    root["vin"] = st->vin;
     root["dir"] = json_serialize(st->status.direction);
     root["movement"] = json_serialize(st->status.movement);
     root["hiz"] = st->status.hiz;

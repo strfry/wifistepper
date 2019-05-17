@@ -7,7 +7,7 @@
 
 //#define LOWCOM_DEBUG
 
-extern StaticJsonBuffer<2048> jsonbuf;
+extern StaticJsonBuffer<2560> jsonbuf;
 extern volatile bool flag_reboot;
 
 #define LTC_SIZE      (2)
@@ -409,7 +409,7 @@ static void lc_handlepacket(size_t client, uint8_t mode, uint8_t opcode, uint8_t
       root["stepss"] = st->stepss;
       root["pos"] = st->pos;
       root["mark"] = st->mark;
-      root["adc"] = st->adc;
+      root["vin"] = st->vin;
       root["dir"] = json_serialize(st->status.direction);
       root["movement"] = json_serialize(st->status.movement);
       root["hiz"] = st->status.hiz;

@@ -386,15 +386,14 @@ layout: default
                                 </span>
                             </span>
                             <span class="control">
-                                <span class="button is-label" style="border-left-width: 0px;">
+                                <span class="button is-label" style="border-left-width: 0px; border-right-width: 1px;">
                                     <label class="is-switch-label" for="daisy-master">Slave</label>
                                 </span>
                             </span>
-                            <span class="control"><button class="is-help button tooltip is-tooltip-left is-tooltip-multiline" data-tooltip="{{ help_daisy }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                         </div>
                     </div>
                 </div>
-                <div class="field is-horizontal">
+                <div class="field is-horizontal is-spaced-mobile" v-if="daisy.master">
                     <div class="field-label is-normal"></div>
                     <div class="field-body">
                         <div class="field">
@@ -402,6 +401,7 @@ layout: default
                                 <input class="is-checkradio has-background-color is-white" id="daisy-slavewifioff" type="checkbox" v-model="daisy.slavewifioff" />
                                 <label class="is-checkradio-enable" for="daisy-slavewifioff"><strong>Turn off Slave Wifi</strong></label>
                             </span>
+                            <span class="control"><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_slavewifioff }}">{% mdicon help-circle, .baseline, .inline %}</button></span>
                         </div>
                     </div>
                 </div>
@@ -545,7 +545,6 @@ layout: default
                             <th class="has-text-centered">Current Status</th>
                             <th class="has-text-centered">Recommendation</th>
                             <th></th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tr>
@@ -558,21 +557,18 @@ layout: default
                         </td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['wifi'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_wifi">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_wifi }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr v-if="wifi.mode == 'station'">
                         <td>Revert AP</td>
                         <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_revertap}">{% raw %}{{ wifi.station_revertap? 'On' : 'Off' }}{% endraw %}</td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['revertap'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_revertap">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_revertap }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>mDNS</td>
                         <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_mdns}">{% raw %}{{ service.mdns_enabled? 'On' : 'Off' }}{% endraw %}</td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['mdns'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_mdns">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_mdns }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>HTTP</td>
@@ -583,7 +579,6 @@ layout: default
                         </td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['http'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_http">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_http }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>Low Level Interface</td>
@@ -595,14 +590,12 @@ layout: default
                         </td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['lowcom'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_lowcom">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_lowcom }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>Arduino OTA</td>
                         <td class="has-text-centered" v-bind:class="{'is-issue': security_warn_ota}">{% raw %}{{ service.ota_enabled? 'On' : 'Off' }}{% endraw %}</td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['ota'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_ota">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_ota }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                     <tr>
                         <td>MQTT</td>
@@ -613,7 +606,6 @@ layout: default
                         </td>
                         <td class="has-text-centered">{% raw %}{{ service.security_matrix[service.security]['mqtt'] }}{% endraw %}</td>
                         <td class="title is-3"><span v-if="security_warn_mqtt">{% mdicon alert-circle, #f90 %}</span><span v-else>{% mdicon check-circle, #093 %}</span></td>
-                        <td><button class="button tooltip is-tooltip-left is-tooltip-multiline" style="background-color: #333; border-width: 0px;" data-tooltip="{{ help_security_mqtt }}">{% mdicon help-circle, .baseline, .inline %}</button></td>
                     </tr>
                 </table>
             </div>
@@ -638,7 +630,7 @@ layout: default
                     <div class="field-label is-normal">Check for official updates to the Wi-Fi Stepper project.</div>
                     <div class="field-body">
                         <div class="field">
-                            <span class="control"><a class="button is-primary is-medium" v-bind:href="'http://www.wifistepper.com/downloads/'+update.model+'/check?version='+update.version+'&branch='+update.branch" target="_blank">Check Now</a></span>
+                            <span class="control"><a class="button is-primary is-medium" v-bind:href="'https://www.wifistepper.com/downloads/'+update.model+'/check.html?version='+update.version+'&branch='+update.branch" target="_blank">Check Now</a></span>
                         </div>
                     </div>
                 </div>
