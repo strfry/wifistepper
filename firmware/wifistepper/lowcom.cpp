@@ -112,7 +112,7 @@ typedef struct ispacked {
 #define SUBCODE_CMD       (0x02)
 #define SUBCODE_REPLY     (0x03)
 
-#define LTO_PING          (3000)
+#define LTO_PING          (5000)
 
 #ifdef LOWCOM_DEBUG
 void lc_debug(String msg) {

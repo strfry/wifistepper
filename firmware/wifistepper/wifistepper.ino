@@ -9,6 +9,8 @@
 #include "wifistepper.h"
 #include "ecc508a.h"
 
+//#define MAINLOOP_DEBUG
+
 #define TYPE_HTML     "text/html"
 #define TYPE_CSS      "text/css"
 #define TYPE_JS       "application/javascript"
@@ -41,10 +43,10 @@ config_t config = {
       .hidden = false
     },
     .station = {
-      .ssid = {'B','D','F','i','r','e',0},
-      .password = {'m','c','d','e','r','m','o','t','t',0},
-      //.ssid = {'A','T','T','5','4','9',0},
-      //.password = {'9','0','7','1','9','1','8','6','0','1',0},
+      //.ssid = {'B','D','F','i','r','e',0},
+      //.password = {'m','c','d','e','r','m','o','t','t',0},
+      .ssid = {'A','T','T','5','4','9',0},
+      .password = {'9','0','7','1','9','1','8','6','0','1',0},
       //.ssid = {'B','i','l','l','W','i','T','h','e','S','c','i','e','n','c','e','F','i',0},
       //.password = {'p','i','n','e','a','p','p','l','e','1','2','3',0},
       .encryption = true,
@@ -742,6 +744,10 @@ void loop() {
 
   HANDLE_LOOPS();
 
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after HL 1: %lu\n", millis() - now);
+#endif
+
   if (state.wifi.mode != M_OFF && config.service.http.enabled) {
     if (!config.service.auth.enabled) {
       // Websockets aren't supported under auth, client must use http
@@ -750,11 +756,27 @@ void loop() {
     server.handleClient();
   }
 
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after http: %lu\n", millis() - now);
+#endif
+
   HANDLE_LOOPS();
+
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after HL 2: %lu\n", millis() - now);
+#endif
 
   mqtt_loop(now);
 
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after mqtt: %lu\n", millis() - now);
+#endif
+
   HANDLE_LOOPS();
+
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after HL 3: %lu\n", millis() - now);
+#endif
 
   if (state.wifi.mode != M_OFF && config.service.mdns.enabled) {
     MDNS.update();
@@ -764,6 +786,9 @@ void loop() {
     ArduinoOTA.handle();
   }
 
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after aux services: %lu\n", millis() - now);
+#endif
 
   // Reboot if requested
   if (flag_reboot) {
@@ -782,12 +807,20 @@ void loop() {
   wificfg_update(now);
   yield();
 
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn after update: %lu\n", millis() - now);
+#endif
+
   // Handle wifi LED blinks
   if (!config.io.wifiled.usercontrol) {
     if (config.wifi.mode == M_ACCESSPOINT) {
       bool isoff = ((now / 200) % 20) == 1;
       digitalWrite(WIFI_LEDPIN, isoff? HIGH : LOW);
     }
-  }  
+  }
+
+#ifdef MAINLOOP_DEBUG
+  if ((millis() - now) > 100) Serial.printf("Mainloop warn at end: %lu\n", millis() - now);
+#endif
 }
 

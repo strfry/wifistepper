@@ -281,24 +281,25 @@ void update_init() {
       up_debug("Upload file end");
       
       // Check md5
-      update_md5.calculate();
-      if (strcmp(sketch.update.imagemd5, update_md5.toString().c_str()) != 0) {
-        // Bad md5
-        strlcpy(sketch.update.message, "Bad image file MD5 verification.", LEN_MESSAGE);
-        sketch.update.iserror = true;
-      } else {
-        // Delete orphaned files
-        Dir root = SPIFFS.openDir("/");
-        while (root.next()) {
-          if (std::find(update_files.begin(), update_files.end(), root.fileName()) == update_files.end()) {
-            up_print("Deleting orphaned file: ", root.fileName());
-            SPIFFS.remove(root.fileName());
+      if (!sketch.update.iserror) {
+        update_md5.calculate();
+        if (strcmp(sketch.update.imagemd5, update_md5.toString().c_str()) != 0) {
+          // Bad md5
+          strlcpy(sketch.update.message, "Bad image file MD5 verification.", LEN_MESSAGE);
+          sketch.update.iserror = true;
+        } else {
+          // Delete orphaned files
+          Dir root = SPIFFS.openDir("/");
+          while (root.next()) {
+            if (std::find(update_files.begin(), update_files.end(), root.fileName()) == update_files.end()) {
+              up_print("Deleting orphaned file: ", root.fileName());
+              SPIFFS.remove(root.fileName());
+            }
           }
+          up_print("Update complete.");
+          strlcpy(sketch.update.message, "Upload complete (success).", LEN_MESSAGE);
         }
-        up_print("Update complete.");
-        strlcpy(sketch.update.message, "Upload complete (success).", LEN_MESSAGE);
       }
-      
     }
     yield();
   });
