@@ -33,8 +33,8 @@ volatile bool flag_wifiled = false;
 
 config_t config = {
   .wifi = {
-    .mode = M_STATION,    // TODO
-    //.mode = M_ACCESSPOINT,
+    //.mode = M_STATION,
+    .mode = M_ACCESSPOINT,
     .accesspoint = {
       .ssid = {0},
       .password = {0},
@@ -45,11 +45,13 @@ config_t config = {
     .station = {
       //.ssid = {'B','D','F','i','r','e',0},
       //.password = {'m','c','d','e','r','m','o','t','t',0},
-      .ssid = {'A','T','T','5','4','9',0},
-      .password = {'9','0','7','1','9','1','8','6','0','1',0},
+      //.ssid = {'A','T','T','5','4','9',0},
+      //.password = {'9','0','7','1','9','1','8','6','0','1',0},
       //.ssid = {'B','i','l','l','W','i','T','h','e','S','c','i','e','n','c','e','F','i',0},
       //.password = {'p','i','n','e','a','p','p','l','e','1','2','3',0},
-      .encryption = true,
+      .ssid = {0},
+      .password = {0},
+      .encryption = false,
       .forceip = {0},
       .forcesubnet = {0},
       .forcegateway = {0},
@@ -76,19 +78,15 @@ config_t config = {
       .crypto_enabled = false
     },
     .mqtt = {
-      .enabled = true,
-      .server = {'1','0','.','1','.','1','0','.','1','9','5',0},
-      //.server = {'i','o','.','a','d','a','f','r','u','i','t','.','c','o','m',0},
+      .enabled = false,
+      .server = {0},
       .port = 1883,
       .auth_enabled = false,
-      //.auth_enabled = true,
-      .username = {'a','k','l','o','f','a','s',0},
-      .password = {'b','b','7','3','3','c','b','e','4','a','9','b','4','7','5','2','a','c','0','d','a','a','b','b','b','e','4','2','f','b','5','7',0},
-      .state_topic = {'s','t','a','t','e',0},
-      //.state_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','s','t','a','t','e',0},
+      .username = {0},
+      .password = {0},
+      .state_topic = {0},
       .state_publish_period = 10.0,
-      .command_topic = {'c','o','m','m','a','n','d',0}
-      //.command_topic = {'a','k','l','o','f','a','s','/','f','e','e','d','s','/','c','o','m','m','a','n','d',0}
+      .command_topic = {0}
     },
     .ota = {
       .enabled = false,
@@ -98,7 +96,7 @@ config_t config = {
   .daisy = {
     .enabled = true,
     .master = false,
-    .slavewifioff = true
+    .slavewifioff = false
   },
   .io = {
     .wifiled = {
@@ -624,6 +622,7 @@ void setup() {
     pinMode(RESET_PIN, INPUT_PULLUP);
     unsigned long startcheck = millis();
     while (!digitalRead(RESET_PIN) && timesince(startcheck, millis()) < RESET_TIMEOUT) {
+      ESP.wdtFeed();
       delay(1);
     }
     if (timesince(startcheck, millis()) >= RESET_TIMEOUT) {
@@ -813,10 +812,13 @@ void loop() {
 
   // Handle wifi LED blinks
   if (!config.io.wifiled.usercontrol) {
+    bool isoff = true;
     if (config.wifi.mode == M_ACCESSPOINT) {
-      bool isoff = ((now / 200) % 20) == 1;
-      digitalWrite(WIFI_LEDPIN, isoff? HIGH : LOW);
+      isoff = ((now / 200) % 20) == 1;
+    } else if (config.wifi.mode == M_STATION) {
+      isoff = ((now / 200) % 20) != 1;
     }
+    digitalWrite(WIFI_LEDPIN, isoff? HIGH : LOW);
   }
 
 #ifdef MAINLOOP_DEBUG

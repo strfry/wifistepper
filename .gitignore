@@ -3,4 +3,5 @@
 /webpage/build
 /firmware/wifistepper/data
 /firmware/wifistepper/wifistepper.ino.generic.bin
-/image/wifistepper.image.*.bin
+/firmware/mfg-wifistepper/mfg-wifistepper.ino.generic.bin
+/image/*.image*.bin
