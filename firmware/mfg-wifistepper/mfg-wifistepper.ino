@@ -195,9 +195,6 @@ void setup() {
     host_print("* MAC: ", buf);
   }
 
-  host_print("Waiting for BUTTON...");
-  check_button(0);
-
   delay(100);
   host_print("Testing ECC");
   {
@@ -335,6 +332,8 @@ void setup() {
     bool s = update_firmware(HOST, PORT_UPDATE);
     if (!s) host_print("FAILED UPDATE!");
   }
+
+  SPIFFS.end();
 }
 
 void loop() {

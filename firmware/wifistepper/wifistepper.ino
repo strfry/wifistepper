@@ -791,6 +791,7 @@ void loop() {
 
   // Reboot if requested
   if (flag_reboot) {
+    SPIFFS.end();
     // Delay for a second before restarting
     for (size_t i = 0; i < 1000; i++) {
       yield();
