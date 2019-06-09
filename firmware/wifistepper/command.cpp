@@ -61,7 +61,7 @@ void cmd_init() {
 
 void cmd_loop(unsigned long now) {
   state.command.this_command = 0;
-  ESP.wdtFeed();
+  //ESP.wdtFeed();
 
   while (Q0->len > 0) {
     cmd_head_t * head = (cmd_head_t *)(Q0->Q);
@@ -252,7 +252,7 @@ void cmd_loop(unsigned long now) {
     state.command.last_completed = millis();
 
     cmd_debug(head->id, head->opcode, "Exec complete");
-    ESP.wdtFeed();
+    //ESP.wdtFeed();
   }
 }
 
@@ -422,5 +422,3 @@ bool cmdq_copy(queue_t * queue, id_t id, queue_t * src) {
   memcpy(buf, src->Q, src->len);
   return true;
 }
-
-

@@ -1,13 +1,17 @@
 #include <FS.h>
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 #include <WebSocketsServer.h>
 
-#include <ESP8266mDNS.h>
+#include <ESPmDNS.h>
 #include <ArduinoOTA.h>
+
+#include <stdint.h>
 
 #include "powerstep01.h"
 #include "wifistepper.h"
 #include "ecc508a.h"
+
+#include <SPIFFS.h>
 
 //#define MAINLOOP_DEBUG
 
@@ -23,7 +27,7 @@
 queue_t queue[QS_SIZE];
 volatile id_t _id = ID_START;
 
-ESP8266WebServer server(PORT_HTTP);
+WebServer server(PORT_HTTP);
 WebSocketsServer websocket(PORT_HTTPWS);
 
 StaticJsonBuffer<2560> jsonbuf;
@@ -250,7 +254,7 @@ bool wificfg_connect(wifi_mode mode, wifi_config * const cfg) {
       }
       WiFi.begin(cfg->station.ssid, cfg->station.password);
       for (int i=0; i < 200 && WiFi.status() != WL_CONNECTED; i++) {
-        ESP.wdtFeed();
+//        ESP.wdtFeed();
         delay(50);
       }
 
@@ -607,7 +611,7 @@ void setup() {
     ecc_init();
 
     // Get wifi info from ESP
-    state.wifi.chipid = ESP.getChipId();
+    state.wifi.chipid = ESP.getEfuseMac();
     WiFi.macAddress(state.wifi.mac);
 
     // Set default ap name
@@ -622,7 +626,7 @@ void setup() {
     pinMode(RESET_PIN, INPUT_PULLUP);
     unsigned long startcheck = millis();
     while (!digitalRead(RESET_PIN) && timesince(startcheck, millis()) < RESET_TIMEOUT) {
-      ESP.wdtFeed();
+      //ESP.wdtFeed();
       delay(1);
     }
     if (timesince(startcheck, millis()) >= RESET_TIMEOUT) {
@@ -652,7 +656,7 @@ void setup() {
   // Wifi connection
   {
     WiFi.persistent(false);
-    WiFi.hostname(config.service.hostname);
+    //WiFi.setHostname(config.service.getHostname());
     
     if (!config.io.wifiled.usercontrol) {
       pinMode(WIFI_LEDPIN, OUTPUT);
@@ -701,7 +705,7 @@ void setup() {
 
     api_init();
     static_init();
-    update_init();
+    //update_init();
     server.begin();
     websocket_init();
     mqtt_init();
@@ -778,7 +782,7 @@ void loop() {
 #endif
 
   if (state.wifi.mode != M_OFF && config.service.mdns.enabled) {
-    MDNS.update();
+//    MDNS.update();
   }
 
   if (state.wifi.mode != M_OFF && config.service.ota.enabled) {
@@ -791,11 +795,11 @@ void loop() {
 
   // Reboot if requested
   if (flag_reboot) {
-    SPIFFS.end();
+//    SPIFFS.end();
     // Delay for a second before restarting
     for (size_t i = 0; i < 1000; i++) {
       yield();
-      ESP.wdtFeed();
+      //ESP.wdtFeed();
       delay(1);
     }
     ESP.restart();
@@ -826,4 +830,3 @@ void loop() {
   if ((millis() - now) > 100) Serial.printf("Mainloop warn at end: %lu\n", millis() - now);
 #endif
 }
-

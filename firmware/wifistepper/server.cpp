@@ -1,10 +1,14 @@
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 #include <FS.h>
+
+#include <crypto/common.h> // for u8...
 
 #include "wifistepper.h"
 #include "ecc508a.h"
 
-extern ESP8266WebServer server;
+#include <wps/wps.h>
+
+extern WebServer server;
 extern StaticJsonBuffer<2560> jsonbuf;
 
 extern volatile bool flag_reboot;
@@ -52,7 +56,7 @@ void api_initwifi() {
       JsonObject& network = jsonbuf.createObject();
       network["ssid"] = WiFi.SSID(i);
       network["rssi"] = WiFi.RSSI(i);
-      network["encryption"] = WiFi.encryptionType(i) != ENC_TYPE_NONE;
+      network["encryption"] = WiFi.encryptionType(i) != WPS_WIFI_AUTH_OPEN;
       networks.add(network);
     }
     root["status"] = "ok";
@@ -712,7 +716,7 @@ void api_init() {
     // Loop waiting for crypto
     for (size_t i = 0; i < 500; i++) {
       yield();
-      ESP.wdtFeed();
+//      ESP.wdtFeed();
       ecc_loop(millis());
       delay(1);
     }
@@ -746,4 +750,3 @@ void api_init() {
     jsonbuf.clear();
   });
 }
-

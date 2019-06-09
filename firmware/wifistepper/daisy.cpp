@@ -2,7 +2,7 @@
 
 #include "wifistepper.h"
 
-#define D_BAUDRATE      (512000)
+#define D_BAUDRATE      (115200)
 
 #define B_SIZE          (2048)
 #define B_MAGIC         (0xAB)
@@ -438,8 +438,10 @@ static void daisy_slaveconsume(uint8_t q, id_t id, uint8_t opcode, void * data, 
 
 void daisy_loop(unsigned long now) {
   if (!config.daisy.enabled) return;
-  ESP.wdtFeed();
-  Blen += Serial.read((char *)&B[Blen], B_SIZE - Blen);
+  //ESP.wdtFeed();
+  // Serial.read((char *)&B[Blen], B_SIZE - Blen);
+  B[Blen] = Serial.read();
+  Blen += 1;
 
   // If no packets to parse, dump outbox
   if (Blen == 0) {
@@ -694,4 +696,3 @@ bool daisy_estop(uint8_t target, id_t id, bool hiz, bool soft) {
   if (cmd != NULL) *cmd = { .hiz = hiz, .soft = soft };
   return daisy_pack(cmd) != NULL;
 }
-

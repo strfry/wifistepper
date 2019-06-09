@@ -1,6 +1,7 @@
 #include <Arduino.h>
 //#include <ArduinoJson.h>
-#include <ESP8266WiFi.h>
+//#include <ESP8266WiFi.h>
+#include <WiFi.h>
 
 #include "wifistepper.h"
 #include "ecc508a.h"
@@ -221,7 +222,7 @@ static inline void lc_packpreamble(lc_preamble * p, uint8_t type) {
 
 static void lc_send(size_t client, uint8_t * data, size_t len) {
   size_t i = 0;
-  if (lowcom_client[client].Olen == 0 && lowcom_client[i].sock.availableForWrite() > 0) {
+  if (lowcom_client[client].Olen == 0 && /*lowcom_client[i].sock.availableForWrite()*/ 1 > 0) {
     i = lowcom_client[i].sock.write(data, len);
   }
   if (i != len) {
@@ -894,7 +895,7 @@ void lowcom_update(unsigned long now) {
         
         lc_preamble ping = {0};
         lc_packpreamble(&ping, TYPE_PING);
-        if (lowcom_client[i].sock.availableForWrite() >= sizeof(lc_preamble)) {
+        if (1  >= sizeof(lc_preamble)) {
           lc_debug("PING client write", i);
           lowcom_client[i].sock.write((uint8_t *)&ping, sizeof(lc_preamble));
         }
@@ -916,7 +917,7 @@ void lowcom_senderror(error_state * e) {
       lc_packpreamble(preamble, TYPE_ERROR);
       memcpy(error, e, sizeof(error_state));
       
-      if (lowcom_client[i].sock.availableForWrite() >= sizeof(packet)) {
+      if (1 >= sizeof(packet)) {
         lc_debug("ERROR client write", i);
         lowcom_client[i].sock.write(packet, sizeof(packet));
       }
@@ -924,4 +925,3 @@ void lowcom_senderror(error_state * e) {
     }
   }
 }
-

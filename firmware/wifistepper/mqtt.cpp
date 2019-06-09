@@ -1,4 +1,4 @@
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 
@@ -118,4 +118,3 @@ void mqtt_loop(unsigned long now) {
     sketch.service.mqtt.last.publish = now;
   }
 }
-

@@ -5,6 +5,8 @@
 #define __ps_packed   __attribute__((packed))
 #endif
 
+#include <stdint.h>
+
 
 typedef enum __ps_packed {
   REV       = 0x0,

@@ -1,5 +1,7 @@
+#include <Arduino.h>
 #include <SPI.h>
 #include <float.h>
+#include <math.h>
 
 #include "powerstep01.h"
 #include "powerstep01priv.h"
@@ -828,4 +830,3 @@ void ps_gountil(ps_posact act, ps_direction dir, float speed) {
 void ps_releasesw(ps_posact act, ps_direction dir) {
   ps_xfer("releasesw", CMD_RELEASESW(act, dir), NULL, 0);
 }
-

@@ -1,5 +1,9 @@
 #include <WebSocketsServer.h>
 
+extern "C" {
+#include <crypto/common.h> // for u8 etc.
+}
+
 #include "wifistepper.h"
 
 extern WebSocketsServer websocket;
@@ -193,4 +197,3 @@ void websocket_init() {
   websocket.begin();
   websocket.onEvent(ws_event);
 }
-
