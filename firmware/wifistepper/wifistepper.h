@@ -10,7 +10,7 @@
 #define BRANCH            "stable"
 #define VERSION           (1)
 
-#define RESET_PIN         (8)
+#define RESET_PIN         (5)
 #define RESET_TIMEOUT     (3000)
 #define WIFI_LEDPIN       (16)
 #define WIFI_ADCCOEFF     (0.003223) /*(0.003125)*/
