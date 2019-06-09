@@ -620,7 +620,7 @@ void setup() {
 
   // Initialize FS
   {
-    SPIFFS.begin();
+    SPIFFS.begin(true);
     
     // Check reset
     pinMode(RESET_PIN, INPUT_PULLUP);
