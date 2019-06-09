@@ -6,8 +6,8 @@
 #include "powerstep01.h"
 #include "powerstep01priv.h"
 
-#define PS_PIN_RST      (15)
-#define PS_PIN_CS       (4)
+#define PS_PIN_RST      (8)
+#define PS_PIN_CS       (10)
 
 //#define PS_DEBUG
 
